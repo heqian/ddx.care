@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const infectiologist = new Agent({
   id: "infectiologist",
   name: "Infectious Disease Specialist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("infectiologist"),
   description:
     "Evaluates infectious etiologies including fever of unknown origin, sepsis, tropical/travel-related infections, opportunistic infections, HIV/AIDS, complicated urinary tract infections, wound infections, and antibiotic stewardship. Use when infection is suspected or fever is unexplained.",
   instructions: `You are a board-certified Infectious Disease Specialist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

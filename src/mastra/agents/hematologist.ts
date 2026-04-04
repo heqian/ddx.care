@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const hematologist = new Agent({
   id: "hematologist",
   name: "Hematologist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("hematologist"),
   description:
     "Evaluates blood disorders including anemia, abnormal CBC findings, bleeding/clotting disorders, coagulopathies, thrombocytopenia, leukocyte abnormalities, and hematologic malignancies. Use when hematologic abnormalities are identified.",
   instructions: `You are a board-certified Hematologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

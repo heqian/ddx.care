@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const rheumatologist = new Agent({
   id: "rheumatologist",
   name: "Rheumatologist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("rheumatologist"),
   description:
     "Evaluates joint, muscle, and autoimmune conditions including arthritis, connective tissue diseases, vasculitis, elevated inflammatory markers, and unexplained musculoskeletal pain. Use when autoimmune or rheumatologic etiology is suspected.",
   instructions: `You are a board-certified Rheumatologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

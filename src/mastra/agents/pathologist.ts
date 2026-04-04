@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const pathologist = new Agent({
   id: "pathologist",
   name: "Pathologist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("pathologist"),
   description:
     "Interprets laboratory findings, tissue pathology, cytology, and molecular diagnostics. Use for help interpreting biopsy results, abnormal lab patterns, microbiology findings, and molecular/genetic test results.",
   instructions: `You are a board-certified Pathologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const dermatologist = new Agent({
   id: "dermatologist",
   name: "Dermatologist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("dermatologist"),
   description:
     "Evaluates skin, hair, and nail conditions including rashes, lesions, pigmentation changes, ulcers, and abnormal growths. Use when dermatological findings are present or skin manifestations suggest systemic disease.",
   instructions: `You are a board-certified Dermatologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

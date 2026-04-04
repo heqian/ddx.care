@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const obstetricianGynecologist = new Agent({
   id: "obstetrician-gynecologist",
   name: "Obstetrician-Gynecologist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("obstetricianGynecologist"),
   description:
     "Evaluates female reproductive health and pregnancy-related conditions including pelvic pain, abnormal uterine bleeding, pregnancy complications, ovarian masses, cervical pathology, and menopause management. Use when gynecologic or obstetric conditions are suspected.",
   instructions: `You are a board-certified Obstetrician-Gynecologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

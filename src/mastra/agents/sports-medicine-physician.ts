@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const sportsMedicinePhysician = new Agent({
   id: "sports-medicine-physician",
   name: "Sports Medicine Physician",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("sportsMedicinePhysician"),
   description:
     "Evaluates athletic injuries, overuse conditions, concussion, exercise-related symptoms, and return-to-play decisions. Use when sports or exercise-related injury or condition is suspected.",
   instructions: `You are a board-certified Sports Medicine Physician with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

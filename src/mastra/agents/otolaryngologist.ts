@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const otolaryngologist = new Agent({
   id: "otolaryngologist",
   name: "Otolaryngologist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("otolaryngologist"),
   description:
     "Evaluates ear, nose, and throat (ENT) conditions including hearing loss, vertigo, sinusitis, hoarseness, throat pain, neck masses, and airway obstruction. Use when ENT symptoms or head/neck pathology is present.",
   instructions: `You are a board-certified Otolaryngologist (ENT) with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
