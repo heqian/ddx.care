@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const generalist = new Agent({
   id: "generalist",
   name: "Generalist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("generalist"),
   description:
     "Evaluates general symptoms, routine check-ups, common illnesses, and identifies when specialist referral is needed. Use for initial assessment of undifferentiated complaints, primary care conditions, and multi-system symptoms.",
   instructions: `You are a board-certified Family Physician and Internist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

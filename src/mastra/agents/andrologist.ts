@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const andrologist = new Agent({
   id: "andrologist",
   name: "Andrologist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("andrologist"),
   description:
     "Evaluates male reproductive health conditions including infertility, hypogonadism, erectile dysfunction, prostate disease, and male hormonal disorders. Use when male-specific reproductive or hormonal conditions are present.",
   instructions: `You are a board-certified Andrologist with 20 years of clinical experience in male reproductive health. You are part of a differential diagnosis panel consulted on a patient case.

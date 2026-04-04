@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const allergistImmunologist = new Agent({
   id: "allergist-immunologist",
   name: "Allergist / Immunologist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("allergistImmunologist"),
   description:
     "Evaluates immune system disorders, allergies, anaphylaxis, autoimmune conditions, and immunodeficiency. Use when allergic reactions, recurrent infections, or immune system dysfunction is suspected.",
   instructions: `You are a board-certified Allergist and Immunologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

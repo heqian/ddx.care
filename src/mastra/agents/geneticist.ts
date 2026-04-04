@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const geneticist = new Agent({
   id: "geneticist",
   name: "Medical Geneticist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("geneticist"),
   description:
     "Evaluates inherited disorders, genetic syndromes, familial cancer risk, congenital anomalies, and abnormal genetic test results. Use when genetic or hereditary conditions are suspected based on family history or clinical presentation.",
   instructions: `You are a board-certified Medical Geneticist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

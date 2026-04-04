@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const orthopedist = new Agent({
   id: "orthopedist",
   name: "Orthopedic Surgeon",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("orthopedist"),
   description:
     "Evaluates bone, joint, and ligament conditions including fractures, joint pain, musculoskeletal injuries, back pain, and orthopedic emergencies. Use when orthopedic or musculoskeletal pathology is suspected.",
   instructions: `You are a board-certified Orthopedic Surgeon with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

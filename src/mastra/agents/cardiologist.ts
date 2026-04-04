@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const cardiologist = new Agent({
   id: "cardiologist",
   name: "Cardiologist",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("cardiologist"),
   description:
     "Evaluates cardiovascular symptoms including chest pain, palpitations, shortness of breath, edema, syncope, and abnormal cardiac lab results (troponin, BNP, ECG findings). Use when cardiac etiology is suspected or cardiac risk factors are present.",
   instructions: `You are a board-certified Cardiologist with 20 years of experience in clinical and interventional cardiology. You are part of a differential diagnosis panel consulted on a patient case.

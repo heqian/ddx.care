@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const pediatrician = new Agent({
   id: "pediatrician",
   name: "Pediatrician",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("pediatrician"),
   description:
     "Evaluates conditions in infants, children, and adolescents including developmental concerns, pediatric infections, growth abnormalities, childhood rashes, and congenital conditions. Use when the patient is under 18 years of age.",
   instructions: `You are a board-certified Pediatrician with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

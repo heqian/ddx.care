@@ -1,10 +1,12 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
+import { getToolsForSpecialist } from "../tools";
 
 export const cardiothoracicSurgeon = new Agent({
   id: "cardiothoracic-surgeon",
   name: "Cardiothoracic Surgeon",
   model: SPECIALIST_MODEL,
+  tools: getToolsForSpecialist("cardiothoracicSurgeon"),
   description:
     "Evaluates conditions requiring surgical intervention of the heart, lungs, and chest including aortic dissection, valve disease, lung cancer, pneumothorax, and empyema. Use when thoracic surgical evaluation is needed.",
   instructions: `You are a board-certified Cardiothoracic Surgeon with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
