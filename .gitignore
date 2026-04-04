@@ -175,3 +175,14 @@ dist
 .svelte-kit
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,node
+
+
+# My Stuff
+# Mastra
+.mastra/
+
+# Skills
+.agents/
+
+# Supporting files
+PRD.md
