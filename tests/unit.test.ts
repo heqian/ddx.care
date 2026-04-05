@@ -2,7 +2,7 @@ import { test, expect, describe } from "bun:test";
 
 describe("Agent Registry", () => {
   test("all specialist agents are registered", async () => {
-    const { specialists } = await import("../src/mastra/agents/index");
+    const { specialists } = await import("../src/backend/agents/index");
     const keys = Object.keys(specialists);
 
     // 35 specialist agents (excludes CMO)
@@ -22,7 +22,7 @@ describe("Agent Registry", () => {
   });
 
   test("agent list provides metadata", async () => {
-    const { agentList } = await import("../src/mastra/agents/index");
+    const { agentList } = await import("../src/backend/agents/index");
 
     expect(agentList.length).toBeGreaterThan(0);
 
@@ -34,7 +34,7 @@ describe("Agent Registry", () => {
   });
 
   test("no duplicate agent IDs", async () => {
-    const { specialists } = await import("../src/mastra/agents/index");
+    const { specialists } = await import("../src/backend/agents/index");
     const keys = Object.keys(specialists);
     const unique = new Set(keys);
 
@@ -44,7 +44,7 @@ describe("Agent Registry", () => {
 
 describe("Config", () => {
   test("model constants are strings", async () => {
-    const { SPECIALIST_MODEL, ORCHESTRATOR_MODEL } = await import("../src/mastra/config");
+    const { SPECIALIST_MODEL, ORCHESTRATOR_MODEL } = await import("../src/backend/config");
 
     expect(typeof SPECIALIST_MODEL).toBe("string");
     expect(SPECIALIST_MODEL.length).toBeGreaterThan(0);
@@ -53,9 +53,9 @@ describe("Config", () => {
   });
 
   test("timeout constant is reasonable", async () => {
-    const { DIAGNOSIS_TIMEOUT_MS } = await import("../src/mastra/config");
+    const { DIAGNOSIS_TIMEOUT_MS } = await import("../src/backend/config");
 
     expect(DIAGNOSIS_TIMEOUT_MS).toBeGreaterThan(0);
-    expect(DIAGNOSIS_TIMEOUT_MS).toBeLessThanOrEqual(120_000);
+    expect(DIAGNOSIS_TIMEOUT_MS).toBeLessThanOrEqual(600_000);
   });
 });

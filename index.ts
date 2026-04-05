@@ -1,6 +1,7 @@
-import { mastra } from "./src/mastra/index";
-import { agentList } from "./src/mastra/agents/index";
+import { mastra } from "./src/backend/index";
+import { agentList } from "./src/backend/agents/index";
 import { z } from "zod";
+import appHtml from "./index.html";
 
 const diagnoses = new Map<string, { status: "pending" | "completed" | "failed"; result?: unknown; error?: string }>();
 
@@ -13,6 +14,8 @@ const diagnoseSchema = z.object({
 Bun.serve({
   port: process.env.PORT ?? 3000,
   routes: {
+    "/": appHtml,
+
     "/v1/diagnose": {
       POST: async (req) => {
         let body: unknown;
