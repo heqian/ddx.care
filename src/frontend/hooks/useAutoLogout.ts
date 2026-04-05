@@ -5,8 +5,8 @@ const WARNING_MS = 2 * 60 * 1000; // 2 minutes before logout
 
 export function useAutoLogout(onTimeout: () => void) {
   const [showWarning, setShowWarning] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
-  const warningRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const warningRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const reset = useCallback(() => {
     setShowWarning(false);

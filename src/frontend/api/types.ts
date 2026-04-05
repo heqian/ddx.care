@@ -9,8 +9,33 @@ export interface DiagnoseResponse {
   status: "pending";
 }
 
+export interface SpecialistConsulted {
+  specialist: string;
+  keyFindings: string;
+}
+
+export interface Diagnosis {
+  rank: number;
+  name: string;
+  confidence: number;
+  urgency: "emergent" | "urgent" | "routine";
+  rationale: string;
+  supportingEvidence: string[];
+  contradictoryEvidence: string[];
+  nextSteps: string[];
+}
+
+export interface DiagnosisReport {
+  chiefComplaint: string;
+  patientSummary: string;
+  specialistsConsulted: SpecialistConsulted[];
+  diagnoses: Diagnosis[];
+  crossSpecialtyObservations: string;
+  recommendedImmediateActions: string;
+}
+
 export interface DiagnosisResult {
-  report: string;
+  report: DiagnosisReport;
   generatedAt: string;
   disclaimer: string;
 }
@@ -18,6 +43,7 @@ export interface DiagnosisResult {
 export interface StatusResponse {
   jobId: string;
   status: "pending" | "completed" | "failed";
+  progress?: { time: string; message: string }[];
   result?: {
     status: string;
     result?: DiagnosisResult;
@@ -34,21 +60,4 @@ export interface AgentInfo {
 
 export interface AgentsResponse {
   agents: AgentInfo[];
-}
-
-export interface ParsedDiagnosis {
-  rank: number;
-  name: string;
-  confidence: number | null;
-  urgency: "emergent" | "urgent" | "routine" | null;
-  supportingEvidence: string[];
-  contradictoryEvidence: string[];
-  nextSteps: string[];
-  rationale: string;
-}
-
-export interface ParsedReport {
-  diagnoses: ParsedDiagnosis[];
-  consultNotes: string;
-  rawReport: string;
 }

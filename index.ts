@@ -66,8 +66,13 @@ Bun.serve({
         if (!entry) {
           return Response.json({ error: "Job not found" }, { status: 404 });
         }
+        
+        let progress = [];
+        if ((global as any).jobProgress && (global as any).jobProgress.has(jobId)) {
+           progress = (global as any).jobProgress.get(jobId);
+        }
 
-        return Response.json({ jobId, ...entry });
+        return Response.json({ jobId, ...entry, progress });
       },
     },
 

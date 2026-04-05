@@ -36,6 +36,19 @@ export function WaitingRoom({ jobId, onComplete }: WaitingRoomProps) {
           takes a few minutes.
         </p>
       </div>
+      
+      {status?.progress && status.progress.length > 0 && (
+         <div className="max-w-2xl mx-auto mb-8 bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-y-auto h-64 flex flex-col shadow-inner">
+           <div className="space-y-2 mt-auto">
+             {status.progress.map((p, i) => (
+                <div key={i} className="text-green-400 opacity-90 break-words">
+                  <span className="text-slate-500 text-xs mr-2">[{new Date(p.time).toLocaleTimeString()}]</span>
+                  {p.message}
+                </div>
+             ))}
+           </div>
+         </div>
+      )}
 
       {agents.length > 0 && (
         <div>
