@@ -3,7 +3,6 @@ import { ArrowPathIcon, DocumentChartBarIcon } from "@heroicons/react/24/outline
 import { Button } from "../components/ui/Button";
 import { DiagnosisCard } from "../components/diagnosis/DiagnosisCard";
 import { ConsultNotes } from "../components/diagnosis/ConsultNotes";
-import { parseReport } from "../api/report-parser";
 import type { StatusResponse } from "../api/types";
 
 interface ResultsViewProps {
@@ -29,9 +28,8 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
     );
   }
 
-  const parsed = parseReport(report);
-  const topDiagnoses = parsed.diagnoses.slice(0, 3);
-  const otherDiagnoses = parsed.diagnoses.slice(3);
+  const topDiagnoses = report.diagnoses.slice(0, 3);
+  const otherDiagnoses = report.diagnoses.slice(3);
 
   return (
     <div className="space-y-6">
@@ -62,7 +60,7 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
           }`}
         >
           <DocumentChartBarIcon className="h-4 w-4 inline mr-1.5 -mt-0.5" />
-          Diagnoses ({parsed.diagnoses.length})
+          Diagnoses ({report.diagnoses.length})
         </button>
         <button
           onClick={() => setTab("consult")}
@@ -72,13 +70,21 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
               : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >
-          Consult Notes
+          Full Report
         </button>
       </div>
 
       {/* Tab Content */}
       {tab === "diagnoses" && (
         <div className="space-y-4">
+
+          {report.chiefComplaint && (
+             <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+               <h3 className="font-semibold text-sm text-slate-500 dark:text-slate-400 mb-2 uppercase">Chief Complaint</h3>
+               <p className="text-slate-800 dark:text-slate-200">{report.chiefComplaint}</p>
+             </div>
+          )}
+
           {/* Top Diagnoses */}
           <div>
             <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
@@ -104,11 +110,35 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
               </div>
             </div>
           )}
+
+          {/* Cross-Specialty Observations */}
+          {report.crossSpecialtyObservations && (
+            <div className="mt-8">
+              <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
+                Cross-Specialty Observations
+              </h2>
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-200 rounded-lg border border-blue-200 dark:border-blue-800/50 text-sm">
+                 {report.crossSpecialtyObservations}
+              </div>
+            </div>
+          )}
+
+          {/* Immediate Actions */}
+          {report.recommendedImmediateActions && (
+             <div className="mt-4">
+               <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
+                 Recommended Immediate Actions
+               </h2>
+               <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-200 rounded-lg border border-red-200 dark:border-red-800/50 text-sm font-semibold">
+                  {report.recommendedImmediateActions}
+               </div>
+             </div>
+          )}
         </div>
       )}
 
       {tab === "consult" && (
-        <ConsultNotes rawReport={report} />
+        <ConsultNotes report={report} />
       )}
 
       {/* Disclaimer */}

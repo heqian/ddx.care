@@ -183,6 +183,7 @@ dist
 
 # Skills
 .agents/
+.claude/
 
 # Supporting files
 *_prd.md

@@ -3,8 +3,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "mastra dev",
-    "build": "mastra build"
+    "dev": "bun --hot index.ts",
+    "build": "bun build ./index.html --outdir ./dist"
   },
   "devDependencies": {
     "@types/bun": "latest",

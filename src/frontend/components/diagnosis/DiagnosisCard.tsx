@@ -2,11 +2,11 @@ import { Card } from "../ui/Card";
 import { ConfidenceBadge } from "./ConfidenceBadge";
 import { UrgencyBadge } from "./UrgencyBadge";
 import { useMemo } from "react";
-import { renderMarkdown } from "../../api/report-parser";
-import type { ParsedDiagnosis } from "../../api/types";
+import { marked } from "marked";
+import type { Diagnosis } from "../../api/types";
 
 interface DiagnosisCardProps {
-  diagnosis: ParsedDiagnosis;
+  diagnosis: Diagnosis;
 }
 
 const rankBadgeColors: Record<number, string> = {
@@ -19,7 +19,7 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
   const rankColor = rankBadgeColors[diagnosis.rank] || "bg-slate-300 text-slate-700";
 
   const rationaleHtml = useMemo(
-    () => (diagnosis.rationale ? renderMarkdown(diagnosis.rationale) : ""),
+    () => (diagnosis.rationale ? (marked.parse(diagnosis.rationale) as string) : ""),
     [diagnosis.rationale],
   );
 
