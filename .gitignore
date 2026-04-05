@@ -185,4 +185,6 @@ dist
 .agents/
 
 # Supporting files
-PRD.md
+*_prd.md
+TODO.md
+server.log

@@ -1,6 +1,6 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
-import { mastra } from "../src/mastra/index";
-import { agentList } from "../src/mastra/agents/index";
+import { mastra } from "../src/backend/index";
+import { agentList } from "../src/backend/agents/index";
 
 // These tests require a running server. Run `bun --hot index.ts` first.
 const BASE = process.env.API_BASE ?? "http://localhost:3000";
