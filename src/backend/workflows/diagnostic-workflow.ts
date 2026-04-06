@@ -1,5 +1,5 @@
 import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { z, type infer as zInfer } from "zod";
 import { DIAGNOSIS_TIMEOUT_MS, MAX_DIAGNOSIS_ROUNDS } from "../config";
 
 // Step 1: Validate and structure the incoming patient data
@@ -61,6 +61,24 @@ export const diagnosisReportSchema = z.object({
   recommendedImmediateActions: z.string(),
 });
 
+type DiagnosisReport = zInfer<typeof diagnosisReportSchema>;
+
+interface CmoDecision {
+  specialistsToConsult: string[];
+  isFinal: boolean;
+  finalReport?: DiagnosisReport;
+}
+
+/** Split a possibly multi-line string into a list of trimmed, non-empty lines */
+function splitToList(value: string | undefined): string[] {
+  if (!value) return [];
+  // If it already looks like a bullet list, split on bullets/newlines
+  return value
+    .split(/\n|;\s*/)
+    .map((s) => s.replace(/^[-•*]\s*/, "").trim())
+    .filter(Boolean);
+}
+
 // Step 2: Run the diagnostic analysis via the CMO supervisor agent
 const runDiagnosis = createStep({
   id: "run-diagnosis",
@@ -71,7 +89,7 @@ const runDiagnosis = createStep({
     labResults: z.string(),
   }),
   outputSchema: z.object({
-    diagnosisReport: z.any(),
+    diagnosisReport: diagnosisReportSchema,
   }),
   execute: async ({ inputData, mastra, runId }) => {
     const cmo = mastra.getAgent("chiefMedicalOfficer");
@@ -98,7 +116,7 @@ const runDiagnosis = createStep({
       inputData.patientSummary,
     ];
     
-    let finalDiagnosisReport: any = null;
+    let finalDiagnosisReport: DiagnosisReport | null = null;
 
     const runLoop = async () => {
       while (round <= MAX_ROUNDS) {
@@ -125,7 +143,7 @@ Specialists consulted so far: ${Array.from(allConsultedSpecialists).join(", ") |
           }
         });
         
-        const { specialistsToConsult, isFinal, finalReport } = cmoDecision.object as any;
+        const { specialistsToConsult, isFinal, finalReport } = cmoDecision.object as CmoDecision;
 
         if (isFinal && finalReport) {
           emitProgress(`CMO has determined no further consultations are needed and finalized the report.`);
@@ -225,7 +243,7 @@ ${contextHistory.join("\n\n")}`;
 const formatReport = createStep({
   id: "format-report",
   inputSchema: z.object({
-    diagnosisReport: z.any(),
+    diagnosisReport: diagnosisReportSchema,
   }),
   outputSchema: z.object({
     report: z.object({
@@ -264,15 +282,15 @@ const formatReport = createStep({
         chiefComplaint: raw.chiefComplaint ?? "",
         patientSummary: raw.patientSummary ?? "",
         specialistsConsulted: raw.specialistsConsulted ?? [],
-        diagnoses: (raw.rankedDiagnoses ?? []).map((d: any, i: number) => ({
+        diagnoses: (raw.rankedDiagnoses ?? []).map((d: DiagnosisReport["rankedDiagnoses"][number], i: number) => ({
           rank: i + 1,
           name: d.diagnosisName ?? "",
           confidence: d.confidencePercentage ?? 0,
           urgency: (d.urgency?.toLowerCase() ?? "routine") as "emergent" | "urgent" | "routine",
           rationale: d.rationale ?? "",
-          supportingEvidence: d.supportingEvidence ? [d.supportingEvidence] : [],
-          contradictoryEvidence: d.contradictoryEvidence ? [d.contradictoryEvidence] : [],
-          nextSteps: d.suggestedNextSteps ? [d.suggestedNextSteps] : [],
+          supportingEvidence: splitToList(d.supportingEvidence),
+          contradictoryEvidence: splitToList(d.contradictoryEvidence),
+          nextSteps: splitToList(d.suggestedNextSteps),
         })),
         crossSpecialtyObservations: raw.crossSpecialtyObservations ?? "",
         recommendedImmediateActions: raw.recommendedImmediateActions ?? "",

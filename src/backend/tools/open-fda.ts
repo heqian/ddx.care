@@ -49,7 +49,7 @@ export const adverseEventsTool = createTool({
     error: z.string().optional(),
   }),
   execute: async ({ drugName, limit }) => {
-    const url = `${FDA_BASE}/drug/event.json?search=patient.drug.medicinalproduct:${encodeURIComponent(drugName)}&limit=${limit}`;
+    const url = `${FDA_BASE}/drug/event.json?search=patient.drug.medicinalproduct:"${encodeURIComponent(drugName)}"&limit=${limit}`;
     const result = await fetchJSON(url);
 
     if (result.error) {

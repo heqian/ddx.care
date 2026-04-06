@@ -1,6 +1,26 @@
 {
   "version": 1,
   "skills": {
+    "Agent Development": {
+      "source": "anthropics/claude-code",
+      "sourceType": "github",
+      "computedHash": "4931c2867890bfef5881225adb691c3d719fe9ad556e3d5fae15f83e0668fa60"
+    },
+    "code-review": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "computedHash": "919719020590499db120437b53defa7dcb05e138aa5ce9e55034b88dbad7fff8"
+    },
+    "documentation": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "computedHash": "c24a1672a7edad51225859d6549d9a61892f704a4527a65ce3cddd913ca04550"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+    },
     "mastra": {
       "source": "mastra-ai/skills",
       "sourceType": "github",
@@ -10,6 +30,26 @@
       "source": "mastra-ai/mastra",
       "sourceType": "github",
       "computedHash": "86a6ec0cf56b06a8f7efc98ca3ac69ae3318ffa0576106cbb7de198ac8c4ad39"
+    },
+    "system-design": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "computedHash": "5915b5f79ae74f20473c4922075b091f290374d26b26c927af9c767102424ac4"
+    },
+    "task-management": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "computedHash": "a1f9389c1f06bb9c630001875e0801eb209b08818ba217f0114bc62d149eb056"
+    },
+    "theme-factory": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "93e78aa44f8fa00bb2c0608f400de1e1dcd6494611dd8ea27c867654240c7bcd"
+    },
+    "webapp-testing": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "cf8e5916d474886bd67b09691247f43f331523008b7d366064bc607ab42d6302"
     }
   }
 }

@@ -20,6 +20,7 @@
   "dependencies": {
     "@heroicons/react": "^2.2.0",
     "@mastra/core": "^1.22.0",
+    "isomorphic-dompurify": "^3.7.1",
     "marked": "^17.0.5",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

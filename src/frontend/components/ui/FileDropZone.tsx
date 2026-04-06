@@ -10,7 +10,7 @@ interface FileDropZoneProps {
 
 export function FileDropZone({
   onFileContent,
-  accept = ".txt,.csv,.pdf",
+  accept = ".txt,.csv",
   label,
   className = "",
 }: FileDropZoneProps) {
