@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   MicrophoneIcon,
   DocumentTextIcon,
@@ -28,8 +28,18 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
   const [showPiiModal, setShowPiiModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeVoiceTarget, setActiveVoiceTarget] = useState<"history" | "transcript" | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const canSubmit = medicalHistory.trim() && transcript.trim() && labResults.trim();
+
+  const stopVoiceInput = useCallback(() => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* already stopped */ }
+      recognitionRef.current = null;
+    }
+    setActiveVoiceTarget(null);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     setSubmitting(true);
@@ -63,6 +73,9 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
 
   const handleVoiceInput = useCallback(
     (target: "history" | "transcript") => {
+      // Stop any existing recognition first
+      stopVoiceInput();
+
       const SpeechRecognition =
         (window as any).SpeechRecognition ||
         (window as any).webkitSpeechRecognition;
@@ -74,11 +87,19 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = false;
+      recognitionRef.current = recognition;
+      setActiveVoiceTarget(target);
+
+      let lastIndex = 0;
 
       recognition.onresult = (event: any) => {
+        // Only process new results since last callback
         const text = Array.from(event.results)
+          .slice(lastIndex)
           .map((r: any) => r[0].transcript)
           .join(" ");
+        lastIndex = event.results.length;
+
         if (target === "history") {
           setMedicalHistory((prev) => (prev ? prev + " " + text : text));
         } else {
@@ -86,10 +107,14 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
         }
       };
 
-      recognition.onerror = () => recognition.stop();
+      recognition.onerror = () => stopVoiceInput();
+      recognition.onend = () => {
+        recognitionRef.current = null;
+        setActiveVoiceTarget(null);
+      };
       recognition.start();
     },
-    [],
+    [stopVoiceInput],
   );
 
   return (
@@ -152,12 +177,16 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
             Medical History
           </h2>
           <button
-            onClick={() => handleVoiceInput("history")}
-            className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark transition-colors"
-            title="Voice input"
+            onClick={() => activeVoiceTarget === "history" ? stopVoiceInput() : handleVoiceInput("history")}
+            className={`flex items-center gap-1 text-xs transition-colors ${
+              activeVoiceTarget === "history"
+                ? "text-red-500 hover:text-red-600"
+                : "text-primary hover:text-primary-dark"
+            }`}
+            title={activeVoiceTarget === "history" ? "Stop dictation" : "Voice input"}
           >
             <MicrophoneIcon className="h-4 w-4" />
-            Dictate
+            {activeVoiceTarget === "history" ? "Stop" : "Dictate"}
           </button>
         </div>
         <textarea
@@ -185,12 +214,16 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
             Conversation Transcript
           </h2>
           <button
-            onClick={() => handleVoiceInput("transcript")}
-            className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark transition-colors"
-            title="Voice input"
+            onClick={() => activeVoiceTarget === "transcript" ? stopVoiceInput() : handleVoiceInput("transcript")}
+            className={`flex items-center gap-1 text-xs transition-colors ${
+              activeVoiceTarget === "transcript"
+                ? "text-red-500 hover:text-red-600"
+                : "text-primary hover:text-primary-dark"
+            }`}
+            title={activeVoiceTarget === "transcript" ? "Stop dictation" : "Voice input"}
           >
             <MicrophoneIcon className="h-4 w-4" />
-            Dictate
+            {activeVoiceTarget === "transcript" ? "Stop" : "Dictate"}
           </button>
         </div>
         <textarea

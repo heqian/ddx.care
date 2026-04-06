@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const WARNING_MS = 2 * 60 * 1000; // 2 minutes before logout
@@ -7,6 +7,8 @@ export function useAutoLogout(onTimeout: () => void) {
   const [showWarning, setShowWarning] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const warningRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const onTimeoutRef = useRef(onTimeout);
+  onTimeoutRef.current = onTimeout;
 
   const reset = useCallback(() => {
     setShowWarning(false);
@@ -18,9 +20,9 @@ export function useAutoLogout(onTimeout: () => void) {
     }, TIMEOUT_MS - WARNING_MS);
 
     timerRef.current = setTimeout(() => {
-      onTimeout();
+      onTimeoutRef.current();
     }, TIMEOUT_MS);
-  }, [onTimeout]);
+  }, []);
 
   useEffect(() => {
     reset();

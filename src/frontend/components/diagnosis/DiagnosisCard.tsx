@@ -3,6 +3,7 @@ import { ConfidenceBadge } from "./ConfidenceBadge";
 import { UrgencyBadge } from "./UrgencyBadge";
 import { useMemo } from "react";
 import { marked } from "marked";
+import DOMPurify from "isomorphic-dompurify";
 import type { Diagnosis } from "../../api/types";
 
 interface DiagnosisCardProps {
@@ -19,7 +20,7 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
   const rankColor = rankBadgeColors[diagnosis.rank] || "bg-slate-300 text-slate-700";
 
   const rationaleHtml = useMemo(
-    () => (diagnosis.rationale ? (marked.parse(diagnosis.rationale) as string) : ""),
+    () => diagnosis.rationale ? DOMPurify.sanitize(marked.parse(diagnosis.rationale) as string) : "",
     [diagnosis.rationale],
   );
 
