@@ -15,12 +15,12 @@
   - Server pushes progress, completion, and error events
   - Fall back to polling only if WebSocket fails to connect
 
-- [ ] **Add concurrency controls for specialist agent calls** — In `diagnostic-workflow.ts:175–193`, all specialist agents are called via `Promise.all` with no concurrency limit. If the CMO requests many specialists (e.g., 10+), this can overload the LLM provider with simultaneous requests, causing rate-limit errors or timeouts.
+- [x] **Add concurrency controls for specialist agent calls** — In `diagnostic-workflow.ts:175–193`, all specialist agents are called via `Promise.all` with no concurrency limit. If the CMO requests many specialists (e.g., 10+), this can overload the LLM provider with simultaneous requests, causing rate-limit errors or timeouts.
   - Implement a `pLimit`-style concurrency limiter (e.g., max 3–5 concurrent specialist calls)
   - Add per-specialist retry with exponential backoff
   - Emit progress updates per-specialist as they complete (not all at once)
 
-- [ ] **In-memory job store lacks persistence and resilience** — The `diagnoses` Map in `index.ts:16` is entirely in-memory. Server restarts lose all job state. For now, use `bun:sqlite` to persist jobs and results, which is consistent with the project conventions.
+- [x] **In-memory job store lacks persistence and resilience** — The `diagnoses` Map in `index.ts:16` is entirely in-memory. Server restarts lose all job state. For now, use `bun:sqlite` to persist jobs and results, which is consistent with the project conventions.
   - Create a `JobStore` abstraction backed by `bun:sqlite`
   - Store job status, progress events, and final results
   - Replace the `diagnoses` Map and the global cleanup interval

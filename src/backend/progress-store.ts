@@ -1,4 +1,5 @@
 import type { ServerWebSocket } from "bun";
+import { Database } from "bun:sqlite";
 
 export interface ProgressEvent {
   time: string;
@@ -13,27 +14,58 @@ export interface JobEntry {
   progress: ProgressEvent[];
 }
 
-class ProgressStore extends EventTarget {
-  private jobs = new Map<string, JobEntry>();
-  
+export class JobStore extends EventTarget {
+  private db: Database;
+
+  constructor(dbPath = "jobs.sqlite") {
+    super();
+    this.db = new Database(dbPath, { create: true });
+    this.init();
+  }
+
+  private init() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS jobs (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL,
+        result TEXT,
+        error TEXT,
+        createdAt INTEGER NOT NULL,
+        progress TEXT NOT NULL
+      );
+    `);
+  }
+
   createJob(jobId: string): void {
-    this.jobs.set(jobId, {
-      status: "pending",
-      createdAt: Date.now(),
-      progress: [],
-    });
+    const stmt = this.db.prepare(
+      `INSERT INTO jobs (id, status, createdAt, progress) VALUES (?, ?, ?, ?)`
+    );
+    stmt.run(jobId, "pending", Date.now(), "[]");
   }
 
   getJob(jobId: string): JobEntry | undefined {
-    return this.jobs.get(jobId);
+    const stmt = this.db.prepare(`SELECT * FROM jobs WHERE id = ?`);
+    const row = stmt.get(jobId) as any;
+    if (!row) return undefined;
+
+    return {
+      status: row.status,
+      result: row.result ? JSON.parse(row.result) : undefined,
+      error: row.error || undefined,
+      createdAt: row.createdAt,
+      progress: JSON.parse(row.progress),
+    };
   }
 
   emitMessage(jobId: string, message: string): void {
-    const job = this.jobs.get(jobId);
+    const job = this.getJob(jobId);
     if (!job) return;
 
     const event = { time: new Date().toISOString(), message };
     job.progress.push(event);
+
+    const stmt = this.db.prepare(`UPDATE jobs SET progress = ? WHERE id = ?`);
+    stmt.run(JSON.stringify(job.progress), jobId);
 
     this.dispatchEvent(
       new CustomEvent(`progress-${jobId}`, {
@@ -43,11 +75,13 @@ class ProgressStore extends EventTarget {
   }
 
   complete(jobId: string, result: unknown): void {
-    const job = this.jobs.get(jobId);
+    const job = this.getJob(jobId);
     if (!job) return;
 
-    job.status = "completed";
-    job.result = result;
+    const stmt = this.db.prepare(
+      `UPDATE jobs SET status = ?, result = ? WHERE id = ?`
+    );
+    stmt.run("completed", JSON.stringify(result), jobId);
 
     this.dispatchEvent(
       new CustomEvent(`progress-${jobId}`, {
@@ -57,11 +91,13 @@ class ProgressStore extends EventTarget {
   }
 
   fail(jobId: string, error: string): void {
-    const job = this.jobs.get(jobId);
+    const job = this.getJob(jobId);
     if (!job) return;
 
-    job.status = "failed";
-    job.error = error;
+    const stmt = this.db.prepare(
+      `UPDATE jobs SET status = ?, error = ? WHERE id = ?`
+    );
+    stmt.run("failed", error, jobId);
 
     this.dispatchEvent(
       new CustomEvent(`progress-${jobId}`, {
@@ -84,13 +120,10 @@ class ProgressStore extends EventTarget {
   }
 
   cleanupExpired(ttlMs: number): void {
-    const now = Date.now();
-    for (const [id, entry] of this.jobs) {
-      if (now - entry.createdAt > ttlMs) {
-        this.jobs.delete(id);
-      }
-    }
+    const cutoff = Date.now() - ttlMs;
+    const stmt = this.db.prepare(`DELETE FROM jobs WHERE createdAt < ?`);
+    stmt.run(cutoff);
   }
 }
 
-export const progressStore = new ProgressStore();
+export const progressStore = new JobStore();

@@ -186,6 +186,4 @@ dist
 .claude/
 
 # Supporting files
-*_prd.md
-TODO.md
-server.log
+jobs.sqlite

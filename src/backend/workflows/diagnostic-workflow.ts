@@ -3,6 +3,33 @@ import { z, type infer as zInfer } from "zod";
 import { DIAGNOSIS_TIMEOUT_MS, MAX_DIAGNOSIS_ROUNDS } from "../config";
 import { progressStore } from "../progress-store";
 
+async function limitConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let index = 0;
+  const workers = Array.from({ length: limit }, async () => {
+    while (index < items.length) {
+      const currentIndex = index++;
+      results[currentIndex] = await fn(items[currentIndex]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelay = 1000): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (e) {
+      attempt++;
+      if (attempt >= maxRetries) throw e;
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 // Step 1: Validate and structure the incoming patient data
 const parseInput = createStep({
   id: "parse-input",
@@ -165,13 +192,18 @@ ${contextHistory.join("\n\n")}`;
         
         // Call the new specialists
         emitProgress(`CMO requested consultations from: ${newSpecialists.join(", ")}`);
-        const promises = newSpecialists.map(async (specId: string) => {
+        
+        const results = await limitConcurrency(newSpecialists, 3, async (specId: string) => {
           try {
             const specAgent = mastra.getAgent(specId);
             if (specAgent) {
               allConsultedSpecialists.add(specId);
               emitProgress(`Calling specialist ${specId}...`);
-              const specResponse = await specAgent.generate(`Please analyze this case from the perspective of a ${specId}:\n\n${inputData.patientSummary}`);
+              
+              const specResponse = await withRetry(async () => {
+                return await specAgent.generate(`Please analyze this case from the perspective of a ${specId}:\n\n${inputData.patientSummary}`);
+              }, 3, 1000);
+              
               emitProgress(`Received analysis from ${specId}`);
               return `=== ${specId} Consult ===\n${specResponse.text}`;
             } else {
@@ -179,11 +211,10 @@ ${contextHistory.join("\n\n")}`;
             }
           } catch (e) {
             console.warn(`Failed to consult specialist ${specId}`, e);
+            emitProgress(`Failed to receive analysis from ${specId}`);
             return `=== ${specId} Consult ===\nFailed to consult specialist: ${e instanceof Error ? e.message : 'Unknown error'}`;
           }
         });
-        
-        const results = await Promise.all(promises);
         
         if (results.length > 0) {
            contextHistory.push(`=== Results from Round ${round} ===\n\n` + results.join("\n\n"));
