@@ -61,3 +61,8 @@ export interface AgentInfo {
 export interface AgentsResponse {
   agents: AgentInfo[];
 }
+
+export type WsMessage =
+  | { type: "progress"; jobId: string; event: { time: string; message: string } }
+  | { type: "completed"; jobId: string; result: { result?: DiagnosisResult; error?: string; status: string } | DiagnosisResult }
+  | { type: "failed"; jobId: string; error: string };

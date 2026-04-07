@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Spinner } from "../components/ui/Spinner";
 import { AgentGrid } from "../components/agents/AgentGrid";
-import { usePolling } from "../hooks/usePolling";
+import { useJobStream } from "../hooks/useJobStream";
 import { getAgents } from "../api/client";
 import type { AgentInfo, StatusResponse } from "../api/types";
 
@@ -12,7 +12,7 @@ interface WaitingRoomProps {
 
 export function WaitingRoom({ jobId, onComplete }: WaitingRoomProps) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const { status, error } = usePolling(jobId, 3000);
+  const { status, error } = useJobStream(jobId);
 
   useEffect(() => {
     getAgents()

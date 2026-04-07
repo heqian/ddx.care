@@ -2,36 +2,15 @@ import { mastra } from "./src/backend/index";
 import { agentList } from "./src/backend/agents/index";
 import { z } from "zod";
 import appHtml from "./index.html";
+import { progressStore } from "./src/backend/progress-store";
+import type { ServerWebSocket } from "bun";
 
 const JOB_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-interface JobEntry {
-  status: "pending" | "completed" | "failed";
-  result?: unknown;
-  error?: string;
-  createdAt: number;
-}
-
-const diagnoses = new Map<string, JobEntry>();
-
 // Periodic cleanup of expired jobs
 setInterval(() => {
-  const now = Date.now();
-  for (const [id, entry] of diagnoses) {
-    if (now - entry.createdAt > JOB_TTL_MS) {
-      diagnoses.delete(id);
-    }
-  }
-  // Also clean up global progress tracking
-  const progressMap = (global as any).jobProgress as Map<string, unknown[]> | undefined;
-  if (progressMap) {
-    for (const id of progressMap.keys()) {
-      if (!diagnoses.has(id)) {
-        progressMap.delete(id);
-      }
-    }
-  }
+  progressStore.cleanupExpired(JOB_TTL_MS);
 }, CLEANUP_INTERVAL_MS);
 
 const diagnoseSchema = z.object({
@@ -40,13 +19,13 @@ const diagnoseSchema = z.object({
   labResults: z.string().min(1),
 });
 
-Bun.serve({
+const server = Bun.serve<{ jobId: string }>({
   port: process.env.PORT ?? 3000,
   routes: {
     "/": appHtml,
 
     "/v1/diagnose": {
-      POST: async (req) => {
+      POST: async (req: Request) => {
         let body: unknown;
         try {
           body = await req.json();
@@ -66,7 +45,7 @@ Bun.serve({
         const { medicalHistory, conversationTranscript, labResults } = parsed.data;
 
         const jobId = crypto.randomUUID();
-        diagnoses.set(jobId, { status: "pending", createdAt: Date.now() });
+        progressStore.createJob(jobId);
 
         const workflow = mastra.getWorkflow("diagnosticWorkflow");
         const run = await workflow.createRun({ runId: jobId });
@@ -74,14 +53,10 @@ Bun.serve({
         run
           .start({ inputData: { medicalHistory, conversationTranscript, labResults } })
           .then((result) => {
-            diagnoses.set(jobId, { status: "completed", result: result, createdAt: Date.now() });
+            progressStore.complete(jobId, result);
           })
           .catch((error) => {
-            diagnoses.set(jobId, {
-              status: "failed",
-              error: error instanceof Error ? error.message : "Unknown error",
-              createdAt: Date.now(),
-            });
+            progressStore.fail(jobId, error instanceof Error ? error.message : "Unknown error");
           });
 
         return Response.json({ jobId, status: "pending" }, { status: 202 });
@@ -89,20 +64,15 @@ Bun.serve({
     },
 
     "/v1/status/:jobId": {
-      GET: (req) => {
+      GET: (req: any) => {
         const { jobId } = req.params;
-        const entry = diagnoses.get(jobId);
+        const entry = progressStore.getJob(jobId);
 
         if (!entry) {
           return Response.json({ error: "Job not found" }, { status: 404 });
         }
 
-        let progress: { time: string; message: string }[] = [];
-        if ((global as any).jobProgress && (global as any).jobProgress.has(jobId)) {
-           progress = (global as any).jobProgress.get(jobId);
-        }
-
-        return Response.json({ jobId, ...entry, progress });
+        return Response.json({ jobId, ...entry });
       },
     },
 
@@ -111,6 +81,68 @@ Bun.serve({
         return Response.json({ agents: agentList });
       },
     },
+
+    "/ws": {
+      GET: (req: Request) => {
+        const url = new URL(req.url);
+        const jobId = url.searchParams.get("jobId");
+        if (!jobId) {
+          return new Response("Missing jobId", { status: 400 });
+        }
+
+        if (server.upgrade(req, { data: { jobId } })) {
+          return; // do not return a Response
+        }
+        return new Response("Upgrade failed", { status: 500 });
+      },
+    },
+  },
+  websocket: {
+    open(ws) {
+      const jobId = ws.data.jobId;
+      const job = progressStore.getJob(jobId);
+
+      if (!job) {
+        ws.send(JSON.stringify({ type: "failed", jobId, error: "Job not found" }));
+        ws.close();
+        return;
+      }
+
+      // 1. Replay historical progress
+      for (const event of job.progress) {
+        ws.send(JSON.stringify({ type: "progress", jobId, event }));
+      }
+
+      // 2. If it's already completed or failed, send the result and close
+      if (job.status === "completed") {
+         ws.send(JSON.stringify({ type: "completed", jobId, result: job.result }));
+         ws.close();
+         return;
+      } else if (job.status === "failed") {
+         ws.send(JSON.stringify({ type: "failed", jobId, error: job.error }));
+         ws.close();
+         return;
+      }
+
+      // 3. Subscribe to real-time events
+      const unsubscribe = progressStore.subscribe(jobId, (data: any) => {
+        ws.send(JSON.stringify(data));
+        if (data.type === "completed" || data.type === "failed") {
+          ws.close();
+        }
+      });
+
+      // Store cleanup on socket so we can call it on close
+      (ws as any).unsubscribe = unsubscribe;
+    },
+    message() {
+      // not taking messages from client
+    },
+    close(ws) {
+      if ((ws as any).unsubscribe) {
+        (ws as any).unsubscribe();
+      }
+    },
   },
   development: {
     hmr: true,
@@ -118,4 +150,4 @@ Bun.serve({
   },
 });
 
-console.log("ddx.care API server running on port 3000");
+console.log("ddx.care API server running on port " + server.port);

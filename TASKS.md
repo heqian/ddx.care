@@ -4,13 +4,13 @@
 
 ### 🔴 P0 — Critical Architecture Issues
 
-- [ ] **Eliminate `(global as any).jobProgress` state** — Replace the fragile global mutable state used for progress tracking ([diagnostic-workflow.ts:101–108](src/backend/workflows/diagnostic-workflow.ts), [index.ts:27–34](index.ts), [index.ts:100–103](index.ts)) with a proper event-driven mechanism. Use Bun's built-in `WebSocket` support to push progress events to the frontend in real time instead of polling + global map.
+- [x] **Eliminate `(global as any).jobProgress` state** — Replace the fragile global mutable state used for progress tracking ([diagnostic-workflow.ts:101–108](src/backend/workflows/diagnostic-workflow.ts), [index.ts:27–34](index.ts), [index.ts:100–103](index.ts)) with a proper event-driven mechanism. Use Bun's built-in `WebSocket` support to push progress events to the frontend in real time instead of polling + global map.
   - Create a `ProgressStore` class with typed events (e.g., `EventEmitter` / `EventTarget`)
   - Wire WebSocket upgrade in `Bun.serve()` to subscribe clients to a jobId's progress stream
   - Remove all `(global as any).jobProgress` references
   - Update `WaitingRoom.tsx` to consume WebSocket messages instead of HTTP polling
 
-- [ ] **Replace HTTP polling with WebSocket streaming** — The frontend polls `/v1/status/:jobId` every 3 seconds ([usePolling.ts](src/frontend/hooks/usePolling.ts)). This is wasteful and introduces latency. Migrate to a WebSocket-based push model where progress and completion events are streamed in real time.
+- [x] **Replace HTTP polling with WebSocket streaming** — The frontend polls `/v1/status/:jobId` every 3 seconds ([usePolling.ts](src/frontend/hooks/usePolling.ts)). This is wasteful and introduces latency. Migrate to a WebSocket-based push model where progress and completion events are streamed in real time.
   - Create a `useJobStream(jobId)` hook that opens a WebSocket connection
   - Server pushes progress, completion, and error events
   - Fall back to polling only if WebSocket fails to connect

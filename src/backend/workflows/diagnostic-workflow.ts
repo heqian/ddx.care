@@ -1,6 +1,7 @@
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z, type infer as zInfer } from "zod";
 import { DIAGNOSIS_TIMEOUT_MS, MAX_DIAGNOSIS_ROUNDS } from "../config";
+import { progressStore } from "../progress-store";
 
 // Step 1: Validate and structure the incoming patient data
 const parseInput = createStep({
@@ -94,17 +95,9 @@ const runDiagnosis = createStep({
   execute: async ({ inputData, mastra, runId }) => {
     const cmo = mastra.getAgent("chiefMedicalOfficer");
 
-    // Helper to send progress updates
     const emitProgress = (message: string) => {
-      // In a real system, we'd emit an event. For now, we'll use a global map via process.
-      // We'll attach progress updates to the global node process since Mastra steps don't have built-in stream yet.
-      if (!(global as any).jobProgress) {
-        (global as any).jobProgress = new Map();
-      }
-      const progressMap = (global as any).jobProgress;
       if (runId) {
-         if (!progressMap.has(runId)) progressMap.set(runId, []);
-         progressMap.get(runId).push({ time: new Date().toISOString(), message });
+        progressStore.emitMessage(runId, message);
       }
     };
 
