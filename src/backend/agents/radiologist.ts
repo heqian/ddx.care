@@ -1,12 +1,8 @@
-import { Agent } from "@mastra/core/agent";
-import { SPECIALIST_MODEL } from "../config";
-import { getToolsForSpecialist } from "../tools";
+import { createSpecialistAgent } from "./factory";
 
-export const radiologist = new Agent({
+export const radiologist = createSpecialistAgent({
   id: "radiologist",
   name: "Radiologist",
-  model: SPECIALIST_MODEL,
-  tools: getToolsForSpecialist("radiologist"),
   description:
     "Interprets medical imaging findings including X-rays, CT scans, MRI, ultrasound, and nuclear medicine studies. Use when imaging findings need interpretation or when recommending appropriate imaging workup.",
   instructions: `You are a board-certified Radiologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

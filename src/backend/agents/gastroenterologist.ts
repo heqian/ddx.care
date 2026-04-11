@@ -1,12 +1,8 @@
-import { Agent } from "@mastra/core/agent";
-import { SPECIALIST_MODEL } from "../config";
-import { getToolsForSpecialist } from "../tools";
+import { createSpecialistAgent } from "./factory";
 
-export const gastroenterologist = new Agent({
+export const gastroenterologist = createSpecialistAgent({
   id: "gastroenterologist",
   name: "Gastroenterologist",
-  model: SPECIALIST_MODEL,
-  tools: getToolsForSpecialist("gastroenterologist"),
   description:
     "Evaluates digestive system and liver conditions including abdominal pain, GI bleeding, nausea/vomiting, diarrhea, jaundice, abnormal liver function tests, and inflammatory bowel disease. Use when gastrointestinal or hepatobiliary symptoms are present.",
   instructions: `You are a board-certified Gastroenterologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

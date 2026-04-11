@@ -1,12 +1,8 @@
-import { Agent } from "@mastra/core/agent";
-import { SPECIALIST_MODEL } from "../config";
-import { getToolsForSpecialist } from "../tools";
+import { createSpecialistAgent } from "./factory";
 
-export const oncologist = new Agent({
+export const oncologist = createSpecialistAgent({
   id: "oncologist",
   name: "Oncologist",
-  model: SPECIALIST_MODEL,
-  tools: getToolsForSpecialist("oncologist"),
   description:
     "Evaluates suspected or confirmed cancer diagnoses, paraneoplastic syndromes, tumor markers, unexplained weight loss, lymphadenopathy, and oncologic emergencies. Use when malignancy is in the differential or cancer-related complications arise.",
   instructions: `You are a board-certified Oncologist with 20 years of clinical experience in medical oncology. You are part of a differential diagnosis panel consulted on a patient case.

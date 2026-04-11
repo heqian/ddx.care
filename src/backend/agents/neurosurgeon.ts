@@ -1,12 +1,8 @@
-import { Agent } from "@mastra/core/agent";
-import { SPECIALIST_MODEL } from "../config";
-import { getToolsForSpecialist } from "../tools";
+import { createSpecialistAgent } from "./factory";
 
-export const neurosurgeon = new Agent({
+export const neurosurgeon = createSpecialistAgent({
   id: "neurosurgeon",
   name: "Neurosurgeon",
-  model: SPECIALIST_MODEL,
-  tools: getToolsForSpecialist("neurosurgeon"),
   description:
     "Evaluates conditions requiring surgical intervention of the brain, spine, and nervous system including intracranial hemorrhage, spinal cord compression, brain tumors, hydrocephalus, and severe traumatic brain injury. Use when neurosurgical emergency or intervention is considered.",
   instructions: `You are a board-certified Neurosurgeon with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

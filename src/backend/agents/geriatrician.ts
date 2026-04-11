@@ -1,12 +1,8 @@
-import { Agent } from "@mastra/core/agent";
-import { SPECIALIST_MODEL } from "../config";
-import { getToolsForSpecialist } from "../tools";
+import { createSpecialistAgent } from "./factory";
 
-export const geriatrician = new Agent({
+export const geriatrician = createSpecialistAgent({
   id: "geriatrician",
   name: "Geriatrician",
-  model: SPECIALIST_MODEL,
-  tools: getToolsForSpecialist("geriatrician"),
   description:
     "Evaluates conditions in elderly patients including polypharmacy, falls, cognitive decline, delirium, frailty, functional decline, and geriatric syndromes. Use when the patient is elderly (65+) with complex multi-system issues.",
   instructions: `You are a board-certified Geriatrician with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

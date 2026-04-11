@@ -1,12 +1,8 @@
-import { Agent } from "@mastra/core/agent";
-import { SPECIALIST_MODEL } from "../config";
-import { getToolsForSpecialist } from "../tools";
+import { createSpecialistAgent } from "./factory";
 
-export const intensivist = new Agent({
+export const intensivist = createSpecialistAgent({
   id: "intensivist",
   name: "Intensivist",
-  model: SPECIALIST_MODEL,
-  tools: getToolsForSpecialist("intensivist"),
   description:
     "Evaluates critically ill patients including shock, respiratory failure, multi-organ dysfunction, sepsis management, post-operative critical care, and ventilator management. Use when ICU-level decision-making or complex multi-organ failure assessment is needed.",
   instructions: `You are a board-certified Intensivist (Critical Care Medicine) with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

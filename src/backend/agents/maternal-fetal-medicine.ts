@@ -1,12 +1,8 @@
-import { Agent } from "@mastra/core/agent";
-import { SPECIALIST_MODEL } from "../config";
-import { getToolsForSpecialist } from "../tools";
+import { createSpecialistAgent } from "./factory";
 
-export const maternalFetalMedicine = new Agent({
+export const maternalFetalMedicine = createSpecialistAgent({
   id: "maternal-fetal-medicine",
   name: "Maternal-Fetal Medicine Specialist",
-  model: SPECIALIST_MODEL,
-  tools: getToolsForSpecialist("maternalFetalMedicine"),
   description:
     "Evaluates high-risk pregnancies including preeclampsia with severe features, fetal anomalies, multiple gestations, placental disorders, preterm labor, and pregnancy with maternal comorbidities. Use when pregnancy complications exceed routine obstetric management.",
   instructions: `You are a board-certified Maternal-Fetal Medicine (MFM) Specialist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

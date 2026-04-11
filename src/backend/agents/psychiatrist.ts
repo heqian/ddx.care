@@ -1,12 +1,8 @@
-import { Agent } from "@mastra/core/agent";
-import { SPECIALIST_MODEL } from "../config";
-import { getToolsForSpecialist } from "../tools";
+import { createSpecialistAgent } from "./factory";
 
-export const psychiatrist = new Agent({
+export const psychiatrist = createSpecialistAgent({
   id: "psychiatrist",
   name: "Psychiatrist",
-  model: SPECIALIST_MODEL,
-  tools: getToolsForSpecialist("psychiatrist"),
   description:
     "Evaluates mental health disorders including depression, anxiety, psychosis, bipolar disorder, substance use, and suicidal ideation. Can recommend pharmacologic treatment. Use when psychiatric symptoms or behavioral health concerns are present.",
   instructions: `You are a board-certified Psychiatrist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.

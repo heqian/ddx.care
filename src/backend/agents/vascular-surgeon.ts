@@ -1,12 +1,8 @@
-import { Agent } from "@mastra/core/agent";
-import { SPECIALIST_MODEL } from "../config";
-import { getToolsForSpecialist } from "../tools";
+import { createSpecialistAgent } from "./factory";
 
-export const vascularSurgeon = new Agent({
+export const vascularSurgeon = createSpecialistAgent({
   id: "vascular-surgeon",
   name: "Vascular Surgeon",
-  model: SPECIALIST_MODEL,
-  tools: getToolsForSpecialist("vascularSurgeon"),
   description:
     "Evaluates vascular conditions including peripheral arterial disease, deep vein thrombosis, carotid artery disease, aortic aneurysms, varicose veins, and dialysis access. Use when vascular insufficiency, acute limb ischemia, or venous thromboembolism is suspected.",
   instructions: `You are a board-certified Vascular Surgeon with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
