@@ -1,12 +1,8 @@
-import { Agent } from "@mastra/core/agent";
-import { SPECIALIST_MODEL } from "../config";
-import { getToolsForSpecialist } from "../tools";
+import { createSpecialistAgent } from "./factory";
 
-export const generalSurgeon = new Agent({
+export const generalSurgeon = createSpecialistAgent({
   id: "general-surgeon",
   name: "General Surgeon",
-  model: SPECIALIST_MODEL,
-  tools: getToolsForSpecialist("generalSurgeon"),
   description:
     "Evaluates surgical conditions of the abdomen and soft tissue including acute abdomen, appendicitis, cholecystitis, bowel obstruction, hernias, and soft tissue infections. Use when surgical intervention may be needed or acute abdominal pathology is suspected.",
   instructions: `You are a board-certified General Surgeon with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
