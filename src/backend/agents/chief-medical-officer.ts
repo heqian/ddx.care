@@ -1,10 +1,24 @@
 import { Agent } from "@mastra/core/agent";
 import { ORCHESTRATOR_MODEL } from "../config";
+import {
+  pubmedSearchTool,
+  clinicalTrialsSearchTool,
+  medlinePlusSearchTool,
+  drugInteractionTool,
+  drugLookupTool,
+} from "../tools";
 
 export const chiefMedicalOfficer = new Agent({
   id: "chief-medical-officer",
   name: "Chief Medical Officer",
   model: ORCHESTRATOR_MODEL,
+  tools: {
+    "pubmed-search": pubmedSearchTool,
+    "clinical-trials-search": clinicalTrialsSearchTool,
+    "medlineplus-search": medlinePlusSearchTool,
+    "drug-interaction": drugInteractionTool,
+    "drug-lookup": drugLookupTool,
+  },
   instructions: `You are the Chief Medical Officer (CMO) of a differential diagnosis panel. You orchestrate a team of 30+ specialist sub-agents to analyze complex patient cases and produce a comprehensive, ranked differential diagnosis report.
 
 ## Your Responsibilities

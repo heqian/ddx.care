@@ -44,7 +44,7 @@
   - Replace `AnyTool` with proper Mastra tool types
   - Consider a declarative config map (e.g., `Record<SpecialistId, ToolCategory[]>`) instead of imperative `if` chains
 
-- [ ] **The CMO agent has no tools** — The `chiefMedicalOfficer` agent ([chief-medical-officer.ts](src/backend/agents/chief-medical-officer.ts)) has no `tools` assigned, unlike all specialist agents. While it delegates rather than researching directly, it might benefit from tools for verifying specialist availability or accessing evidence.
+- [x] **The CMO agent has no tools** — The `chiefMedicalOfficer` agent ([chief-medical-officer.ts](src/backend/agents/chief-medical-officer.ts)) has no `tools` assigned, unlike all specialist agents. While it delegates rather than researching directly, it might benefit from tools for verifying specialist availability or accessing evidence.
 
 - [ ] **`ConsultNotes` renders raw JSON** — The "Full Report" tab ([ConsultNotes.tsx](src/frontend/components/diagnosis/ConsultNotes.tsx)) just does `JSON.stringify(report, null, 2)`. This should render a properly formatted, human-readable clinical report with markdown sections, not a raw JSON dump.
 
