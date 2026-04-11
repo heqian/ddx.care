@@ -48,7 +48,7 @@
 
 - [x] **`ConsultNotes` renders raw JSON** — The "Full Report" tab ([ConsultNotes.tsx](src/frontend/components/diagnosis/ConsultNotes.tsx)) just does `JSON.stringify(report, null, 2)`. This should render a properly formatted, human-readable clinical report with markdown sections, not a raw JSON dump.
 
-- [ ] **Separate route handlers from `index.ts`** — The server entry point `index.ts` mixes server setup, job management, cleanup logic, WebSocket handlers, and route handlers in a single file. The `src/backend/api/` directory exists but is empty.
+- [x] **Separate route handlers from `index.ts`** — The server entry point `index.ts` mixes server setup, job management, cleanup logic, WebSocket handlers, and route handlers in a single file. The `src/backend/api/` directory exists but is empty.
   - Extract route handlers into `src/backend/api/routes.ts`
   - Extract WebSocket handler into `src/backend/api/websocket.ts`
   - Keep `index.ts` as a thin orchestrator that wires everything together
