@@ -5,6 +5,25 @@ import type {
   AgentsResponse,
 } from "./types";
 
+async function handleResponseText(res: Response): Promise<never> {
+  const errText = await res.text();
+  let parsedError: string | null = null;
+  try {
+    const errJson = JSON.parse(errText);
+    if (errJson.error) {
+      parsedError = errJson.error;
+    }
+  } catch (e) {
+    // Ignore JSON parse error
+  }
+  
+  if (parsedError) {
+    throw new Error(parsedError);
+  }
+  
+  throw new Error(errText || `Request failed with status ${res.status}`);
+}
+
 export async function submitDiagnosis(
   data: DiagnoseRequest,
 ): Promise<DiagnoseResponse> {
@@ -14,8 +33,7 @@ export async function submitDiagnosis(
     body: JSON.stringify(data),
   });
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err);
+    await handleResponseText(res);
   }
   return res.json();
 }
@@ -23,8 +41,7 @@ export async function submitDiagnosis(
 export async function getJobStatus(jobId: string): Promise<StatusResponse> {
   const res = await fetch(`/v1/status/${jobId}`);
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err);
+    await handleResponseText(res);
   }
   return res.json();
 }
@@ -32,8 +49,7 @@ export async function getJobStatus(jobId: string): Promise<StatusResponse> {
 export async function getAgents(): Promise<AgentsResponse> {
   const res = await fetch("/v1/agents");
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err);
+    await handleResponseText(res);
   }
   return res.json();
 }
