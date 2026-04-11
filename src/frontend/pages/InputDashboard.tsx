@@ -31,7 +31,7 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
   const [activeVoiceTarget, setActiveVoiceTarget] = useState<"history" | "transcript" | null>(null);
   const recognitionRef = useRef<any>(null);
 
-  const canSubmit = medicalHistory.trim() && transcript.trim() && labResults.trim();
+  const canSubmit = Boolean(medicalHistory.trim() || transcript.trim() || labResults.trim());
 
   const stopVoiceInput = useCallback(() => {
     if (recognitionRef.current) {
