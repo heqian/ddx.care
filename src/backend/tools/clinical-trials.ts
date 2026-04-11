@@ -1,12 +1,11 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { fetchJSON as baseFetchJSON } from "./utils/fetch";
 
 const CT_BASE = "https://clinicaltrials.gov/api/v2";
 
 async function fetchJSON(url: string) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`ClinicalTrials.gov API error: ${res.status} ${res.statusText}`);
-  return res.json();
+  return baseFetchJSON(url, { errorPrefix: "ClinicalTrials.gov API" });
 }
 
 /**

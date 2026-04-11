@@ -34,7 +34,7 @@
   - Reduce each agent file to just the domain-specific config (description + instructions)
   - Consider moving agent configs to a single data file or directory of `.ts` config objects
 
-- [ ] **Deduplicate `fetchJSON` helper** — There are 4 separate `fetchJSON` implementations across tool files ([pubmed-search.ts:6](src/backend/tools/pubmed-search.ts), [drug-interaction.ts:6](src/backend/tools/drug-interaction.ts), [open-fda.ts:6](src/backend/tools/open-fda.ts), [clinical-trials.ts:6](src/backend/tools/clinical-trials.ts)), each with slightly different error handling (open-fda handles 404 specially, others throw).
+- [x] **Deduplicate `fetchJSON` helper** — There are 4 separate `fetchJSON` implementations across tool files ([pubmed-search.ts:6](src/backend/tools/pubmed-search.ts), [drug-interaction.ts:6](src/backend/tools/drug-interaction.ts), [open-fda.ts:6](src/backend/tools/open-fda.ts), [clinical-trials.ts:6](src/backend/tools/clinical-trials.ts)), each with slightly different error handling (open-fda handles 404 specially, others throw).
   - Extract a shared `src/backend/tools/utils/fetch.ts` with a single `fetchJSON` that accepts retry/error config
   - Add proper rate-limiting for NCBI APIs (3 req/sec without API key)
   - Add request timeout handling

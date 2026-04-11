@@ -1,17 +1,11 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { fetchJSON as baseFetchJSON } from "./utils/fetch";
 
 const FDA_BASE = "https://api.fda.gov";
 
 async function fetchJSON(url: string) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    if (res.status === 404) {
-      return { error: true, results: [] };
-    }
-    throw new Error(`OpenFDA API error: ${res.status} ${res.statusText}`);
-  }
-  return res.json();
+  return baseFetchJSON(url, { errorPrefix: "OpenFDA API", ignore404: true });
 }
 
 /**
