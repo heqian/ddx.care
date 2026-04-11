@@ -57,7 +57,7 @@
 
 ### 🟡 P2 — Security & Robustness
 
-- [ ] **Add PII detection/scrubbing before LLM submission** — The frontend shows a PII warning modal ([InputDashboard.tsx:286–322](src/frontend/pages/InputDashboard.tsx)), but there is zero server-side PII detection. Patient identifiers could be sent to external LLM providers.
+- [x] **Add PII detection/scrubbing before LLM submission** — The frontend shows a PII warning modal ([InputDashboard.tsx:286–322](src/frontend/pages/InputDashboard.tsx)), but there is zero server-side PII detection. Patient identifiers could be sent to external LLM providers.
   - Implement a lightweight PII detection layer (regex for SSN, MRN, DOB patterns, names from common patterns)
   - Warn or reject submissions with detected PII
   - Log PII detection events (without the PII itself) for audit

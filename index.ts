@@ -4,6 +4,7 @@ import { z } from "zod";
 import appHtml from "./index.html";
 import { progressStore } from "./src/backend/progress-store";
 import type { ServerWebSocket } from "bun";
+import { detectPII } from "./src/backend/utils/pii-detector";
 
 const JOB_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -43,6 +44,16 @@ const server = Bun.serve<{ jobId: string }>({
         }
 
         const { medicalHistory, conversationTranscript, labResults } = parsed.data;
+
+        const combinedText = `${medicalHistory}\n${conversationTranscript}\n${labResults}`;
+        const piiResult = detectPII(combinedText);
+        if (piiResult.hasPII) {
+          console.warn(`[SECURITY] PII detected in diagnostic request. Types: ${piiResult.detectedTypes.join(", ")}`);
+          return Response.json(
+            { error: `Submission rejected: Please remove potential Patient Health Information (${piiResult.detectedTypes.join(", ")}).` },
+            { status: 400 },
+          );
+        }
 
         const jobId = crypto.randomUUID();
         progressStore.createJob(jobId);
