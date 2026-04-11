@@ -177,13 +177,15 @@ dist
 # End of https://www.toptal.com/developers/gitignore/api/macos,node
 
 
-# My Stuff
 # Mastra
 .mastra/
 
 # Skills
 .agents/
 .claude/
+
+# Playwright
+test-results/
 
 # Supporting files
 jobs.sqlite

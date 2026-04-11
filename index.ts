@@ -20,7 +20,7 @@ const diagnoseSchema = z.object({
   labResults: z.string().min(1),
 });
 
-const server = Bun.serve<{ jobId: string }>({
+export const server = Bun.serve<{ jobId: string }>({
   port: process.env.PORT ?? 3000,
   routes: {
     "/": appHtml,

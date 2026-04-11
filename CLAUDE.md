@@ -1,106 +1,92 @@
+# ddx.care — AI-Powered Differential Diagnosis System
+
+Uses AI agents (via Mastra) to simulate a panel of medical specialists analyzing patient cases. 36+ specialist agents consult on cases, orchestrated by a Chief Medical Officer agent that synthesizes findings into a ranked differential diagnosis.
+
+## Runtime & Tooling
 
 Default to using Bun instead of Node.js.
 
 - Use `bun <file>` instead of `node <file>` or `ts-node <file>`
 - Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
 - Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
 - Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
 - Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+- Bun automatically loads `.env`, so don't use `dotenv`.
+
+## Scripts
+
+- `bun run dev` — Start dev server with HMR on port 3000 (or `PORT` env var)
+- `bun run build` — Bundle frontend to `./dist`
+- `bun run test` — Run unit tests (api, tools, api-integration)
+- `bun run test:e2e` — Run Playwright E2E tests
+- `bun run test:all` — Run both unit and E2E tests
+- `bun run test:integration` — Run integration tests against live APIs (`RUN_INTEGRATION=1`)
 
 ## APIs
 
 - `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
 - `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
 - `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
+- Prefer `Bun.file` over `node:fs`'s readFile/writeFile.
 - Bun.$`ls` instead of execa.
+
+## Architecture
+
+### Backend (`src/backend/`)
+
+- **Mastra framework** (`@mastra/core`) — agent orchestration, workflows, tool definitions
+- **AI Model**: Google Gemini (default: `gemini-3.1-pro-preview`), configured via `GOOGLE_GENERATIVE_AI_API_KEY`
+- **Agents** (`src/backend/agents/`) — 36+ medical specialist agents + Chief Medical Officer. Created via factory pattern in `factory.ts`. Listed in `index.ts`.
+- **Tools** (`src/backend/tools/`) — Medical API integrations:
+  - PubMed/NCBI literature search
+  - OpenFDA drug safety & adverse events
+  - ClinicalTrials.gov trial matching
+  - RxNav drug interactions
+  - MedlinePlus patient education
+- **Workflows** (`src/backend/workflows/`) — Multi-step diagnostic workflow with concurrency control (max 3 concurrent specialist calls) and retry logic
+- **Progress Store** (`src/backend/progress-store.ts`) — SQLite-backed job persistence with pub/sub for real-time updates and TTL-based cleanup
+- **PII Detection** (`src/backend/utils/pii-detector.ts`) — Server-side check for patient health information before processing
+
+### Frontend (`src/frontend/`)
+
+- **React 19** with Tailwind CSS v4
+- Entry: `src/frontend/main.tsx` (loaded via `<script>` in `index.html`)
+- **Pages**: InputDashboard (case submission) → WaitingRoom (real-time progress) → ResultsView (diagnosis report)
+- **Hooks**: `useJobStream` (WebSocket with HTTP polling fallback), `usePolling`, `useAutoLogout`
+- **Context**: `ThemeContext` (light/dark mode)
+- Built by Bun's bundler via HTML imports — no Vite.
+
+### Server (`index.ts`)
+
+Routes:
+- `POST /v1/diagnose` — Submit a diagnostic case (validates input, checks PII, starts workflow)
+- `GET /v1/status/:jobId` — Poll job status
+- `GET /v1/agents` — List available specialist agents
+- `GET /ws?jobId=...` — WebSocket for real-time progress streaming (replays history on connect)
+- `/` — Serves the frontend SPA
+
+### Environment Variables
+
+- `GOOGLE_GENERATIVE_AI_API_KEY` — Required. Google AI API key.
+- `PORT` — Server port (default: 3000)
+- `SPECIALIST_MODEL` — Override specialist agent model
+- `ORCHESTRATOR_MODEL` — Override CMO agent model
+- `MAX_DIAGNOSIS_ROUNDS` — Max consultation rounds (default: 3)
+- `MOCK_LLM` — Set to `1` for mock mode (testing)
 
 ## Testing
 
-Use `bun test` to run tests.
+- **Unit tests**: `bun test` — files in `tests/` (`api.test.ts`, `tools.test.ts`, `api-integration.test.ts`)
+- **E2E tests**: Playwright (`bun run test:e2e`) — `tests/full-flow.spec.ts`, runs on port 3999 with `MOCK_LLM=1`
+- Test server configured in `playwright.config.ts`
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+## Key Dependencies
 
-test("hello world", () => {
-  expect(1).toBe(1);
-});
-```
-
-## Frontend
-
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
-
-Server:
-
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
-
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
-
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
-
-With the following `frontend.tsx`:
-
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+- `@mastra/core` — Agent/workflow framework
+- `react` / `react-dom` (v19) — UI
+- `tailwindcss` (v4) + `bun-plugin-tailwind` — Styling
+- `zod` — Input validation schemas
+- `marked` — Markdown rendering
+- `isomorphic-dompurify` — HTML sanitization
+- `@heroicons/react` — Icon library
+- `@playwright/test` — E2E testing
