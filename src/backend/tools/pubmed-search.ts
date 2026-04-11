@@ -1,12 +1,11 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { fetchJSON as baseFetchJSON } from "./utils/fetch";
 
 const EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
 
 async function fetchJSON(url: string) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`NCBI E-utilities error: ${res.status} ${res.statusText}`);
-  return res.json();
+  return baseFetchJSON(url, { errorPrefix: "NCBI E-utilities" });
 }
 
 /**

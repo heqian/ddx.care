@@ -1,12 +1,11 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { fetchJSON as baseFetchJSON } from "./utils/fetch";
 
 const RXNAV_BASE = "https://rxnav.nlm.nih.gov/REST";
 
 async function fetchJSON(url: string) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`RxNav API error: ${res.status} ${res.statusText}`);
-  return res.json();
+  return baseFetchJSON(url, { errorPrefix: "RxNav API" });
 }
 
 /**
