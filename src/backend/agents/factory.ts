@@ -1,6 +1,7 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
 import { getToolsForSpecialist } from "../tools";
+import type { SpecialistId } from ".";
 
 export interface SpecialistConfig {
   id: string;
@@ -18,7 +19,7 @@ export function createSpecialistAgent(config: SpecialistConfig): Agent {
     id: config.id,
     name: config.name,
     model: SPECIALIST_MODEL,
-    tools: getToolsForSpecialist(kebabToCamel(config.id)),
+    tools: getToolsForSpecialist(kebabToCamel(config.id) as SpecialistId),
     description: config.description,
     instructions: config.instructions,
   });

@@ -39,7 +39,7 @@
   - Add proper rate-limiting for NCBI APIs (3 req/sec without API key)
   - Add request timeout handling
 
-- [ ] **Type-safe tool assignments** — The `getToolsForSpecialist` function in [tools/index.ts](src/backend/tools/index.ts) uses `type AnyTool = any` and multiple hardcoded `Set` lookups of specialist IDs as strings. This is error-prone and can silently fail if agent IDs change.
+- [x] **Type-safe tool assignments** — The `getToolsForSpecialist` function in [tools/index.ts](src/backend/tools/index.ts) uses `type AnyTool = any` and multiple hardcoded `Set` lookups of specialist IDs as strings. This is error-prone and can silently fail if agent IDs change.
   - Define a `SpecialistId` union type from the agent registry
   - Replace `AnyTool` with proper Mastra tool types
   - Consider a declarative config map (e.g., `Record<SpecialistId, ToolCategory[]>`) instead of imperative `if` chains

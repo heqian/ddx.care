@@ -13,7 +13,10 @@ export { clinicalTrialsSearchTool } from "./clinical-trials";
 // MedlinePlus health info
 export { medlinePlusSearchTool } from "./medlineplus";
 
-// --- Tool groupings by specialist category ---
+// --- Type-safe tool assignments ---
+
+import type { SpecialistId } from "../agents";
+import type { ToolsInput } from "@mastra/core/agent";
 
 import { pubmedSearchTool, omimSearchTool, geneReviewsSearchTool, clinVarSearchTool } from "./pubmed-search";
 import { drugLookupTool, drugInteractionTool, drugSpellingTool } from "./drug-interaction";
@@ -21,108 +24,109 @@ import { adverseEventsTool, drugLabelingTool, substanceToxicologyTool } from "./
 import { clinicalTrialsSearchTool } from "./clinical-trials";
 import { medlinePlusSearchTool } from "./medlineplus";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyTool = any;
+// --- Tool categories ---
 
 /** Tools available to all specialists */
-const universalTools: Record<string, AnyTool> = {
+const universal = {
   "pubmed-search": pubmedSearchTool,
   "drug-lookup": drugLookupTool,
   "drug-interaction": drugInteractionTool,
 };
 
-/** Additional tools for specialists that prescribe or manage medications heavily */
-const prescribingTools: Record<string, AnyTool> = {
+/** Additional tools for specialists that prescribe or manage medications */
+const prescribing = {
   "drug-labeling": drugLabelingTool,
   "adverse-events": adverseEventsTool,
 };
 
 /** Tools for genetic/hereditary condition evaluation */
-const geneticsTools: Record<string, AnyTool> = {
+const genetics = {
   "omim-search": omimSearchTool,
   "gene-reviews-search": geneReviewsSearchTool,
   "clinvar-search": clinVarSearchTool,
 };
 
-/** Tools for oncology (cancer treatment and trials) */
-const oncologyTools: Record<string, AnyTool> = {
+/** Tools for oncology (cancer treatment, trials, and drug info) */
+const oncology = {
   "clinical-trials-search": clinicalTrialsSearchTool,
-  "drug-recall": drugLabelingTool, // reuse labeling for drug info
+  "drug-recall": drugLabelingTool,
 };
 
 /** Tools for toxicology and poisoning */
-const toxicologyTools: Record<string, AnyTool> = {
+const toxicology = {
   "substance-toxicology": substanceToxicologyTool,
   "adverse-events": adverseEventsTool,
 };
 
 /** Tools for patient education and counseling */
-const patientEducationTools: Record<string, AnyTool> = {
+const education = {
   "medlineplus-search": medlinePlusSearchTool,
 };
 
+/** Clinical trial search for chronic/serious conditions */
+const trials = {
+  "clinical-trials-search": clinicalTrialsSearchTool,
+};
+
+/** Drug spelling suggestions for identifying unknown substances */
+const spelling = {
+  "drug-spelling-suggestion": drugSpellingTool,
+};
+
+// --- Declarative specialist → tool categories ---
+
+const toolAssignments: Record<SpecialistId, ToolsInput[]> = {
+  // Primary Care
+  generalist: [universal, prescribing, education],
+  pediatrician: [universal, prescribing, genetics, education],
+  geriatrician: [universal, prescribing, education],
+  // Internal Medicine Subspecialties
+  cardiologist: [universal, prescribing, genetics, trials],
+  dermatologist: [universal],
+  endocrinologist: [universal, prescribing],
+  gastroenterologist: [universal, prescribing],
+  hematologist: [universal, prescribing, trials],
+  infectiologist: [universal, prescribing, trials],
+  nephrologist: [universal, prescribing],
+  neurologist: [universal, prescribing, genetics, trials],
+  oncologist: [universal, prescribing, genetics, oncology, trials],
+  pulmonologist: [universal, prescribing, trials],
+  rheumatologist: [universal, prescribing, trials],
+  // Surgical Specialties
+  generalSurgeon: [universal],
+  cardiothoracicSurgeon: [universal],
+  neurosurgeon: [universal],
+  orthopedist: [universal],
+  otolaryngologist: [universal],
+  urologist: [universal],
+  vascularSurgeon: [universal],
+  // Diagnostic & Support
+  pathologist: [universal],
+  radiologist: [universal],
+  geneticist: [universal, genetics],
+  // Reproductive & Gender-Specific
+  obstetricianGynecologist: [universal, prescribing, genetics, education],
+  andrologist: [universal, prescribing],
+  maternalFetalMedicine: [universal, prescribing, genetics],
+  // Mental & Behavioral Health
+  psychiatrist: [universal, prescribing, education],
+  // Critical Care & Emergency Subspecialties
+  intensivist: [universal, prescribing, toxicology],
+  toxicologist: [universal, toxicology, spelling],
+  // Other Specialized Fields
+  allergistImmunologist: [universal, prescribing],
+  ophthalmologist: [universal],
+  emergencyPhysician: [universal, prescribing, toxicology, spelling],
+  sportsMedicinePhysician: [universal, prescribing, education],
+  podiatrist: [universal],
+};
+
 /**
- * Tool assignments per specialist ID.
- * Every specialist gets universal tools. Domain-specific tools are layered on top.
+ * Get the set of tools for a given specialist agent.
+ * Tool categories are merged in order; later categories may override
+ * duplicate keys from earlier ones.
  */
-export function getToolsForSpecialist(specialistId: string): Record<string, AnyTool> {
-  const tools: Record<string, AnyTool> = { ...universalTools };
-
-  // Add prescribing tools for specialists that commonly prescribe
-  const prescribers = new Set([
-    "generalist", "cardiologist", "endocrinologist", "gastroenterologist",
-    "hematologist", "infectiologist", "nephrologist", "neurologist",
-    "oncologist", "pulmonologist", "rheumatologist", "psychiatrist",
-    "pediatrician", "geriatrician", "intensivist", "emergencyPhysician",
-    "allergistImmunologist", "obstetricianGynecologist", "andrologist",
-    "maternalFetalMedicine", "sportsMedicinePhysician",
-  ]);
-
-  if (prescribers.has(specialistId)) {
-    Object.assign(tools, prescribingTools);
-  }
-
-  // Add genetics tools for specialists that deal with inherited conditions
-  const geneticsUsers = new Set([
-    "geneticist", "oncologist", "pediatrician", "obstetricianGynecologist",
-    "maternalFetalMedicine", "neurologist", "cardiologist",
-  ]);
-  if (geneticsUsers.has(specialistId)) {
-    Object.assign(tools, geneticsTools);
-  }
-
-  // Add oncology-specific tools
-  if (specialistId === "oncologist") {
-    Object.assign(tools, oncologyTools);
-  }
-
-  // Add toxicology tools
-  if (specialistId === "toxicologist" || specialistId === "emergencyPhysician" || specialistId === "intensivist") {
-    Object.assign(tools, toxicologyTools);
-  }
-
-  // Add patient education tools for primary care and counseling specialties
-  const educators = new Set([
-    "generalist", "pediatrician", "geriatrician", "psychiatrist",
-    "obstetricianGynecologist", "sportsMedicinePhysician",
-  ]);
-  if (educators.has(specialistId)) {
-    Object.assign(tools, patientEducationTools);
-  }
-
-  // Clinical trials for specialists dealing with serious/chronic conditions
-  const trialUsers = new Set([
-    "oncologist", "hematologist", "neurologist", "pulmonologist",
-    "cardiologist", "infectiologist", "rheumatologist",
-  ]);
-  if (trialUsers.has(specialistId)) {
-    tools["clinical-trials-search"] = clinicalTrialsSearchTool;
-  }
-
-  // Drug spelling suggestions for toxicologist and emergency (unknown pills)
-  if (specialistId === "toxicologist" || specialistId === "emergencyPhysician") {
-    tools["drug-spelling-suggestion"] = drugSpellingTool;
-  }
-
-  return tools;
+export function getToolsForSpecialist(id: SpecialistId): ToolsInput {
+  const categories = toolAssignments[id];
+  return Object.assign({}, ...categories);
 }

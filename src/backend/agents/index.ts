@@ -52,7 +52,7 @@ import { sportsMedicinePhysician } from "./sports-medicine-physician";
 import { podiatrist } from "./podiatrist";
 
 /** All specialist agents (excludes the CMO orchestrator) */
-export const specialists: Record<string, Agent> = {
+export const specialists = {
   // Primary Care
   generalist,
   pediatrician,
@@ -96,7 +96,10 @@ export const specialists: Record<string, Agent> = {
   emergencyPhysician,
   sportsMedicinePhysician,
   podiatrist,
-};
+} satisfies Record<string, Agent>;
+
+/** Specialist agent IDs (camelCase, matching agent record keys) */
+export type SpecialistId = keyof typeof specialists;
 
 /** List of agent metadata for the /v1/agents endpoint */
 export const agentList = Object.entries(specialists).map(([id, agent]) => ({

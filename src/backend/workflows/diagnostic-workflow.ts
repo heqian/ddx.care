@@ -107,6 +107,70 @@ function splitToList(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+/** Mock diagnosis for E2E testing — returns a realistic canned response */
+async function mockDiagnosis(
+  _patientSummary: string,
+  emitProgress: (msg: string) => void,
+): Promise<{ diagnosisReport: DiagnosisReport }> {
+  const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  emitProgress("Round 1 Analysis: Asking CMO for decision on needed specialists...");
+  await delay(100);
+
+  const specialists = ["cardiologist", "neurologist", "nephrologist"];
+  for (const id of specialists) {
+    emitProgress(`Calling specialist ${id}...`);
+    await delay(80);
+    emitProgress(`Received analysis from ${id}`);
+  }
+
+  emitProgress("CMO has determined no further consultations are needed and finalized the report.");
+  await delay(50);
+
+  return {
+    diagnosisReport: {
+      chiefComplaint: "Severe headache with blurred vision",
+      patientSummary: "45-year-old male with history of hypertension presenting with 3-day severe headache and blurred vision.",
+      specialistsConsulted: [
+        { specialist: "cardiologist", keyFindings: "Severe hypertension likely contributing to headache. BP 180/110 suggests hypertensive urgency." },
+        { specialist: "neurologist", keyFindings: "Blurred vision with severe headache raises concern for papilledema and increased intracranial pressure." },
+        { specialist: "nephrologist", keyFindings: "Elevated BP with possible renal involvement. Recommend basic metabolic panel and urinalysis." },
+      ],
+      rankedDiagnoses: [
+        {
+          diagnosisName: "Hypertensive Urgency",
+          confidencePercentage: 85,
+          urgency: "Emergent" as const,
+          rationale: "Severe headache with BP 180/110 and blurred vision strongly suggest hypertensive urgency.",
+          supportingEvidence: "BP 180/110\nHistory of hypertension\nBlurred vision",
+          contradictoryEvidence: "None identified",
+          suggestedNextSteps: "Lower BP with IV antihypertensives\nOphthalmologic exam\nCT head to rule out hemorrhage",
+        },
+        {
+          diagnosisName: "Migraine with Aura",
+          confidencePercentage: 45,
+          urgency: "Urgent" as const,
+          rationale: "Severe headache with visual changes could represent migraine, though less likely given BP readings.",
+          supportingEvidence: "Severe headache\nVisual disturbances",
+          contradictoryEvidence: "No prior migraine history\nBP 180/110 suggests secondary cause",
+          suggestedNextSteps: "Consider migraine workup if BP control does not resolve symptoms\nTrial of analgesics",
+        },
+        {
+          diagnosisName: "Tension-Type Headache",
+          confidencePercentage: 20,
+          urgency: "Routine" as const,
+          rationale: "Less likely given severity and associated visual symptoms, but possible comorbid condition.",
+          supportingEvidence: "Headache as primary symptom",
+          contradictoryEvidence: "Blurred vision not typical\nBP elevation suggests secondary cause",
+          suggestedNextSteps: "Stress management\nFollow up if symptoms persist",
+        },
+      ],
+      crossSpecialtyObservations: "All consultants agree that blood pressure control is the immediate priority. Neurology and cardiology both recommend neuroimaging.",
+      recommendedImmediateActions: "Administer IV antihypertensive medication. Order STAT CT head. Consult ophthalmology for fundoscopic exam.",
+    },
+  };
+}
+
 // Step 2: Run the diagnostic analysis via the CMO supervisor agent
 const runDiagnosis = createStep({
   id: "run-diagnosis",
@@ -120,13 +184,18 @@ const runDiagnosis = createStep({
     diagnosisReport: diagnosisReportSchema,
   }),
   execute: async ({ inputData, mastra, runId }) => {
-    const cmo = mastra.getAgent("chiefMedicalOfficer");
-
     const emitProgress = (message: string) => {
       if (runId) {
         progressStore.emitMessage(runId, message);
       }
     };
+
+    // Mock mode: return a canned response without calling real LLMs
+    if (process.env.MOCK_LLM) {
+      return mockDiagnosis(inputData.patientSummary, emitProgress);
+    }
+
+    const cmo = mastra.getAgent("chiefMedicalOfficer");
 
     const MAX_ROUNDS = MAX_DIAGNOSIS_ROUNDS;
     let round = 1;

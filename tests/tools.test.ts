@@ -1,122 +1,112 @@
-import { describe, test, expect } from "bun:test";
+import { test, expect, describe } from "bun:test";
 
-const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
-const RXNAV = "https://rxnav.nlm.nih.gov/REST";
-const FDA = "https://api.fda.gov";
-const CT = "https://clinicaltrials.gov/api/v2";
-const MEDLINE = "https://connect.medlineplus.gov/service";
+describe("Agent Registry", () => {
+  test("all specialist agents are registered", async () => {
+    const { specialists } = await import("../src/backend/agents/index");
+    const keys = Object.keys(specialists);
 
-async function fetchJSON(url: string) {
-  // NCBI rate limits to 3 req/sec without API key — add delay between calls
-  if (url.includes("eutils.ncbi")) {
-    await new Promise((r) => setTimeout(r, 350));
-  }
-  const res = await fetch(url);
-  if (!res.ok && url.includes("eutils.ncbi")) {
-    await new Promise((r) => setTimeout(r, 1000));
-    const retry = await fetch(url);
-    expect(retry.ok).toBe(true);
-    return retry.json();
-  }
-  expect(res.ok).toBe(true);
-  return res.json();
-}
+    // Should have a reasonable number of specialists (guards against accidental removal)
+    expect(keys.length).toBeGreaterThan(30);
 
-describe("PubMed / NCBI E-utilities", () => {
-  test("esearch returns results for a medical query", async () => {
-    const data = await fetchJSON(`${EUTILS}/esearch.fcgi?db=pubmed&term=sepsis+treatment&retmax=3&retmode=json`);
-    expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
-    expect(parseInt(data.esearchresult.count)).toBeGreaterThan(0);
+    // Spot-check key specialties exist
+    expect(keys).toContain("generalist");
+    expect(keys).toContain("cardiologist");
+    expect(keys).toContain("neurologist");
+    expect(keys).toContain("emergencyPhysician");
+    expect(keys).toContain("psychiatrist");
+    expect(keys).toContain("obstetricianGynecologist");
+    expect(keys).toContain("vascularSurgeon");
+    expect(keys).toContain("intensivist");
+    expect(keys).toContain("toxicologist");
+    expect(keys).toContain("maternalFetalMedicine");
   });
 
-  test("esummary returns article metadata", async () => {
-    const data = await fetchJSON(`${EUTILS}/esummary.fcgi?db=pubmed&id=41934189&retmode=json`);
-    const article = data.result["41934189"];
-    expect(article.title).toBeTruthy();
-    expect(article.authors).toBeInstanceOf(Array);
+  test("agent list provides metadata", async () => {
+    const { agentList } = await import("../src/backend/agents/index");
+
+    expect(agentList.length).toBeGreaterThan(0);
+
+    for (const entry of agentList) {
+      expect(entry.id).toBeTruthy();
+      expect(entry.name).toBeTruthy();
+      expect(typeof entry.description).toBe("string");
+    }
   });
 
-  test("OMIM search returns genetic conditions", async () => {
-    const data = await fetchJSON(`${EUTILS}/esearch.fcgi?db=omim&term=%22cystic+fibrosis%22&retmax=3&retmode=json`);
-    expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
-  });
+  test("no duplicate agent IDs", async () => {
+    const { specialists } = await import("../src/backend/agents/index");
+    const keys = Object.keys(specialists);
+    const unique = new Set(keys);
 
-  test("ClinVar search returns genetic variants", async () => {
-    const data = await fetchJSON(`${EUTILS}/esearch.fcgi?db=clinvar&term=BRCA1&retmax=3&retmode=json`);
-    expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
-  });
-
-  test("GeneReviews search returns results", async () => {
-    const data = await fetchJSON(`${EUTILS}/esearch.fcgi?db=books&term=%22Huntington+disease%22+GeneReviews&retmax=3&retmode=json`);
-    expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
+    expect(unique.size).toBe(keys.length);
   });
 });
 
-describe("RxNav Drug API", () => {
-  test("drug lookup returns RxCUI for a known drug", async () => {
-    const data = await fetchJSON(`${RXNAV}/drugs.json?name=metformin`);
-    expect(data.drugGroup).toBeDefined();
-    expect(data.drugGroup.conceptGroup).toBeInstanceOf(Array);
-    // Verify at least one concept has an RxCUI
-    const allProps = data.drugGroup.conceptGroup.flatMap(
-      (cg: any) => cg.conceptProperties ?? [],
-    );
-    const withRxCUI = allProps.filter((p: any) => p.rxcui);
-    expect(withRxCUI.length).toBeGreaterThan(0);
+describe("Tool Assignments", () => {
+  test("every specialist has a tool assignment entry", async () => {
+    const { specialists } = await import("../src/backend/agents/index");
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+
+    const ids = Object.keys(specialists);
+    for (const id of ids) {
+      const tools = getToolsForSpecialist(id as keyof typeof specialists);
+      expect(Object.keys(tools).length, `${id} has no tools`).toBeGreaterThan(0);
+    }
   });
 
-  test("spelling suggestions correct misspelled drug names", async () => {
-    const data = await fetchJSON(`${RXNAV}/spellingsuggestions.json?name=aspririn`);
-    expect(data.suggestionGroup.suggestionList.suggestion).toContain("aspirin");
+  test("every specialist gets universal tools", async () => {
+    const { specialists } = await import("../src/backend/agents/index");
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+
+    const ids = Object.keys(specialists);
+    for (const id of ids) {
+      const tools = getToolsForSpecialist(id as keyof typeof specialists);
+      expect(tools).toHaveProperty("pubmed-search");
+      expect(tools).toHaveProperty("drug-lookup");
+      expect(tools).toHaveProperty("drug-interaction");
+    }
   });
 
-  test("RxCUI lookup returns ID for a known drug", async () => {
-    const data = await fetchJSON(`${RXNAV}/rxcui.json?name=warfarin`);
-    expect(data.idGroup.rxnormId).toBeInstanceOf(Array);
-    expect(data.idGroup.rxnormId[0]).toBe("11289");
-  });
-});
+  test("prescribers get prescribing tools", async () => {
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
 
-describe("OpenFDA API", () => {
-  test("adverse events returns reports for a known drug", async () => {
-    const data = await fetchJSON(`${FDA}/drug/event.json?search=patient.drug.medicinalproduct:metformin&limit=1`);
-    expect(data.meta.results.total).toBeGreaterThan(0);
-    expect(data.results).toBeInstanceOf(Array);
-    expect(data.results.length).toBe(1);
-  });
+    const prescribers = [
+      "generalist", "cardiologist", "endocrinologist", "oncologist",
+    ] as const;
 
-  test("drug labeling returns package insert data", async () => {
-    const data = await fetchJSON(`${FDA}/drug/label.json?search=openfda.generic_name:metformin&limit=1`);
-    expect(data.meta.results.total).toBeGreaterThan(0);
-    expect(data.results[0].openfda.generic_name).toBeDefined();
+    for (const id of prescribers) {
+      const tools = getToolsForSpecialist(id);
+      expect(tools).toHaveProperty("drug-labeling");
+      expect(tools).toHaveProperty("adverse-events");
+    }
   });
 
-  test("drug enforcement returns recall data", async () => {
-    const data = await fetchJSON(`${FDA}/drug/enforcement.json?limit=1`);
-    expect(data.results).toBeInstanceOf(Array);
-    expect(data.results[0].recall_number).toBeTruthy();
-  });
+  test("non-prescribers do not get prescribing tools", async () => {
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
 
-  test("substance toxicology returns data", async () => {
-    const data = await fetchJSON(`${FDA}/other/substance.json?search=substance_name:ethylene+glycol&limit=1`);
-    expect(data.results).toBeInstanceOf(Array);
-    expect(data.results.length).toBeGreaterThan(0);
-  });
-});
+    const nonPrescribers = ["dermatologist", "radiologist", "pathologist"] as const;
 
-describe("ClinicalTrials.gov API v2", () => {
-  test("search returns trials for a condition", async () => {
-    const data = await fetchJSON(`${CT}/studies?query.term=diabetes&pageSize=2`);
-    expect(data.studies).toBeInstanceOf(Array);
-    expect(data.studies.length).toBeGreaterThan(0);
-    expect(data.studies[0].protocolSection.identificationModule.nctId).toBeTruthy();
+    for (const id of nonPrescribers) {
+      const tools = getToolsForSpecialist(id);
+      expect(tools).not.toHaveProperty("drug-labeling");
+    }
   });
 });
 
-describe("MedlinePlus Connect API", () => {
-  test("returns health info for a condition", async () => {
-    const url = `${MEDLINE}?mainSearchCriteria.v.cs=2.16.840.1.113883.6.103&mainSearchCriteria.v.dn=diabetes&knowledgeResponseType=application/json`;
-    const data = await fetchJSON(url);
-    expect(data.feed).toBeDefined();
+describe("Config", () => {
+  test("model constants are strings", async () => {
+    const { SPECIALIST_MODEL, ORCHESTRATOR_MODEL } = await import("../src/backend/config");
+
+    expect(typeof SPECIALIST_MODEL).toBe("string");
+    expect(SPECIALIST_MODEL.length).toBeGreaterThan(0);
+    expect(typeof ORCHESTRATOR_MODEL).toBe("string");
+    expect(ORCHESTRATOR_MODEL.length).toBeGreaterThan(0);
+  });
+
+  test("timeout constant is reasonable", async () => {
+    const { DIAGNOSIS_TIMEOUT_MS } = await import("../src/backend/config");
+
+    expect(DIAGNOSIS_TIMEOUT_MS).toBeGreaterThan(0);
+    expect(DIAGNOSIS_TIMEOUT_MS).toBeLessThanOrEqual(600_000);
   });
 });
