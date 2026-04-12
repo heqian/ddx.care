@@ -1,186 +1,73 @@
-# Tasks
+# Tasks — Week of Apr 13–19, 2026
 
-## Active
+> Full project review conducted Apr 12. Tasks ranked by impact and risk.
 
-### 🔴 P0 — Critical Security Issues
+## P0 — Critical / Ship-Blocking
 
-- [x] **Eliminate `(global as any).jobProgress` state** — Replace the fragile global mutable state used for progress tracking ([diagnostic-workflow.ts:101–108](src/backend/workflows/diagnostic-workflow.ts), [index.ts:27–34](index.ts), [index.ts:100–103](index.ts)) with a proper event-driven mechanism. Use Bun's built-in `WebSocket` support to push progress events to the frontend in real time instead of polling + global map.
-  - Create a `ProgressStore` class with typed events (e.g., `EventEmitter` / `EventTarget`)
-  - Wire WebSocket upgrade in `Bun.serve()` to subscribe clients to a jobId's progress stream
-  - Remove all `(global as any).jobProgress` references
-  - Update `WaitingRoom.tsx` to consume WebSocket messages instead of HTTP polling
+- [ ] **Remove misleading "HIPAA Mode" badge** — [Header.tsx](src/frontend/components/layout/Header.tsx) displays a `ShieldCheckIcon` + "HIPAA Mode" label, but there is zero HIPAA compliance behind it. This is legally misleading for a medical tool. Either remove the badge entirely, or replace it with a neutral label like "Clinical Decision Support" or "Research Only".
 
-- [x] **Replace HTTP polling with WebSocket streaming** — The frontend polls `/v1/status/:jobId` every 3 seconds ([usePolling.ts](src/frontend/hooks/usePolling.ts)). This is wasteful and introduces latency. Migrate to a WebSocket-based push model where progress and completion events are streamed in real time.
-  - Create a `useJobStream(jobId)` hook that opens a WebSocket connection
-  - Server pushes progress, completion, and error events
-  - Fall back to polling only if WebSocket fails to connect
+- [ ] **Remove stale PII docs from CLAUDE.md** — [CLAUDE.md](CLAUDE.md) still references `src/backend/utils/pii-detector.ts` and the routes description mentions "checks PII". It also still lists PII Detection in the Architecture section and describes the diagnose route as "checks PII". PII detection was deleted in commit `a79b4e9`. Update both files to match reality.
 
-- [x] **Add concurrency controls for specialist agent calls** — In `diagnostic-workflow.ts:175–193`, all specialist agents are called via `Promise.all` with no concurrency limit. If the CMO requests many specialists (e.g., 10+), this can overload the LLM provider with simultaneous requests, causing rate-limit errors or timeouts.
-  - Implement a `pLimit`-style concurrency limiter (e.g., max 3–5 concurrent specialist calls)
-  - Add per-specialist retry with exponential backoff
-  - Emit progress updates per-specialist as they complete (not all at once)
+- [ ] **Fix `limitConcurrency` race condition** — [diagnostic-workflow.ts](src/backend/workflows/diagnostic-workflow.ts) uses `index++` across concurrent async workers. Under V8 microtask scheduling this is safe today (JS is single-threaded and `index++` is atomic at the instruction level), but the code relies on an implicit engine guarantee that isn't expressed in the type system or documented. Add a comment explaining *why* it's safe, or restructure to use a single dispatcher (`for` loop) that feeds a bounded queue — this makes the concurrency contract explicit and future-proof.
 
-- [x] **In-memory job store lacks persistence and resilience** — The `diagnoses` Map in `index.ts:16` is entirely in-memory. Server restarts lose all job state. For now, use `bun:sqlite` to persist jobs and results, which is consistent with the project conventions.
-  - Create a `JobStore` abstraction backed by `bun:sqlite`
-  - Store job status, progress events, and final results
-  - Replace the `diagnoses` Map and the global cleanup interval
+- [ ] **Fix `tsconfig.json` include pattern** — [tsconfig.json](tsconfig.json) includes `"frontend/**/*"` but the frontend directory is at `src/frontend/`. This means `bun run typecheck` will never check frontend files. Change to `"src/**/*"` (which already covers it) and remove the redundant `"frontend/**/*"` entry. Verify that `bun run typecheck` passes clean after the fix.
 
----
+## P1 — High Priority / Quality
 
-### 🟠 P1 — Code Quality & Maintainability
+- [ ] **Add CORS headers for production deployment** — The API has no CORS configuration. Any cross-origin frontend deployment (e.g. SPA on a CDN) will fail silently. Add configurable CORS middleware with an `ALLOWED_ORIGINS` env var (comma-separated whitelist, default `*` for dev). Apply to all `/v1/*` routes. Include `Access-Control-Allow-Headers` for `Content-Type`.
 
-- [x] **Extract agent definitions via a factory pattern** — All 36 specialist agent files follow an identical structure: `import Agent` → `import SPECIALIST_MODEL` → `import getToolsForSpecialist` → `new Agent({id, name, model, tools, description, instructions})`. Only `id`, `name`, `description`, and `instructions` differ. This is massive copy-paste boilerplate.
-  - Create a `createSpecialistAgent(config: { id, name, description, instructions })` factory that auto-applies the model and tools
-  - Reduce each agent file to just the domain-specific config (description + instructions)
-  - Consider moving agent configs to a single data file or directory of `.ts` config objects
+- [ ] **Harden WebSocket handler: validate origin on upgrade** — [routes.ts](src/backend/api/routes.ts) upgrades any connection with a `jobId` query param. [websocket.ts](src/backend/api/websocket.ts) does check if the job exists and closes if not, which is reasonable defense. However, there's no origin validation on the upgrade request. Add an `Origin` header check against `ALLOWED_ORIGINS` (same env var as CORS) to prevent cross-site WebSocket hijacking.
 
-- [x] **Deduplicate `fetchJSON` helper** — There are 4 separate `fetchJSON` implementations across tool files ([pubmed-search.ts:6](src/backend/tools/pubmed-search.ts), [drug-interaction.ts:6](src/backend/tools/drug-interaction.ts), [open-fda.ts:6](src/backend/tools/open-fda.ts), [clinical-trials.ts:6](src/backend/tools/clinical-trials.ts)), each with slightly different error handling (open-fda handles 404 specially, others throw).
-  - Extract a shared `src/backend/tools/utils/fetch.ts` with a single `fetchJSON` that accepts retry/error config
-  - Add proper rate-limiting for NCBI APIs (3 req/sec without API key)
-  - Add request timeout handling
+- [ ] **Replace `recognitionRef: any` with proper SpeechRecognition types** — [InputDashboard.tsx](src/frontend/pages/InputDashboard.tsx) uses `useRef<any>`, casts `window as any`, and uses `any` for event types. Add a `src/frontend/types/speech.d.ts` ambient type declaration file for `SpeechRecognition`, `SpeechRecognitionEvent`, and `SpeechRecognitionResultList`. Remove all `any` casts.
 
-- [x] **Type-safe tool assignments** — The `getToolsForSpecialist` function in [tools/index.ts](src/backend/tools/index.ts) uses `type AnyTool = any` and multiple hardcoded `Set` lookups of specialist IDs as strings. This is error-prone and can silently fail if agent IDs change.
-  - Define a `SpecialistId` union type from the agent registry
-  - Replace `AnyTool` with proper Mastra tool types
-  - Consider a declarative config map (e.g., `Record<SpecialistId, ToolCategory[]>`) instead of imperative `if` chains
+- [ ] **Surface network failures to the user instead of silently catching** — Network failures are silently caught with `.catch(() => {})` in [WaitingRoom.tsx](src/frontend/pages/WaitingRoom.tsx) (getAgents) and [main.tsx](src/frontend/main.tsx) (getJobStatus for deep links). Instead of swallowing errors: (1) show a dismissable warning banner when agents fail to load, (2) show a "could not load results" message with a retry button when deep-link status fetch fails. No need for a full React Error Boundary — these are the only two silent catch sites.
 
-- [x] **The CMO agent has no tools** — The `chiefMedicalOfficer` agent ([chief-medical-officer.ts](src/backend/agents/chief-medical-officer.ts)) has no `tools` assigned, unlike all specialist agents. While it delegates rather than researching directly, it might benefit from tools for verifying specialist availability or accessing evidence.
+- [ ] **Implement graceful server shutdown** — [index.ts](index.ts) starts two `setInterval` timers that are never cleaned up. No `SIGINT`/`SIGTERM` handler exists. Add signal handlers that: (1) stop accepting new connections via `server.stop()`, (2) wait for in-flight workflows to finish (with a timeout), (3) clear the cleanup intervals. This prevents corrupted progress-store state on deploy/restart.
 
-- [x] **`ConsultNotes` renders raw JSON** — The "Full Report" tab ([ConsultNotes.tsx](src/frontend/components/diagnosis/ConsultNotes.tsx)) just does `JSON.stringify(report, null, 2)`. This should render a properly formatted, human-readable clinical report with markdown sections, not a raw JSON dump.
+## P2 — Medium Priority / Robustness
 
-- [x] **Separate route handlers from `index.ts`** — The server entry point `index.ts` mixes server setup, job management, cleanup logic, WebSocket handlers, and route handlers in a single file. The `src/backend/api/` directory exists but is empty.
-  - Extract route handlers into `src/backend/api/routes.ts`
-  - Extract WebSocket handler into `src/backend/api/websocket.ts`
-  - Keep `index.ts` as a thin orchestrator that wires everything together
+- [ ] **Add health check endpoint (`GET /v1/health`)** — Essential for deployment behind a load balancer or container orchestrator. Should return `200 OK` with JSON body: `{ status: "ok", uptime: <seconds>, activeWorkflows: <count> }`. Optionally check SQLite connectivity (`progressStore.getJob("__health__")` returning `null` is sufficient proof).
 
----
+- [ ] **Deduplicate report type definitions** — The `DiagnosisReport` shape is defined in three places: [diagnostic-workflow.ts](src/backend/workflows/diagnostic-workflow.ts) (Zod schema), [api/types.ts](src/frontend/api/types.ts) (TS interface), and [ConsultNotes.tsx](src/frontend/components/diagnosis/ConsultNotes.tsx) (imports the type). The Zod schema is the source of truth. Generate the frontend interface using `z.infer<typeof reportSchema>` and re-export from a shared location, or at minimum add a compile-time assertion that the TS interface extends the Zod-inferred type so drift is caught.
 
-### 🟡 P2 — Security & Robustness
+- [ ] **Add retry/reconnect to WebSocket client** — [useJobStream.ts](src/frontend/hooks/useJobStream.ts) falls back to polling on WebSocket error/close, but never attempts to reconnect. Add exponential backoff reconnection (3 attempts, 1s → 2s → 4s) before falling back to polling. Only reconnect on abnormal close codes (not 1000/1005).
 
+- [ ] **Harden PDF export against XSS** — [ConsultNotes.tsx](src/frontend/components/diagnosis/ConsultNotes.tsx) writes `reportRef.current.innerHTML` directly into a new window via `document.write`. While the report content is LLM-generated (not user-authored HTML), defense in depth is warranted. Add a CSP `<meta>` tag in the print template: `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">`. This blocks script execution in the print window without affecting the inline styles.
 
-- [x] **Add rate limiting to API endpoints** — No rate limiting exists on `/v1/diagnose`. A single user can submit unlimited diagnosis jobs, each of which triggers expensive multi-agent LLM workflows.
-  - Add per-IP rate limiting (e.g., 5 diagnoses per hour)
-  - Add global concurrency limiting (e.g., max 3 concurrent workflows)
-  - Return 429 with `Retry-After` header
+- [ ] **Rate limiter: log a warning on startup about in-memory state** — [rate-limiter.ts](src/backend/utils/rate-limiter.ts) uses an in-memory `Map`. Server restarts reset all rate limits. Rather than adding SQLite persistence now (over-engineering for current scale), add a `logger.warn("rate_limiter_reset")` on first request after startup so it's visible in logs if abuse coincides with a restart. Revisit persistence if the app gets real traffic.
 
-- [x] **Add request/response logging and audit trail** — No logging exists beyond `console.log("ddx.care API server running on port 3000")`. For a medical decision-support tool, an audit trail is critical.
-  - Log all API requests (method, path, status code, latency)
-  - Log workflow start/completion/failure events with timing
-  - Log specialist consultations performed and their durations
-  - Ensure no PHI is logged
+- [ ] **Add structured JSON logging option** — [logger.ts](src/backend/utils/logger.ts) outputs human-readable text. In production, JSON-structured logs are easier to ingest into log aggregation (Datadog, Grafana Loki). Add a `LOG_FORMAT=json` env var toggle. When set, `logger.info/warn/error` should output `JSON.stringify({ level, message, timestamp, ...meta })` on a single line.
 
-- [x] **Consolidate config into `config.ts`** — Server port is in `index.ts`, model names in `config.ts`, and the log message hardcodes "port 3000". Move `PORT` and `JOB_TTL_MS` into `config.ts` alongside existing env vars.
+## P3 — Improvements / Developer Experience
 
-- [x] **Add input size validation** — No limits on the size of `medicalHistory`, `conversationTranscript`, or `labResults`. Extremely large inputs could exceed LLM context windows or cause memory issues.
-  - Add `z.string().max(50000)` or similar constraints on the Zod schema
-  - Add total payload size middleware
+- [ ] **Fix and run `bun run typecheck` in CI** — The `tsconfig.json` include pattern fix (P0 above) is a prerequisite. After fixing it, run `bun run typecheck` and fix any type errors that surface. Add typecheck to the test pipeline (e.g. a `pretest` script or CI step).
 
----
+- [ ] **Add `bun run lint` script with Biome** — No linter is configured. Add `@biomejs/biome` as a dev dependency with a minimal `biome.json` config focused on catching real bugs: `noExplicitAny`, `noUnusedVariables`, `useConst`. Don't enable stylistic rules — just bug-catching. Add `"lint": "biome check src/"` script to `package.json`.
 
-### 🟢 P3 — Frontend UX Improvements
+- [ ] **Centralize environment variable validation** — [config.ts](src/backend/config.ts) does bare `parseInt` with no validation. Missing `GOOGLE_GENERATIVE_AI_API_KEY` silently fails at the first LLM call. Add a `validateConfig()` function that runs at server startup: assert `GOOGLE_GENERATIVE_AI_API_KEY` is set, assert parsed ints are positive numbers, assert `PORT` is in valid range. Fail fast with a clear error message.
 
-- [x] **Generic, forgettable design** — The UI uses generic Inter font and basic blue color scheme with minimal creative expression. No distinctive visual identity.
-  - Consider a medical-themed aesthetic: clean, professional, with subtle clinical design elements
-  - Use distinctive typography pairing (e.g., display font for headings)
-  - Add meaningful micro-interactions and animations
-  - Create visual hierarchy with proper use of whitespace
+- [ ] **Add `.editorconfig`** — Ensure consistent basic formatting across contributors (indent style, trailing newline, charset). No need for Prettier or a full formatting config yet — Biome can handle formatting if desired later.
 
-- [x] **Implement real-time specialist status in WaitingRoom** — The `AgentGrid` marks all agents as `active` ([AgentGrid.tsx:17](src/frontend/components/agents/AgentGrid.tsx)) regardless of whether they're actually being consulted. Use WebSocket progress events to show which specialists are:
-  - `idle` — not yet consulted
-  - `active` — currently being consulted
-  - `completed` — finished their analysis
+- [ ] **Improve test isolation in progress-store tests** — Tests should use `:memory:` SQLite databases instead of the default `jobs.sqlite` file so tests don't contaminate each other or prod data. Pass the DB path via a constructor parameter or env var override.
 
-- [x] **Add error retry and cancellation to WaitingRoom** — There's no way to cancel a running diagnosis or retry a failed one from the waiting room. The user must go back and re-submit.
-  - Add a "Cancel" button that stops polling and returns to input
-  - Add a "Retry" button on failure
-  - Optionally: add a server-side cancellation endpoint
+- [ ] **Add CI pipeline (GitHub Actions)** — No CI is configured. Create a `.github/workflows/ci.yml` that runs on PR and push to main: (1) `bun install`, (2) `bun run typecheck`, (3) `bun run test`, (4) `bun run test:e2e`. Use the official `oven-sh/setup-bun` action. Run E2E with `MOCK_LLM=1`.
 
-- [x] **Improve the "Full Report" tab** — Currently dumps JSON. Render it as a proper formatted report:
-  - Specialists consulted as a summary list
-  - Each diagnosis with collapsible detail sections
-  - Cross-specialty observations in a callout
-  - Recommended immediate actions with urgency highlighting
-  - Export as PDF functionality
+- [ ] **Add `Dockerfile` for containerized deployment** — Use `oven/bun:latest` base image, copy source, `bun install --frozen-lockfile`, expose `PORT`, `CMD ["bun", "index.ts"]`. Add `.dockerignore` for `node_modules`, `dist`, `test-results`, `.git`.
 
-- [x] **Add form validation and UX polish to InputDashboard** — The form lacks inline validation. Users get a generic error on failure. Add:
-  - Character counts on textareas showing proximity to limits
-  - Inline validation messages for required fields
-  - A "Clear All" button
-  - Persist draft data to `sessionStorage` so accidental refreshes don't lose work
+## P4 — Feature Work
 
-- [x] **Add a client-side router** — Currently uses `useState<Screen>` in `main.tsx` for navigation. This breaks browser back/forward and doesn't support deep-linking to results.
-  - Use `history.pushState` / `popstate` for basic routing
-  - Enable direct links to `/results/:jobId`
+- [ ] **Add database persistence for diagnosis history** — Allow users to review past diagnoses, compare results over time, and export case data. Use `bun:sqlite` for MVP. Schema: `diagnosis_history(id, jobId, createdAt, inputPayload, report, status)`. Add `GET /v1/history` and `GET /v1/history/:jobId` routes. Frontend: add a "History" tab in the app shell.
 
----
+- [ ] **Implement SSE or streaming for LLM responses** — Stream specialist agent responses as they generate, rather than waiting for the complete response. This gives the user real-time visibility into the analysis. Requires Mastra streaming support investigation.
 
-### 🔵 P4 — Testing & DevEx
+- [ ] **Add a "Case Examples" dropdown** — Pre-populate the InputDashboard with sample medical cases (e.g. classic cardiac, neurological, pediatric presentations) so users can instantly see how the system works. Store 3–5 curated example cases in `src/frontend/data/example-cases.ts`.
 
-- [x] **Add unit tests for workflow steps** — The `diagnostic-workflow.ts` step functions (`parseInput`, `runDiagnosis`, `formatReport`) are not unit tested. The existing `api.test.ts` does E2E testing only (requires a running server + LLM).
-  - Test `parseInput` with various input formats
-  - Test `formatReport` with mock diagnosis data
-  - Test `splitToList` edge cases (already a pure function)
-  - Mock `mastra.getAgent()` to test `runDiagnosis` logic without LLM calls
+## P5 — Long-Term / Aspirational
 
-- [x] **Add frontend component tests** — Zero frontend tests exist. Add tests for:
-  - `DiagnosisCard` rendering with various urgency/confidence values
-  - `useAutoLogout` timer behavior
-  - `useJobStream` with mocked WebSocket messages
-  - `FileDropZone` file handling
-
-- [x] **Fix the `scripts/` directory — it's empty** — Remove or populate with useful dev scripts (e.g., seed data generation, mock server, lint, format).
-
-- [x] **Eliminate remaining `any` casts** — `tsconfig.json` has `strict: true` but several files use `any`:
-  - `progress-store.ts:48` — `stmt.get() as any` should use a typed `JobRow` interface
-  - `index.ts:67` — `(req: any)` on the status GET handler; use Bun's typed route params
-  - `index.ts:136,142` — `(ws as any).unsubscribe`; use `Bun.serve<WsData>` generic to type `ws.data`
-  - `diagnostic-workflow.ts:166` — `as CmoDecision` bypasses the Zod schema type
-  - `tools/index.ts:25` — `type AnyTool = any`
-  - Tool implementations: numerous `(t: any)`, `(a: any)` callbacks in pubmed/open-fda/clinical-trials
-
-- [x] **Add a `.env.example` file** — The project uses env vars (`SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL`, `MAX_DIAGNOSIS_ROUNDS`, `PORT`) but has no `.env.example` documenting them. The `.env` file is only 69 bytes and likely contains a single API key.
-
-- [x] **No linting/typecheck scripts** — `package.json` has no `lint` or `typecheck` scripts.
-  - Add `bunx tsc --noEmit` for type checking
-  - Add `bunx eslint` or `bunx @biomejs/biome check` for linting
-  - Add pre-commit hooks to run these checks
-
-- [x] **Outdated README** — Current README is minimal and doesn't explain system architecture, usage, or setup requirements.
-
----
-
-### 🟣 P5 — Performance & Efficiency
-
-- [x] **Eliminate unnecessary DB reads in progress-store** — `emitMessage()`, `complete()`, and `fail()` all call `getJob()` (full row read + JSON parse) before writing. For `complete()` and `fail()` the read is entirely unnecessary. For `emitMessage()`, the progress array can be appended directly via SQL string manipulation (`progress = progress || ?`) instead of read-modify-write.
-  - `complete()` and `fail()`: remove the `getJob()` guard, just run the UPDATE
-  - `emitMessage()`: use `UPDATE jobs SET progress = progress || ? WHERE id = ?` to append a JSON event without reading first
-  - Pre-prepare all SQL statements in the constructor for hot-path performance
-
-- [x] **Parallelize PubMed esummary and efetch calls** — In [pubmed-search.ts:50–72](src/backend/tools/pubmed-search.ts), the esummary and efetch HTTP requests are independent and run sequentially. They should use `Promise.all` to cut latency ~50% per search.
-
-- [x] **Remove unused `ServerWebSocket` import in progress-store** — [progress-store.ts:1](src/backend/progress-store.ts) imports `ServerWebSocket` from `bun` but never uses it.
-
----
-
-### 🟤 P6 — Mastra-Specific
-
-- [x] **Verify model string format** — Using `google/gemini-3.1-pro-preview` but Mastra docs suggest format is `"provider/model-name"`. Verify this is correct for current version.
-  - Run `node .agents/skills/mastra/scripts/provider-registry.mjs --provider google` to verify available models
-  - Update model strings if needed
-
-- [x] **Agent registry could use Mastra's built-in features** — Consider if Mastra's agent registration patterns could simplify agent setup.
-
----
-
-## Waiting On
-
-## Someday
-
-- [ ] **Add database persistence for diagnosis history** — Allow users to review past diagnoses, compare results over time, and export case data. Use `bun:sqlite` for MVP, migrate to Postgres (`Bun.sql`) later.
 - [ ] **Add authentication and user accounts** — Required before any multi-user deployment. Use session-based auth with secure cookies.
-- [ ] **Implement SSE or streaming for LLM responses** — Stream specialist agent responses as they generate, rather than waiting for the complete response. This would give the user real-time visibility into the analysis.
-- [ ] **Add a "second opinion" feature** — Allow re-running the diagnosis with a different model or different specialist selection to compare results.
-- [ ] **HIPAA compliance audit** — The header shows "HIPAA Mode" ([Header.tsx:21–22](src/frontend/components/layout/Header.tsx)) but there's no actual HIPAA compliance. This label is misleading and should be removed or backed by real compliance measures.
-- [ ] **Implement agent-to-agent communication** — Currently specialists don't communicate with each other; they each analyze the case independently. Allow specialists to build on each other's findings within a round.
 
-## Done
+- [ ] **Add a "second opinion" feature** — Re-run the diagnosis with a different model or different specialist selection to compare results.
+
+- [ ] **Implement agent-to-agent communication** — Currently specialists don't communicate; they each analyze the case independently. Allow specialists to build on each other's findings within a round.
+
+- [ ] **Mobile-responsive polish** — The current layout works on mobile but hasn't been intentionally optimized. Review and fix: input card stacking, waiting room progress log scroll, results view tab navigation on small screens, PDF export on mobile Safari.
