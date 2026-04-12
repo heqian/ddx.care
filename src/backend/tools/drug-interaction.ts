@@ -2,6 +2,34 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { fetchJSON as baseFetchJSON } from "./utils/fetch";
 
+interface RxNavMinConcept {
+  rxcui?: string;
+  name?: string;
+}
+
+interface RxNavInteractionConcept {
+  minConceptItem?: RxNavMinConcept;
+}
+
+interface RxNavInteractionPair {
+  interactionConcept?: RxNavInteractionConcept[];
+  severity?: string;
+  description?: string;
+}
+
+interface RxNavInteractionType {
+  interactionPair?: RxNavInteractionPair[];
+  comment?: string;
+}
+
+interface RxNavInteractionTypeGroup {
+  fullInteractionTypeList?: RxNavInteractionType[];
+}
+
+interface RxNavInteractionResponse {
+  fullInteractionTypeGroupList?: RxNavInteractionTypeGroup[];
+}
+
 const RXNAV_BASE = "https://rxnav.nlm.nih.gov/REST";
 
 async function fetchJSON(url: string) {
@@ -98,7 +126,7 @@ export const drugInteractionTool = createTool({
   }),
   execute: async ({ rxcuis }) => {
     const url = `${RXNAV_BASE}/interaction/list.json?rxcuis=${rxcuis.join("+")}`;
-    let result: any;
+    let result: RxNavInteractionResponse;
     try {
       const res = await fetch(url);
       if (!res.ok) {

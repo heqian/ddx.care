@@ -2,6 +2,54 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { fetchJSON as baseFetchJSON } from "./utils/fetch";
 
+interface FdaAdverseEventReport {
+  safetyreportid?: string;
+  serious?: string;
+  seriousnesscongenitalanomali?: string;
+  seriousnessdeath?: string;
+  seriousnesshospitalization?: string;
+  seriousnesslifethreatening?: string;
+  seriousnessdisabling?: string;
+  patient?: {
+    reaction?: Array<{ reactionmeddrapt?: string; reactionoutcome?: string }>;
+    patientonsetage?: string | number;
+    patientsex?: string;
+  };
+  receivedate?: string;
+}
+
+interface FdaDrugLabelRecord {
+  id?: string;
+  openfda?: {
+    brand_name?: string[];
+    generic_name?: string[];
+    pregnancy_category?: string[];
+  };
+  indications_and_usage?: string[];
+  contraindications?: string[];
+  warnings?: string[];
+  adverse_reactions?: string[];
+  dosage_and_administration?: string[];
+  mechanism_of_action?: string[];
+  pregnancy?: string | string[];
+}
+
+interface FdaRecallRecord {
+  recall_number?: string;
+  product_description?: string;
+  reason_for_recall?: string;
+  classification?: string;
+  status?: string;
+  recalling_firm?: string;
+  recall_initiation_date?: string;
+}
+
+interface FdaSubstanceRecord {
+  substance_id?: string;
+  substance_name?: string;
+  approval_id?: string;
+}
+
 const FDA_BASE = "https://api.fda.gov";
 
 async function fetchJSON(url: string) {
@@ -57,7 +105,7 @@ export const adverseEventsTool = createTool({
         }
       : undefined;
 
-    const results = (result.results ?? []).map((r: any) => ({
+    const results = (result.results ?? []).map((r: FdaAdverseEventReport) => ({
       reportId: r.safetyreportid ?? undefined,
       serious: r.serious === "1" ? true : r.serious === "2" ? false : undefined,
       seriousnessDescription: r.seriousnesscongenitalanomali === "1"
@@ -71,8 +119,8 @@ export const adverseEventsTool = createTool({
               : r.seriousnessdisabling === "1"
                 ? "Disabling"
                 : undefined,
-      reactions: r.patient?.reaction?.map((rx: any) => rx.reactionmeddrapt ?? "").filter(Boolean) ?? [],
-      outcomes: r.patient?.reaction?.map((rx: any) => rx.reactionoutcome ?? "").filter(Boolean) ?? [],
+      reactions: r.patient?.reaction?.map((rx) => rx.reactionmeddrapt ?? "").filter(Boolean) ?? [],
+      outcomes: r.patient?.reaction?.map((rx) => rx.reactionoutcome ?? "").filter(Boolean) ?? [],
       patientAge: r.patient?.patientonsetage?.toString() ?? undefined,
       patientSex: r.patient?.patientsex === "1" ? "Male" : r.patient?.patientsex === "2" ? "Female" : undefined,
       receiveDate: r.receivedate ?? undefined,
@@ -118,7 +166,7 @@ export const drugLabelingTool = createTool({
       return { results: [], error: "No labeling information found for this drug." };
     }
 
-    const results = (result.results ?? []).map((r: any) => ({
+    const results = (result.results ?? []).map((r: FdaDrugLabelRecord) => ({
       id: r.id ?? undefined,
       brandName: r.openfda?.brand_name?.join(", ") ?? undefined,
       genericName: r.openfda?.generic_name?.join(", ") ?? undefined,
@@ -168,7 +216,7 @@ export const drugRecallTool = createTool({
       return { results: [], error: "No recall data found for this drug." };
     }
 
-    const results = (result.results ?? []).map((r: any) => ({
+    const results = (result.results ?? []).map((r: FdaRecallRecord) => ({
       recallNumber: r.recall_number ?? undefined,
       productDescription: r.product_description ?? undefined,
       reason: r.reason_for_recall ?? undefined,
@@ -211,7 +259,7 @@ export const substanceToxicologyTool = createTool({
       return { results: [], error: "No substance data found." };
     }
 
-    const results = (result.results ?? []).map((r: any) => ({
+    const results = (result.results ?? []).map((r: FdaSubstanceRecord) => ({
       substanceId: r.substance_id ?? undefined,
       substanceName: r.substance_name ?? undefined,
       approvalId: r.approval_id ?? undefined,

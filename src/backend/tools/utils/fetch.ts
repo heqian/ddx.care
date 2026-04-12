@@ -45,8 +45,8 @@ export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
     }
 
     return await res.json();
-  } catch (error: any) {
-    if (error.name === "AbortError") {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`Request timeout after ${timeoutMs}ms for ${url}`);
     }
     throw error;

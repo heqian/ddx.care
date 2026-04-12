@@ -6,6 +6,12 @@ export interface WsData {
   unsubscribe?: () => void;
 }
 
+interface ProgressEventData {
+  type: string;
+  jobId: string;
+  [key: string]: unknown;
+}
+
 export const websocketHandlers = {
   open(ws: ServerWebSocket<WsData>) {
     const jobId = ws.data.jobId;
@@ -33,7 +39,8 @@ export const websocketHandlers = {
 
     const unsubscribe = progressStore.subscribe(jobId, (data: unknown) => {
       ws.send(JSON.stringify(data));
-      if ((data as any).type === "completed" || (data as any).type === "failed") {
+      const event = data as ProgressEventData;
+      if (event.type === "completed" || event.type === "failed") {
         ws.close();
       }
     });
