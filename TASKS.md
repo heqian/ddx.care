@@ -155,14 +155,14 @@
 
 ### 🟣 P5 — Performance & Efficiency
 
-- [ ] **Eliminate unnecessary DB reads in progress-store** — `emitMessage()`, `complete()`, and `fail()` all call `getJob()` (full row read + JSON parse) before writing. For `complete()` and `fail()` the read is entirely unnecessary. For `emitMessage()`, the progress array can be appended directly via SQL string manipulation (`progress = progress || ?`) instead of read-modify-write.
+- [x] **Eliminate unnecessary DB reads in progress-store** — `emitMessage()`, `complete()`, and `fail()` all call `getJob()` (full row read + JSON parse) before writing. For `complete()` and `fail()` the read is entirely unnecessary. For `emitMessage()`, the progress array can be appended directly via SQL string manipulation (`progress = progress || ?`) instead of read-modify-write.
   - `complete()` and `fail()`: remove the `getJob()` guard, just run the UPDATE
   - `emitMessage()`: use `UPDATE jobs SET progress = progress || ? WHERE id = ?` to append a JSON event without reading first
   - Pre-prepare all SQL statements in the constructor for hot-path performance
 
-- [ ] **Parallelize PubMed esummary and efetch calls** — In [pubmed-search.ts:50–72](src/backend/tools/pubmed-search.ts), the esummary and efetch HTTP requests are independent and run sequentially. They should use `Promise.all` to cut latency ~50% per search.
+- [x] **Parallelize PubMed esummary and efetch calls** — In [pubmed-search.ts:50–72](src/backend/tools/pubmed-search.ts), the esummary and efetch HTTP requests are independent and run sequentially. They should use `Promise.all` to cut latency ~50% per search.
 
-- [ ] **Remove unused `ServerWebSocket` import in progress-store** — [progress-store.ts:1](src/backend/progress-store.ts) imports `ServerWebSocket` from `bun` but never uses it.
+- [x] **Remove unused `ServerWebSocket` import in progress-store** — [progress-store.ts:1](src/backend/progress-store.ts) imports `ServerWebSocket` from `bun` but never uses it.
 
 ---
 

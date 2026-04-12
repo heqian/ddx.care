@@ -75,29 +75,34 @@ export const pubmedSearchTool = createTool({
 
     const totalResults = parseInt(searchResult?.esearchresult?.count ?? "0", 10);
 
-    // Step 2: Fetch summaries
+    // Step 2 & 3: Fetch summaries and abstracts in parallel
     const summaryUrl = `${EUTILS_BASE}/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
-    const summaryResult = await fetchJSON(summaryUrl);
+    const abstractUrl = `${EUTILS_BASE}/efetch.fcgi?db=pubmed&id=${ids.join(",")}&rettype=abstract&retmode=json`;
+
+    const [summaryResult, abstractResult] = await Promise.all([
+      fetchJSON(summaryUrl).catch(() => ({})),
+      fetchJSON(abstractUrl).catch(() => null),
+    ]);
+
     const articles: Record<string, NcbiArticleSummary> = (summaryResult?.result as Record<string, NcbiArticleSummary>) ?? {};
 
-    // Step 3: Fetch abstracts
-    const abstractUrl = `${EUTILS_BASE}/efetch.fcgi?db=pubmed&id=${ids.join(",")}&rettype=abstract&retmode=json`;
     let abstracts: Record<string, string> = {};
-    try {
-      const abstractResult = await fetchJSON(abstractUrl);
-      // Parse abstracts from the XML-like JSON structure
-      const fetchedAbstracts: NcbiPubmedArticle[] = abstractResult?.PubmedArticle ?? [];
-      for (const article of Array.isArray(fetchedAbstracts) ? fetchedAbstracts : [fetchedAbstracts]) {
-        const rawPmid = article?.MedlineCitation?.PMID;
-        const pmid = typeof rawPmid === "object" ? rawPmid?.["#text"] : rawPmid;
-        const abstractTexts = article?.MedlineCitation?.Article?.Abstract?.AbstractText;
-        if (pmid && abstractTexts) {
-          const texts = Array.isArray(abstractTexts) ? abstractTexts : [abstractTexts];
-          abstracts[String(pmid)] = texts.map((t: string | NcbiAbstractText) => (typeof t === "string" ? t : t["#text"] ?? "")).join(" ");
+    if (abstractResult) {
+      try {
+        // Parse abstracts from the XML-like JSON structure
+        const fetchedAbstracts: NcbiPubmedArticle[] = abstractResult?.PubmedArticle ?? [];
+        for (const article of Array.isArray(fetchedAbstracts) ? fetchedAbstracts : [fetchedAbstracts]) {
+          const rawPmid = article?.MedlineCitation?.PMID;
+          const pmid = typeof rawPmid === "object" ? rawPmid?.["#text"] : rawPmid;
+          const abstractTexts = article?.MedlineCitation?.Article?.Abstract?.AbstractText;
+          if (pmid && abstractTexts) {
+            const texts = Array.isArray(abstractTexts) ? abstractTexts : [abstractTexts];
+            abstracts[String(pmid)] = texts.map((t: string | NcbiAbstractText) => (typeof t === "string" ? t : t["#text"] ?? "")).join(" ");
+          }
         }
+      } catch {
+        // Abstracts are optional, continue without them
       }
-    } catch {
-      // Abstracts are optional, continue without them
     }
 
     const results = ids.map((id) => {
