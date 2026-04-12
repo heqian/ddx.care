@@ -2,6 +2,7 @@ import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z, type infer as zInfer } from "zod";
 import { DIAGNOSIS_TIMEOUT_MS, MAX_DIAGNOSIS_ROUNDS } from "../config";
 import { progressStore } from "../progress-store";
+import { logger } from "../utils/logger";
 
 async function limitConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
@@ -269,9 +270,11 @@ ${contextHistory.join("\n\n")}`;
               allConsultedSpecialists.add(specId);
               emitProgress(`Calling specialist ${specId}...`);
               
+              const specStart = Date.now();
               const specResponse = await withRetry(async () => {
                 return await specAgent.generate(`Please analyze this case from the perspective of a ${specId}:\n\n${inputData.patientSummary}`);
               }, 3, 1000);
+              logger.specialistCall(specId, runId ?? "unknown", Date.now() - specStart, true);
               
               emitProgress(`Received analysis from ${specId}`);
               return `=== ${specId} Consult ===\n${specResponse.text}`;
@@ -279,9 +282,11 @@ ${contextHistory.join("\n\n")}`;
                return `=== ${specId} Consult ===\nFailed to reach specialist (Not Found).`;
             }
           } catch (e) {
-            console.warn(`Failed to consult specialist ${specId}`, e);
+            const message = e instanceof Error ? e.message : "Unknown error";
+            logger.specialistCall(specId, runId ?? "unknown", 0, false);
+            logger.warn("specialist_call_failed", { specialistId: specId, jobId: runId, error: message });
             emitProgress(`Failed to receive analysis from ${specId}`);
-            return `=== ${specId} Consult ===\nFailed to consult specialist: ${e instanceof Error ? e.message : 'Unknown error'}`;
+            return `=== ${specId} Consult ===\nFailed to consult specialist: ${message}`;
           }
         });
         

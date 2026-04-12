@@ -67,7 +67,7 @@
   - Add global concurrency limiting (e.g., max 3 concurrent workflows)
   - Return 429 with `Retry-After` header
 
-- [ ] **Add request/response logging and audit trail** — No logging exists beyond `console.log("ddx.care API server running on port 3000")`. For a medical decision-support tool, an audit trail is critical.
+- [x] **Add request/response logging and audit trail** — No logging exists beyond `console.log("ddx.care API server running on port 3000")`. For a medical decision-support tool, an audit trail is critical.
   - Log all API requests (method, path, status code, latency)
   - Log workflow start/completion/failure events with timing
   - Log specialist consultations performed and their durations
