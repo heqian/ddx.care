@@ -4,9 +4,27 @@ AI-powered differential diagnosis system that simulates a panel of medical speci
 
 ## Architecture
 
-- **Backend** — Mastra framework with Google Gemini models for agent orchestration, medical API tool integrations (PubMed, OpenFDA, ClinicalTrials.gov, RxNav, MedlinePlus), and SQLite-backed job persistence
-- **Frontend** — React 19 with Tailwind CSS v4, real-time WebSocket progress streaming, and dark mode support
-- **Server** — Bun.serve with HTTP routes and WebSocket support for real-time progress updates
+### Backend (`src/backend/`)
+- **Mastra framework** (`@mastra/core`) — agent orchestration, workflows, tool definitions
+- **AI Model**: Google Gemini (`google/gemini-3.1-pro-preview` by default), configured via `GOOGLE_GENERATIVE_AI_API_KEY`
+- **Agents** — 36+ medical specialist agents + Chief Medical Officer. Created via factory pattern in `factory.ts`
+- **Tools** — Medical API integrations:
+  - PubMed/NCBI literature search
+  - OpenFDA drug safety & adverse events
+  - ClinicalTrials.gov trial matching
+  - RxNav drug interactions
+  - MedlinePlus patient education
+- **Workflows** — Multi-step diagnostic workflow with concurrency control (max 3 concurrent specialist calls) and retry logic
+- **Progress Store** — SQLite-backed job persistence with pub/sub for real-time WebSocket updates and TTL-based cleanup
+
+### Frontend (`src/frontend/`)
+- **React 19** with Tailwind CSS v4
+- **Real-time Updates** — WebSocket progress streaming with fallback to HTTP polling
+- **Context** — `ThemeContext` for light/dark mode support
+- Built by Bun's bundler via HTML imports — no Vite.
+
+### Server (`index.ts`)
+- `Bun.serve()` with HTTP routes and WebSocket support for real-time progress updates
 
 ## Setup
 
@@ -29,7 +47,7 @@ The app runs on `http://localhost:3000` by default.
 | `bun run test` | Run backend unit tests |
 | `bun run test:frontend` | Run frontend component tests |
 | `bun run test:e2e` | Run Playwright E2E tests |
-| `bun run test:all` | Run all tests |
+| `bun run test:all` | Run all tests (unit, frontend, and e2e) |
 | `bun run test:integration` | Run integration tests against live APIs |
 
 ## Environment Variables
@@ -52,7 +70,7 @@ See [`.env.example`](.env.example) for a template.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/v1/diagnose` | Submit a diagnostic case |
+| `POST` | `/v1/diagnose` | Submit a diagnostic case (validates input size up to 1MB max payload) |
 | `GET` | `/v1/status/:jobId` | Poll job status |
 | `GET` | `/v1/agents` | List available specialist agents |
 | `GET` | `/ws?jobId=...` | WebSocket for real-time progress streaming |
