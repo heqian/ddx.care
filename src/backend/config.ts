@@ -11,3 +11,5 @@ export const MAX_DIAGNOSIS_ROUNDS = parseInt(process.env.MAX_DIAGNOSIS_ROUNDS ??
 export const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS ?? "5", 10);
 export const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? String(60 * 60 * 1000), 10);
 export const MAX_CONCURRENT_WORKFLOWS = parseInt(process.env.MAX_CONCURRENT_WORKFLOWS ?? "3", 10);
+export const MAX_INPUT_FIELD_LENGTH = 50_000;
+export const MAX_PAYLOAD_BYTES = 1_000_000;

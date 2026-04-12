@@ -41,7 +41,7 @@ describe("API Endpoints", () => {
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toContain("Missing required fields");
+    expect(body.error).toContain("Validation failed");
   });
 
   test("GET /v1/status/:jobId returns 404 for unknown job", async () => {
