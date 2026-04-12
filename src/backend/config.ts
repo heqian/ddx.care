@@ -1,5 +1,7 @@
 export const PORT = parseInt(process.env.PORT ?? "3000", 10);
 export const JOB_TTL_MS = 30 * 60 * 1000;
+export const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+export const RATE_LIMIT_PRUNE_INTERVAL_MS = 10 * 60 * 1000;
 export const SPECIALIST_MODEL =
   process.env.SPECIALIST_MODEL ?? "google/gemini-3.1-pro-preview";
 export const ORCHESTRATOR_MODEL =
