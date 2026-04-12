@@ -9,9 +9,10 @@ import { Card } from "../components/ui/Card";
 import { Modal } from "../components/ui/Modal";
 import { FileDropZone } from "../components/ui/FileDropZone";
 import { submitDiagnosis } from "../api/client";
+import type { DiagnoseRequest } from "../api/types";
 
 interface InputDashboardProps {
-  onSubmit: (jobId: string) => void;
+  onSubmit: (jobId: string, payload: DiagnoseRequest) => void;
 }
 
 const inputClass =
@@ -58,12 +59,13 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
         ? `${contextPrefix}\n\n${medicalHistory}`
         : medicalHistory;
 
-      const { jobId } = await submitDiagnosis({
+      const payload: DiagnoseRequest = {
         medicalHistory: fullHistory,
         conversationTranscript: transcript,
         labResults,
-      });
-      onSubmit(jobId);
+      };
+      const { jobId } = await submitDiagnosis(payload);
+      onSubmit(jobId, payload);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Submission failed");
     } finally {

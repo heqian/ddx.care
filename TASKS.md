@@ -94,7 +94,7 @@
   - `active` — currently being consulted
   - `completed` — finished their analysis
 
-- [ ] **Add error retry and cancellation to WaitingRoom** — There's no way to cancel a running diagnosis or retry a failed one from the waiting room. The user must go back and re-submit.
+- [x] **Add error retry and cancellation to WaitingRoom** — There's no way to cancel a running diagnosis or retry a failed one from the waiting room. The user must go back and re-submit.
   - Add a "Cancel" button that stops polling and returns to input
   - Add a "Retry" button on failure
   - Optionally: add a server-side cancellation endpoint
