@@ -4,6 +4,7 @@ import { agentList } from "../agents/index";
 import { progressStore } from "../progress-store";
 import { detectPII } from "../utils/pii-detector";
 import { RateLimiter } from "../utils/rate-limiter";
+import { logger } from "../utils/logger";
 import {
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
@@ -34,11 +35,13 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
 
     "/v1/diagnose": {
       POST: async (req: Request) => {
+        const startTime = Date.now();
         const ip = getClientIp(req);
 
         const ipCheck = rateLimiter.check(ip);
         if (!ipCheck.allowed) {
           const retryAfter = Math.ceil(ipCheck.retryAfterMs / 1000);
+          logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, { ip, reason: "rate_limited" });
           return Response.json(
             { error: "Rate limit exceeded. Please try again later." },
             { status: 429, headers: { "Retry-After": String(retryAfter) } },
@@ -46,6 +49,7 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         }
 
         if (!rateLimiter.canStartWorkflow()) {
+          logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, { ip, reason: "at_capacity" });
           return Response.json(
             { error: "Server is at capacity. Please try again later." },
             { status: 429, headers: { "Retry-After": "30" } },
@@ -56,12 +60,14 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         try {
           body = await req.json();
         } catch {
+          logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, { ip });
           return Response.json({ error: "Invalid JSON body" }, { status: 400 });
         }
 
         const parsed = diagnoseSchema.safeParse(body);
         if (!parsed.success) {
           const missing = parsed.error.issues.map((i) => i.path.join(".")).join(", ");
+          logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, { ip, missing });
           return Response.json(
             { error: `Missing required fields: ${missing}` },
             { status: 400 },
@@ -73,7 +79,8 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         const combinedText = `${medicalHistory}\n${conversationTranscript}\n${labResults}`;
         const piiResult = detectPII(combinedText);
         if (piiResult.hasPII) {
-          console.warn(`[SECURITY] PII detected in diagnostic request. Types: ${piiResult.detectedTypes.join(", ")}`);
+          logger.warn("pii_detected", { ip, detectedTypes: piiResult.detectedTypes });
+          logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, { ip, reason: "pii_detected" });
           return Response.json(
             { error: `Submission rejected: Please remove potential Patient Health Information (${piiResult.detectedTypes.join(", ")}).` },
             { status: 400 },
@@ -85,6 +92,8 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
 
         const jobId = crypto.randomUUID();
         progressStore.createJob(jobId);
+        logger.workflowStart(jobId);
+        logger.request("POST", "/v1/diagnose", 202, Date.now() - startTime, { ip, jobId });
 
         const workflow = mastra.getWorkflow("diagnosticWorkflow");
         const run = await workflow.createRun({ runId: jobId });
@@ -92,10 +101,14 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         run
           .start({ inputData: { medicalHistory, conversationTranscript, labResults } })
           .then((result) => {
+            const specialistCount = (result as any)?.report?.specialistsConsulted?.length ?? 0;
+            logger.workflowComplete(jobId, Date.now() - startTime, specialistCount);
             progressStore.complete(jobId, result);
           })
           .catch((error) => {
-            progressStore.fail(jobId, error instanceof Error ? error.message : "Unknown error");
+            const message = error instanceof Error ? error.message : "Unknown error";
+            logger.workflowFail(jobId, Date.now() - startTime, message);
+            progressStore.fail(jobId, message);
           })
           .finally(() => {
             rateLimiter.finishWorkflow();
@@ -107,19 +120,24 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
 
     "/v1/status/:jobId": {
       GET: (req: any) => {
+        const start = Date.now();
         const { jobId } = req.params;
         const entry = progressStore.getJob(jobId);
 
         if (!entry) {
+          logger.request("GET", "/v1/status/:jobId", 404, Date.now() - start, { jobId });
           return Response.json({ error: "Job not found" }, { status: 404 });
         }
 
+        logger.request("GET", "/v1/status/:jobId", 200, Date.now() - start, { jobId, status: entry.status });
         return Response.json({ jobId, ...entry });
       },
     },
 
     "/v1/agents": {
       GET: () => {
+        const start = Date.now();
+        logger.request("GET", "/v1/agents", 200, Date.now() - start);
         return Response.json({ agents: agentList });
       },
     },
@@ -133,8 +151,10 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         }
 
         if (server.upgrade(req, { data: { jobId } })) {
+          logger.info("ws_connect", { jobId });
           return;
         }
+        logger.warn("ws_upgrade_failed", { jobId });
         return new Response("Upgrade failed", { status: 500 });
       },
     },
