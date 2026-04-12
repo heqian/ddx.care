@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Spinner } from "../components/ui/Spinner";
 import { AgentGrid } from "../components/agents/AgentGrid";
+import type { SpecialistStatus } from "../components/agents/AgentStatusCard";
 import { useJobStream } from "../hooks/useJobStream";
 import { getAgents } from "../api/client";
 import type { AgentInfo, StatusResponse } from "../api/types";
@@ -8,6 +9,29 @@ import type { AgentInfo, StatusResponse } from "../api/types";
 interface WaitingRoomProps {
   jobId: string;
   onComplete: (result: StatusResponse) => void;
+}
+
+const CALLING_RE = /^Calling specialist (\w+)\.\.\.$/;
+const RECEIVED_RE = /^(?:Received analysis from|Failed to receive analysis from) (\w+)$/;
+
+function deriveSpecialistStatuses(
+  progress: { time: string; message: string }[] | undefined,
+): Map<string, SpecialistStatus> {
+  const map = new Map<string, SpecialistStatus>();
+  if (!progress) return map;
+
+  for (const { message } of progress) {
+    let m = message.match(CALLING_RE);
+    if (m) {
+      map.set(m[1], "active");
+      continue;
+    }
+    m = message.match(RECEIVED_RE);
+    if (m) {
+      map.set(m[1], "completed");
+    }
+  }
+  return map;
 }
 
 export function WaitingRoom({ jobId, onComplete }: WaitingRoomProps) {
@@ -25,6 +49,11 @@ export function WaitingRoom({ jobId, onComplete }: WaitingRoomProps) {
       onComplete(status);
     }
   }, [status, onComplete]);
+
+  const specialistStatuses = useMemo(
+    () => deriveSpecialistStatuses(status?.progress),
+    [status?.progress],
+  );
 
   return (
     <div className="space-y-8">
@@ -53,9 +82,9 @@ export function WaitingRoom({ jobId, onComplete }: WaitingRoomProps) {
       {agents.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
-            Active Specialist Panel
+            Specialist Panel
           </h2>
-          <AgentGrid agents={agents} />
+          <AgentGrid agents={agents} specialistStatuses={specialistStatuses} />
         </div>
       )}
 
