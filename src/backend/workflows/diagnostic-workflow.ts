@@ -35,9 +35,9 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelay = 10
 const parseInput = createStep({
   id: "parse-input",
   inputSchema: z.object({
-    medicalHistory: z.string().min(1, "Medical history is required"),
-    conversationTranscript: z.string().min(1, "Conversation transcript is required"),
-    labResults: z.string().min(1, "Lab results are required"),
+    medicalHistory: z.string(),
+    conversationTranscript: z.string(),
+    labResults: z.string(),
   }),
   outputSchema: z.object({
     patientSummary: z.string(),

@@ -99,7 +99,7 @@
   - Add a "Retry" button on failure
   - Optionally: add a server-side cancellation endpoint
 
-- [ ] **Improve the "Full Report" tab** — Currently dumps JSON. Render it as a proper formatted report:
+- [x] **Improve the "Full Report" tab** — Currently dumps JSON. Render it as a proper formatted report:
   - Specialists consulted as a summary list
   - Each diagnosis with collapsible detail sections
   - Cross-specialty observations in a callout
