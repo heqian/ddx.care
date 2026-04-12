@@ -1,8 +1,9 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   MicrophoneIcon,
   DocumentTextIcon,
   BeakerIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -15,24 +16,93 @@ interface InputDashboardProps {
   onSubmit: (jobId: string, payload: DiagnoseRequest) => void;
 }
 
+const MAX_CHARS = 50_000;
+const STORAGE_KEY = "ddx_draft";
+
 const inputClass =
   "w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent";
 const textareaClass = `${inputClass} resize-y`;
 
+interface Draft {
+  age: string;
+  sex: string;
+  chiefComplaint: string;
+  medicalHistory: string;
+  transcript: string;
+  labResults: string;
+}
+
+function loadDraft(): Draft | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return null;
+}
+
+function saveDraft(d: Draft) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+  } catch { /* ignore */ }
+}
+
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch { /* ignore */ }
+}
+
+function CharCount({ value, max }: { value: string; max: number }) {
+  const len = value.length;
+  const pct = len / max;
+  const nearLimit = pct > 0.8;
+  const overLimit = len > max;
+  return (
+    <span
+      className={`text-xs tabular-nums transition-colors ${
+        overLimit
+          ? "text-danger font-medium"
+          : nearLimit
+            ? "text-amber-600 dark:text-amber-400"
+            : "text-slate-400 dark:text-slate-500"
+      }`}
+    >
+      {len.toLocaleString()}/{max.toLocaleString()}
+    </span>
+  );
+}
+
 export function InputDashboard({ onSubmit }: InputDashboardProps) {
-  const [age, setAge] = useState("");
-  const [sex, setSex] = useState("");
-  const [chiefComplaint, setChiefComplaint] = useState("");
-  const [medicalHistory, setMedicalHistory] = useState("");
-  const [transcript, setTranscript] = useState("");
-  const [labResults, setLabResults] = useState("");
+  const draft = loadDraft();
+  const [age, setAge] = useState(draft?.age ?? "");
+  const [sex, setSex] = useState(draft?.sex ?? "");
+  const [chiefComplaint, setChiefComplaint] = useState(draft?.chiefComplaint ?? "");
+  const [medicalHistory, setMedicalHistory] = useState(draft?.medicalHistory ?? "");
+  const [transcript, setTranscript] = useState(draft?.transcript ?? "");
+  const [labResults, setLabResults] = useState(draft?.labResults ?? "");
   const [showPiiModal, setShowPiiModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeVoiceTarget, setActiveVoiceTarget] = useState<"history" | "transcript" | null>(null);
+  const [touched, setTouched] = useState(false);
   const recognitionRef = useRef<any>(null);
 
-  const canSubmit = Boolean(medicalHistory.trim() || transcript.trim() || labResults.trim());
+  // Persist draft on change
+  useEffect(() => {
+    saveDraft({ age, sex, chiefComplaint, medicalHistory, transcript, labResults });
+  }, [age, sex, chiefComplaint, medicalHistory, transcript, labResults]);
+
+  const ageError = touched && age !== "" && !/^\d{1,3}$/.test(age);
+
+  const historyLen = medicalHistory.length;
+  const transcriptLen = transcript.length;
+  const labLen = labResults.length;
+  const anyOverLimit = historyLen > MAX_CHARS || transcriptLen > MAX_CHARS || labLen > MAX_CHARS;
+
+  const canSubmit =
+    !anyOverLimit &&
+    !ageError &&
+    Boolean(medicalHistory.trim() || transcript.trim() || labResults.trim());
 
   const stopVoiceInput = useCallback(() => {
     if (recognitionRef.current) {
@@ -46,7 +116,6 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
     setSubmitting(true);
     setError(null);
     try {
-      // Prepend patient context to medical history
       const contextPrefix = [
         age && `Age: ${age}`,
         sex && `Sex: ${sex}`,
@@ -65,6 +134,7 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
         labResults,
       };
       const { jobId } = await submitDiagnosis(payload);
+      clearDraft();
       onSubmit(jobId, payload);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Submission failed");
@@ -73,9 +143,20 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
     }
   }, [age, sex, chiefComplaint, medicalHistory, transcript, labResults, onSubmit]);
 
+  const handleClearAll = useCallback(() => {
+    setAge("");
+    setSex("");
+    setChiefComplaint("");
+    setMedicalHistory("");
+    setTranscript("");
+    setLabResults("");
+    setError(null);
+    setTouched(false);
+    clearDraft();
+  }, []);
+
   const handleVoiceInput = useCallback(
     (target: "history" | "transcript") => {
-      // Stop any existing recognition first
       stopVoiceInput();
 
       const SpeechRecognition =
@@ -95,7 +176,6 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
       let lastIndex = 0;
 
       recognition.onresult = (event: any) => {
-        // Only process new results since last callback
         const text = Array.from(event.results)
           .slice(lastIndex)
           .map((r: any) => r[0].transcript)
@@ -121,11 +201,21 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">New Case</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Enter patient data to generate a differential diagnosis.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-display">New Case</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Enter patient data to generate a differential diagnosis.
+          </p>
+        </div>
+        <button
+          onClick={handleClearAll}
+          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-danger transition-colors mt-1"
+          title="Clear all fields"
+        >
+          <TrashIcon className="h-3.5 w-3.5" />
+          Clear All
+        </button>
       </div>
 
       {/* Patient Context */}
@@ -139,10 +229,16 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
             <input
               type="text"
               value={age}
-              onChange={(e) => setAge(e.target.value)}
+              onChange={(e) => {
+                setAge(e.target.value);
+                setTouched(true);
+              }}
               placeholder="e.g., 45"
-              className={inputClass}
+              className={`${inputClass} ${ageError ? "border-danger focus:ring-danger" : ""}`}
             />
+            {ageError && (
+              <p className="text-xs text-danger mt-1">Age must be a number (1–3 digits)</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Sex</label>
@@ -174,7 +270,7 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
 
       {/* Medical History */}
       <Card>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-1">
           <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
             Medical History
           </h2>
@@ -190,6 +286,9 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
             <MicrophoneIcon className="h-4 w-4" />
             {activeVoiceTarget === "history" ? "Stop" : "Dictate"}
           </button>
+        </div>
+        <div className="flex justify-end mb-1">
+          <CharCount value={medicalHistory} max={MAX_CHARS} />
         </div>
         <textarea
           value={medicalHistory}
@@ -210,7 +309,7 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
 
       {/* Conversation Transcript */}
       <Card>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-1">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
             <DocumentTextIcon className="h-4 w-4" />
             Conversation Transcript
@@ -227,6 +326,9 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
             <MicrophoneIcon className="h-4 w-4" />
             {activeVoiceTarget === "transcript" ? "Stop" : "Dictate"}
           </button>
+        </div>
+        <div className="flex justify-end mb-1">
+          <CharCount value={transcript} max={MAX_CHARS} />
         </div>
         <textarea
           value={transcript}
@@ -247,10 +349,16 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
 
       {/* Lab Results */}
       <Card>
-        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-4">
-          <BeakerIcon className="h-4 w-4" />
-          Lab Results
-        </h2>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+            <BeakerIcon className="h-4 w-4" />
+            Lab Results
+          </h2>
+          <div className="w-20" /> {/* spacer to align with voice buttons */}
+        </div>
+        <div className="flex justify-end mb-1">
+          <CharCount value={labResults} max={MAX_CHARS} />
+        </div>
         <textarea
           value={labResults}
           onChange={(e) => setLabResults(e.target.value)}
@@ -272,6 +380,13 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
       {error && (
         <div className="text-sm text-danger bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
           {error}
+        </div>
+      )}
+
+      {/* Validation hint */}
+      {anyOverLimit && (
+        <div className="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3">
+          One or more fields exceed the character limit. Please shorten before submitting.
         </div>
       )}
 

@@ -65,7 +65,7 @@ export function WaitingRoom({ jobId, onComplete, onCancel, onRetry }: WaitingRoo
     <div className="space-y-8">
       <div className="text-center">
         {!isTerminal && <Spinner size="lg" className="mx-auto mb-4" />}
-        <h1 className="text-2xl font-bold">
+        <h1 className="text-2xl font-display">
           {showRetry ? "Diagnosis Failed" : "Analyzing Case..."}
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
@@ -79,7 +79,7 @@ export function WaitingRoom({ jobId, onComplete, onCancel, onRetry }: WaitingRoo
          <div className="max-w-2xl mx-auto mb-8 bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-y-auto h-64 flex flex-col shadow-inner">
            <div className="space-y-2 mt-auto">
              {status.progress.map((p, i) => (
-                <div key={i} className="text-green-400 opacity-90 break-words">
+                <div key={i} className="text-cyan-300 opacity-90 break-words">
                   <span className="text-slate-500 text-xs mr-2">[{new Date(p.time).toLocaleTimeString()}]</span>
                   {p.message}
                 </div>

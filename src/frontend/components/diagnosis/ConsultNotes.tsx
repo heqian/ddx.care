@@ -101,7 +101,7 @@ function CollapsibleDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
               <ul className="space-y-1.5">
                 {diagnosis.nextSteps.map((step, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
-                    <ArrowRightIcon className="h-4 w-4 text-blue-500 dark:text-blue-400 mt-0.5 shrink-0" />
+                    <ArrowRightIcon className="h-4 w-4 text-primary dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>{step}</span>
                   </li>
                 ))}
@@ -160,7 +160,7 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
-          <ChatBubbleLeftRightIcon className="h-4 w-4 text-primary dark:text-blue-400" />
+          <ChatBubbleLeftRightIcon className="h-4 w-4 text-primary dark:text-cyan-400" />
           Full Report
         </h3>
         <button
@@ -180,7 +180,7 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
         <div className="space-y-4">
           <div>
             <h4 className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100 mb-2">
-              <UserIcon className="h-4 w-4 text-blue-500" />
+              <UserIcon className="h-4 w-4 text-primary" />
               Chief Complaint
             </h4>
             <p className="pl-6 whitespace-pre-wrap leading-relaxed">
@@ -190,7 +190,7 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
 
           <div>
             <h4 className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100 mb-2">
-              <DocumentTextIcon className="h-4 w-4 text-blue-500" />
+              <DocumentTextIcon className="h-4 w-4 text-primary" />
               Patient Summary
             </h4>
             <p className="pl-6 whitespace-pre-wrap leading-relaxed">

@@ -11,7 +11,7 @@ interface DiagnosisCardProps {
 }
 
 const rankBadgeColors: Record<number, string> = {
-  1: "bg-blue-600 text-white dark:bg-blue-500",
+  1: "bg-primary text-white dark:bg-cyan-500",
   2: "bg-slate-500 text-white dark:bg-slate-400",
   3: "bg-slate-400 text-white dark:bg-slate-500",
 };
@@ -106,7 +106,7 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
               <ul className="space-y-1">
                 {diagnosis.nextSteps.map((step, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                    <span className="text-blue-500 dark:text-blue-400">{"→"}</span>
+                    <span className="text-primary dark:text-cyan-400">{"→"}</span>
                     <span>{step}</span>
                   </li>
                 ))}

@@ -36,7 +36,7 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Differential Diagnosis</h1>
+          <h1 className="text-2xl font-display">Differential Diagnosis</h1>
           {generatedAt && (
             <p className="text-xs text-slate-400 mt-1">
               Generated {new Date(generatedAt).toLocaleString()}
@@ -55,7 +55,7 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
           onClick={() => setTab("diagnoses")}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             tab === "diagnoses"
-              ? "border-primary text-primary dark:text-blue-400 dark:border-blue-400"
+              ? "border-primary text-primary dark:text-cyan-400 dark:border-cyan-400"
               : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >
@@ -66,7 +66,7 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
           onClick={() => setTab("consult")}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             tab === "consult"
-              ? "border-primary text-primary dark:text-blue-400 dark:border-blue-400"
+              ? "border-primary text-primary dark:text-cyan-400 dark:border-cyan-400"
               : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >
