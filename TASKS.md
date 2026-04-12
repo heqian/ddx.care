@@ -164,11 +164,11 @@
 
 ### 🟤 P6 — Mastra-Specific
 
-- [ ] **Verify model string format** — Using `google/gemini-3.1-pro-preview` but Mastra docs suggest format is `"provider/model-name"`. Verify this is correct for current version.
+- [x] **Verify model string format** — Using `google/gemini-3.1-pro-preview` but Mastra docs suggest format is `"provider/model-name"`. Verify this is correct for current version.
   - Run `node .agents/skills/mastra/scripts/provider-registry.mjs --provider google` to verify available models
   - Update model strings if needed
 
-- [ ] **Agent registry could use Mastra's built-in features** — Consider if Mastra's agent registration patterns could simplify agent setup.
+- [x] **Agent registry could use Mastra's built-in features** — Consider if Mastra's agent registration patterns could simplify agent setup.
 
 ---
 
