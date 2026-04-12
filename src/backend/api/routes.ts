@@ -2,7 +2,6 @@ import { z } from "zod";
 import { mastra } from "../index";
 import { agentList } from "../agents/index";
 import { progressStore } from "../progress-store";
-import { detectPII } from "../utils/pii-detector";
 import { RateLimiter } from "../utils/rate-limiter";
 import { logger } from "../utils/logger";
 import {
@@ -92,17 +91,6 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         }
 
         const { medicalHistory, conversationTranscript, labResults } = parsed.data;
-
-        const combinedText = `${medicalHistory}\n${conversationTranscript}\n${labResults}`;
-        const piiResult = detectPII(combinedText);
-        if (piiResult.hasPII) {
-          logger.warn("pii_detected", { ip, detectedTypes: piiResult.detectedTypes });
-          logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, { ip, reason: "pii_detected" });
-          return Response.json(
-            { error: `Submission rejected: Please remove potential Patient Health Information (${piiResult.detectedTypes.join(", ")}).` },
-            { status: 400 },
-          );
-        }
 
         rateLimiter.record(ip);
         rateLimiter.startWorkflow();

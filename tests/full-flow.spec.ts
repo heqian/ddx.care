@@ -19,10 +19,8 @@ test.describe("Full diagnosis flow", () => {
     );
     await page.getByPlaceholder(/Blood panels, urinalysis/).fill("BP: 180/110. HR: 90.");
 
-    // 3. Submit — click the submit button, then confirm in the PII modal
+    // 3. Submit — click the submit button
     await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
-    await expect(page.getByRole("heading", { name: "Privacy Reminder" })).toBeVisible();
-    await page.getByRole("button", { name: "I Understand — Submit" }).click();
 
     // 4. Waiting room should appear (briefly — mock completes quickly)
     await expect(page.getByRole("heading", { name: "Analyzing Case..." })).toBeVisible({
