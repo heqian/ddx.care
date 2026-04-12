@@ -83,7 +83,7 @@
 
 ### 🟢 P3 — Frontend UX Improvements
 
-- [ ] **Generic, forgettable design** — The UI uses generic Inter font and basic blue color scheme with minimal creative expression. No distinctive visual identity.
+- [x] **Generic, forgettable design** — The UI uses generic Inter font and basic blue color scheme with minimal creative expression. No distinctive visual identity.
   - Consider a medical-themed aesthetic: clean, professional, with subtle clinical design elements
   - Use distinctive typography pairing (e.g., display font for headings)
   - Add meaningful micro-interactions and animations
@@ -106,13 +106,13 @@
   - Recommended immediate actions with urgency highlighting
   - Export as PDF functionality
 
-- [ ] **Add form validation and UX polish to InputDashboard** — The form lacks inline validation. Users get a generic error on failure. Add:
+- [x] **Add form validation and UX polish to InputDashboard** — The form lacks inline validation. Users get a generic error on failure. Add:
   - Character counts on textareas showing proximity to limits
   - Inline validation messages for required fields
   - A "Clear All" button
   - Persist draft data to `sessionStorage` so accidental refreshes don't lose work
 
-- [ ] **Add a client-side router** — Currently uses `useState<Screen>` in `main.tsx` for navigation. This breaks browser back/forward and doesn't support deep-linking to results.
+- [x] **Add a client-side router** — Currently uses `useState<Screen>` in `main.tsx` for navigation. This breaks browser back/forward and doesn't support deep-linking to results.
   - Use `history.pushState` / `popstate` for basic routing
   - Enable direct links to `/results/:jobId`
 

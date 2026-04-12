@@ -149,6 +149,9 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
       },
     },
 
+    // SPA fallback — serve index.html for all non-API routes
+    "/*": appHtml,
+
     "/ws": {
       GET: (req: Request) => {
         const url = new URL(req.url);

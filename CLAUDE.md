@@ -4,7 +4,7 @@ Uses AI agents (via Mastra) to simulate a panel of medical specialists analyzing
 
 ## Runtime & Tooling
 
-Default to using Bun instead of Node.js.
+Default to using Bun instead of Node.js. You should NEVER use Python or any Python-based tools (including for testing or scripting). Always use Bun tools.
 
 - Use `bun <file>` instead of `node <file>` or `ts-node <file>`
 - Use `bun test` instead of `jest` or `vitest`
