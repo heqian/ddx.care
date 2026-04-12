@@ -26,9 +26,9 @@ function getClientIp(req: Request): string {
 }
 
 const diagnoseSchema = z.object({
-  medicalHistory: z.string().min(1).max(MAX_INPUT_FIELD_LENGTH),
-  conversationTranscript: z.string().min(1).max(MAX_INPUT_FIELD_LENGTH),
-  labResults: z.string().min(1).max(MAX_INPUT_FIELD_LENGTH),
+  medicalHistory: z.string().max(MAX_INPUT_FIELD_LENGTH),
+  conversationTranscript: z.string().max(MAX_INPUT_FIELD_LENGTH),
+  labResults: z.string().max(MAX_INPUT_FIELD_LENGTH),
 });
 
 export function createRoutes(server: { upgrade(req: Request, options: { data: unknown }): boolean }, appHtml: unknown) {
