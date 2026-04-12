@@ -62,7 +62,7 @@
   - Warn or reject submissions with detected PII
   - Log PII detection events (without the PII itself) for audit
 
-- [ ] **Add rate limiting to API endpoints** — No rate limiting exists on `/v1/diagnose`. A single user can submit unlimited diagnosis jobs, each of which triggers expensive multi-agent LLM workflows.
+- [x] **Add rate limiting to API endpoints** — No rate limiting exists on `/v1/diagnose`. A single user can submit unlimited diagnosis jobs, each of which triggers expensive multi-agent LLM workflows.
   - Add per-IP rate limiting (e.g., 5 diagnoses per hour)
   - Add global concurrency limiting (e.g., max 3 concurrent workflows)
   - Return 429 with `Retry-After` header

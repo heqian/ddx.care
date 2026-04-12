@@ -16,9 +16,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "MOCK_LLM=1 bun index.ts",
+    command: "MOCK_LLM=1 PORT=3999 bun index.ts",
     port: Number(process.env.PORT) || 3999,
     reuseExistingServer: !process.env.CI,
-    timeout: 10_000,
+    timeout: 30_000,
+    env: { MOCK_LLM: "1", PORT: "3999" },
   },
 });
