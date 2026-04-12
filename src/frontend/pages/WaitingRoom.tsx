@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ArrowPathIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Spinner } from "../components/ui/Spinner";
 import { AgentGrid } from "../components/agents/AgentGrid";
 import type { SpecialistStatus } from "../components/agents/AgentStatusCard";
@@ -9,6 +10,8 @@ import type { AgentInfo, StatusResponse } from "../api/types";
 interface WaitingRoomProps {
   jobId: string;
   onComplete: (result: StatusResponse) => void;
+  onCancel: () => void;
+  onRetry: () => void;
 }
 
 const CALLING_RE = /^Calling specialist (\w+)\.\.\.$/;
@@ -34,9 +37,10 @@ function deriveSpecialistStatuses(
   return map;
 }
 
-export function WaitingRoom({ jobId, onComplete }: WaitingRoomProps) {
+export function WaitingRoom({ jobId, onComplete, onCancel, onRetry }: WaitingRoomProps) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const { status, error } = useJobStream(jobId);
+  const isTerminal = status?.status === "failed" || status?.status === "completed";
 
   useEffect(() => {
     getAgents()
@@ -55,14 +59,19 @@ export function WaitingRoom({ jobId, onComplete }: WaitingRoomProps) {
     [status?.progress],
   );
 
+  const showRetry = status?.status === "failed";
+
   return (
     <div className="space-y-8">
       <div className="text-center">
-        <Spinner size="lg" className="mx-auto mb-4" />
-        <h1 className="text-2xl font-bold">Analyzing Case...</h1>
+        {!isTerminal && <Spinner size="lg" className="mx-auto mb-4" />}
+        <h1 className="text-2xl font-bold">
+          {showRetry ? "Diagnosis Failed" : "Analyzing Case..."}
+        </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
-          Our specialist panel is reviewing the patient data. This typically
-          takes a few minutes.
+          {showRetry
+            ? "An error occurred during analysis. You can retry or go back."
+            : "Our specialist panel is reviewing the patient data. This typically takes a few minutes."}
         </p>
       </div>
       
@@ -88,7 +97,7 @@ export function WaitingRoom({ jobId, onComplete }: WaitingRoomProps) {
         </div>
       )}
 
-      {error && (
+      {error && !showRetry && (
         <div className="text-center">
           <p className="text-sm text-danger">
             Something went wrong: {error.message}
@@ -99,13 +108,43 @@ export function WaitingRoom({ jobId, onComplete }: WaitingRoomProps) {
         </div>
       )}
 
-      {status?.status === "failed" && (
+      {showRetry && (
         <div className="text-center">
-          <p className="text-sm text-danger">
-            Diagnosis failed: {status.error || "Unknown error"}
+          <p className="text-sm text-danger mb-4">
+            {status.error || "An unexpected error occurred during diagnosis."}
           </p>
         </div>
       )}
+
+      <div className="flex justify-center gap-3">
+        {!isTerminal && (
+          <button
+            onClick={onCancel}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+          >
+            <XMarkIcon className="h-4 w-4" />
+            Cancel
+          </button>
+        )}
+        {showRetry && (
+          <button
+            onClick={onRetry}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors"
+          >
+            <ArrowPathIcon className="h-4 w-4" />
+            Retry Diagnosis
+          </button>
+        )}
+        {isTerminal && (
+          <button
+            onClick={onCancel}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+          >
+            <XMarkIcon className="h-4 w-4" />
+            Back to Input
+          </button>
+        )}
+      </div>
     </div>
   );
 }
