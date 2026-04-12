@@ -4,6 +4,8 @@ import {
   parseInput,
   formatReport,
   diagnosisReportSchema,
+  limitConcurrency,
+  withRetry,
 } from "../src/backend/workflows/diagnostic-workflow";
 
 describe("splitToList", () => {
@@ -354,5 +356,111 @@ describe("diagnosisReportSchema", () => {
 
     const result = diagnosisReportSchema.safeParse(valid);
     expect(result.success).toBe(true);
+  });
+});
+
+describe("limitConcurrency", () => {
+  test("processes all items and returns results in order", async () => {
+    const items = [1, 2, 3, 4, 5];
+    const results = await limitConcurrency(items, 2, async (n) => n * 10);
+    expect(results).toEqual([10, 20, 30, 40, 50]);
+  });
+
+  test("respects concurrency limit", async () => {
+    let activeConcurrency = 0;
+    let maxConcurrency = 0;
+
+    const items = [1, 2, 3, 4, 5, 6];
+    await limitConcurrency(items, 3, async (n) => {
+      activeConcurrency++;
+      maxConcurrency = Math.max(maxConcurrency, activeConcurrency);
+      await new Promise((r) => setTimeout(r, 50));
+      activeConcurrency--;
+      return n;
+    });
+
+    expect(maxConcurrency).toBeLessThanOrEqual(3);
+  });
+
+  test("handles empty items", async () => {
+    const results = await limitConcurrency([], 3, async (n: number) => n);
+    expect(results).toEqual([]);
+  });
+
+  test("handles single item", async () => {
+    const results = await limitConcurrency([42], 5, async (n) => n * 2);
+    expect(results).toEqual([84]);
+  });
+
+  test("limit greater than items count still works", async () => {
+    const results = await limitConcurrency([1, 2], 10, async (n) => n + 1);
+    expect(results).toEqual([2, 3]);
+  });
+});
+
+describe("withRetry", () => {
+  test("returns immediately on first success", async () => {
+    let calls = 0;
+    const result = await withRetry(async () => {
+      calls++;
+      return "ok";
+    }, 3, 10);
+
+    expect(result).toBe("ok");
+    expect(calls).toBe(1);
+  });
+
+  test("retries on failure and succeeds on nth attempt", async () => {
+    let calls = 0;
+    const result = await withRetry(async () => {
+      calls++;
+      if (calls < 3) throw new Error("fail");
+      return "success";
+    }, 3, 10);
+
+    expect(result).toBe("success");
+    expect(calls).toBe(3);
+  });
+
+  test("throws after exhausting all retries", async () => {
+    let calls = 0;
+    await expect(
+      withRetry(async () => {
+        calls++;
+        throw new Error("always fails");
+      }, 3, 10),
+    ).rejects.toThrow("always fails");
+
+    expect(calls).toBe(3);
+  });
+
+  test("preserves the original error", async () => {
+    await expect(
+      withRetry(async () => {
+        throw new Error("specific error message");
+      }, 2, 10),
+    ).rejects.toThrow("specific error message");
+  });
+
+  test("applies exponential backoff between retries", async () => {
+    const callTimes: number[] = [];
+    
+    try {
+      await withRetry(async () => {
+        callTimes.push(Date.now());
+        throw new Error("fail");
+      }, 3, 50); // baseDelay = 50ms
+    } catch {
+      // expected
+    }
+
+    expect(callTimes.length).toBe(3);
+    // Gap 1→2 should be ~50ms (baseDelay * 2^0), gap 2→3 should be ~100ms (baseDelay * 2^1)
+    if (callTimes.length === 3) {
+      const gap1 = callTimes[1] - callTimes[0];
+      const gap2 = callTimes[2] - callTimes[1];
+      expect(gap1).toBeGreaterThanOrEqual(40); // ~50ms with some tolerance
+      expect(gap2).toBeGreaterThanOrEqual(80); // ~100ms with some tolerance
+    }
   });
 });

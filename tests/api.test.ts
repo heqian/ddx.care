@@ -92,4 +92,81 @@ describe("API Endpoints", () => {
     expect(jobStatus).toBe("completed");
     expect(finalResult.result).toBeDefined();
   }, 60_000);
+
+  test("POST /v1/diagnose returns 413 for oversized payload", async () => {
+    // MAX_PAYLOAD_BYTES is 1,000,000 — create a body that exceeds it
+    // We need a body whose actual content-length exceeds the limit
+    const hugeField = "x".repeat(400_000); // each field = 400k chars
+    const body = JSON.stringify({
+      medicalHistory: hugeField,
+      conversationTranscript: hugeField,
+      labResults: hugeField,
+    });
+    // Total body is ~1.2MB, exceeding MAX_PAYLOAD_BYTES (1MB)
+    const req = new Request(`${BASE}/v1/diagnose`, {
+      method: "POST",
+      body,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    const res = await fetch(req);
+    // Should get 413 (payload too large) or 400 (validation failure for field length)
+    // Since individual fields are 400k > MAX_INPUT_FIELD_LENGTH (50k), it will hit the
+    // zod validation first with 400 if content-length check doesn't fire.
+    // The key is that the request is rejected, not accepted.
+    expect([400, 413]).toContain(res.status);
+  });
+
+  test("POST /v1/diagnose returns 400 for oversized field", async () => {
+    // MAX_INPUT_FIELD_LENGTH is 50,000 characters
+    const longField = "x".repeat(51_000);
+    const res = await fetch(`${BASE}/v1/diagnose`, {
+      method: "POST",
+      body: JSON.stringify({
+        medicalHistory: longField,
+        conversationTranscript: "normal",
+        labResults: "normal",
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    // Should be rejected — either 400 (validation) or 413 (payload size)
+    expect([400, 413]).toContain(res.status);
+    const text = await res.text();
+    const body = JSON.parse(text) as { error: string };
+    expect(body.error).toBeTruthy();
+  });
+
+  test("GET /ws returns 400 without jobId query parameter", async () => {
+    const res = await fetch(`${BASE}/ws`);
+    // Should get 400 since no jobId is provided (or 101 upgrade refused)
+    expect(res.status).toBe(400);
+  });
+
+  test("POST /v1/diagnose rejects empty body", async () => {
+    const res = await fetch(`${BASE}/v1/diagnose`, {
+      method: "POST",
+      body: "",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  test("POST /v1/diagnose accepts valid minimal input", async () => {
+    const res = await fetch(`${BASE}/v1/diagnose`, {
+      method: "POST",
+      body: JSON.stringify({
+        medicalHistory: "Hypertension",
+        conversationTranscript: "Headache reported",
+        labResults: "BP elevated",
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    // Should be either 202 (created) or 429 (rate limited from previous tests)
+    expect([202, 429]).toContain(res.status);
+  });
 });

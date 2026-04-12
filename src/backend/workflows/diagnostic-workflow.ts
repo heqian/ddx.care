@@ -4,7 +4,7 @@ import { DIAGNOSIS_TIMEOUT_MS, MAX_DIAGNOSIS_ROUNDS } from "../config";
 import { progressStore } from "../progress-store";
 import { logger } from "../utils/logger";
 
-async function limitConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+export async function limitConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let index = 0;
   const workers = Array.from({ length: limit }, async () => {
@@ -17,7 +17,7 @@ async function limitConcurrency<T, R>(items: T[], limit: number, fn: (item: T) =
   return results;
 }
 
-async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelay = 1000): Promise<T> {
+export async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelay = 1000): Promise<T> {
   let attempt = 0;
   while (true) {
     try {

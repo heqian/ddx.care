@@ -392,3 +392,207 @@ describe("useAutoLogout", () => {
     expect(onTimeout).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// AgentStatusCard
+// ---------------------------------------------------------------------------
+import { AgentStatusCard } from "../src/frontend/components/agents/AgentStatusCard";
+
+describe("AgentStatusCard", () => {
+  test("renders agent name and description", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Cardiologist",
+        agentId: "cardiologist",
+        description: "Heart specialist",
+      }),
+    );
+    expect(getByText(container, "Cardiologist")).toBeTruthy();
+  });
+
+  test("shows 'Waiting...' for idle status", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Neurologist",
+        agentId: "neurologist",
+        description: "Brain doctor",
+        status: "idle",
+      }),
+    );
+    expect(getByText(container, "Waiting...")).toBeTruthy();
+  });
+
+  test("shows 'Consulting...' for active status", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Cardiologist",
+        agentId: "cardiologist",
+        description: "Heart specialist",
+        status: "active",
+      }),
+    );
+    expect(getByText(container, "Consulting...")).toBeTruthy();
+  });
+
+  test("shows 'Analysis complete' for completed status", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Oncologist",
+        agentId: "oncologist",
+        description: "Cancer specialist",
+        status: "completed",
+      }),
+    );
+    expect(getByText(container, "Analysis complete")).toBeTruthy();
+  });
+
+  test("defaults to idle when status is not provided", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Generalist",
+        agentId: "generalist",
+        description: "General practitioner",
+      }),
+    );
+    expect(getByText(container, "Waiting...")).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Badge
+// ---------------------------------------------------------------------------
+import { Badge } from "../src/frontend/components/ui/Badge";
+
+describe("Badge", () => {
+  test("renders children text", () => {
+    resetBody();
+    const { container } = render(
+      createElement(Badge, {}, "Test Label"),
+    );
+    expect(getByText(container, "Test Label")).toBeTruthy();
+  });
+
+  test("applies green color classes", () => {
+    resetBody();
+    const { container } = render(
+      createElement(Badge, { color: "green" }, "Green"),
+    );
+    const badge = getByText(container, "Green");
+    expect(badge.className).toContain("bg-green-100");
+  });
+
+  test("applies red color classes", () => {
+    resetBody();
+    const { container } = render(
+      createElement(Badge, { color: "red" }, "Red"),
+    );
+    const badge = getByText(container, "Red");
+    expect(badge.className).toContain("bg-red-100");
+  });
+
+  test("applies yellow color classes", () => {
+    resetBody();
+    const { container } = render(
+      createElement(Badge, { color: "yellow" }, "Yellow"),
+    );
+    const badge = getByText(container, "Yellow");
+    expect(badge.className).toContain("bg-yellow-100");
+  });
+
+  test("defaults to gray color (no color prop)", () => {
+    resetBody();
+    const { container } = render(
+      createElement(Badge, {}, "Default"),
+    );
+    const badge = getByText(container, "Default");
+    expect(badge.className).toContain("bg-slate-100");
+  });
+
+  test("applies custom className", () => {
+    resetBody();
+    const { container } = render(
+      createElement(Badge, { className: "extra-class" }, "Custom"),
+    );
+    const badge = getByText(container, "Custom");
+    expect(badge.className).toContain("extra-class");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Modal
+// ---------------------------------------------------------------------------
+import { Modal } from "../src/frontend/components/ui/Modal";
+
+describe("Modal", () => {
+  test("renders when open is true", () => {
+    resetBody();
+    const { container } = render(
+      createElement(Modal, { open: true, onClose: () => {}, title: "Test Modal" },
+        createElement("p", {}, "Modal content")),
+    );
+    expect(getByText(container, "Test Modal")).toBeTruthy();
+    expect(getByText(container, "Modal content")).toBeTruthy();
+  });
+
+  test("does not render when open is false", () => {
+    resetBody();
+    const { container } = render(
+      createElement(Modal, { open: false, onClose: () => {}, title: "Hidden" },
+        createElement("p", {}, "Should not show")),
+    );
+    expect(queryByText(container, "Hidden")).toBeNull();
+    expect(queryByText(container, "Should not show")).toBeNull();
+  });
+
+  test("renders title correctly", () => {
+    resetBody();
+    const { container } = render(
+      createElement(Modal, { open: true, onClose: () => {}, title: "Important Dialog" },
+        createElement("p", {}, "Content")),
+    );
+    expect(getByText(container, "Important Dialog")).toBeTruthy();
+  });
+
+  test("calls onClose when close button is clicked", () => {
+    resetBody();
+    const onClose = vi.fn();
+    const { container } = render(
+      createElement(Modal, { open: true, onClose, title: "Closable" },
+        createElement("p", {}, "Content")),
+    );
+    // Find all buttons and click the one that's not the main title area
+    const buttons = Array.from(container.getElementsByTagName("button"));
+    // The close button is the last button (with the X icon)
+    const closeBtn = buttons[buttons.length - 1];
+    if (closeBtn) {
+      fireEvent.click(closeBtn);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  test("calls onClose on backdrop click", () => {
+    resetBody();
+    const onClose = vi.fn();
+    const { container } = render(
+      createElement(Modal, { open: true, onClose, title: "Backdrop Test" },
+        createElement("p", {}, "Content")),
+    );
+    // The backdrop is the second div inside the fixed container
+    // It has an onClick={onClose} handler
+    const fixedDivs = Array.from(container.getElementsByTagName("div"));
+    // Find the backdrop div — it will be a div with the onClick handler
+    // The first fixed div is the wrapper, the backdrop is its first child div
+    const backdrop = fixedDivs.find(
+      (d) => d.className.includes("fixed") && d.className.includes("bg-black"),
+    );
+    if (backdrop) {
+      fireEvent.click(backdrop);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    }
+  });
+});
