@@ -89,7 +89,7 @@
   - Add meaningful micro-interactions and animations
   - Create visual hierarchy with proper use of whitespace
 
-- [ ] **Implement real-time specialist status in WaitingRoom** — The `AgentGrid` marks all agents as `active` ([AgentGrid.tsx:17](src/frontend/components/agents/AgentGrid.tsx)) regardless of whether they're actually being consulted. Use WebSocket progress events to show which specialists are:
+- [x] **Implement real-time specialist status in WaitingRoom** — The `AgentGrid` marks all agents as `active` ([AgentGrid.tsx:17](src/frontend/components/agents/AgentGrid.tsx)) regardless of whether they're actually being consulted. Use WebSocket progress events to show which specialists are:
   - `idle` — not yet consulted
   - `active` — currently being consulted
   - `completed` — finished their analysis
