@@ -9,6 +9,8 @@ import {
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
   MAX_CONCURRENT_WORKFLOWS,
+  MAX_INPUT_FIELD_LENGTH,
+  MAX_PAYLOAD_BYTES,
 } from "../config";
 
 export const rateLimiter = new RateLimiter({
@@ -24,9 +26,9 @@ function getClientIp(req: Request): string {
 }
 
 const diagnoseSchema = z.object({
-  medicalHistory: z.string().min(1),
-  conversationTranscript: z.string().min(1),
-  labResults: z.string().min(1),
+  medicalHistory: z.string().min(1).max(MAX_INPUT_FIELD_LENGTH),
+  conversationTranscript: z.string().min(1).max(MAX_INPUT_FIELD_LENGTH),
+  labResults: z.string().min(1).max(MAX_INPUT_FIELD_LENGTH),
 });
 
 export function createRoutes(server: { upgrade(req: Request, options: { data: unknown }): boolean }, appHtml: unknown) {
@@ -57,6 +59,11 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         }
 
         let body: unknown;
+        const contentLength = parseInt(req.headers.get("content-length") ?? "0", 10);
+        if (contentLength > MAX_PAYLOAD_BYTES) {
+          logger.request("POST", "/v1/diagnose", 413, Date.now() - startTime, { ip, contentLength });
+          return Response.json({ error: "Payload too large" }, { status: 413 });
+        }
         try {
           body = await req.json();
         } catch {
@@ -66,10 +73,10 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
 
         const parsed = diagnoseSchema.safeParse(body);
         if (!parsed.success) {
-          const missing = parsed.error.issues.map((i) => i.path.join(".")).join(", ");
-          logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, { ip, missing });
+          const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+          logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, { ip, issues });
           return Response.json(
-            { error: `Missing required fields: ${missing}` },
+            { error: `Validation failed: ${issues}` },
             { status: 400 },
           );
         }

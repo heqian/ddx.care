@@ -75,7 +75,7 @@
 
 - [x] **Consolidate config into `config.ts`** — Server port is in `index.ts`, model names in `config.ts`, and the log message hardcodes "port 3000". Move `PORT` and `JOB_TTL_MS` into `config.ts` alongside existing env vars.
 
-- [ ] **Add input size validation** — No limits on the size of `medicalHistory`, `conversationTranscript`, or `labResults`. Extremely large inputs could exceed LLM context windows or cause memory issues.
+- [x] **Add input size validation** — No limits on the size of `medicalHistory`, `conversationTranscript`, or `labResults`. Extremely large inputs could exceed LLM context windows or cause memory issues.
   - Add `z.string().max(50000)` or similar constraints on the Zod schema
   - Add total payload size middleware
 
