@@ -2,6 +2,35 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { fetchJSON as baseFetchJSON } from "./utils/fetch";
 
+interface NcbiAuthor {
+  name?: string;
+}
+
+interface NcbiArticleSummary {
+  title?: string;
+  fulljournalname?: string;
+  source?: string;
+  pubdate?: string;
+  authors?: NcbiAuthor[];
+  elocationid?: string;
+  doctype?: string;
+}
+
+interface NcbiAbstractText {
+  "#text"?: string;
+}
+
+interface NcbiPubmedArticle {
+  MedlineCitation?: {
+    PMID?: string | { "#text"?: string };
+    Article?: {
+      Abstract?: {
+        AbstractText?: string | NcbiAbstractText[];
+      };
+    };
+  };
+}
+
 const EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
 
 async function fetchJSON(url: string) {
@@ -49,7 +78,7 @@ export const pubmedSearchTool = createTool({
     // Step 2: Fetch summaries
     const summaryUrl = `${EUTILS_BASE}/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
     const summaryResult = await fetchJSON(summaryUrl);
-    const articles = summaryResult?.result ?? {};
+    const articles: Record<string, NcbiArticleSummary> = (summaryResult?.result as Record<string, NcbiArticleSummary>) ?? {};
 
     // Step 3: Fetch abstracts
     const abstractUrl = `${EUTILS_BASE}/efetch.fcgi?db=pubmed&id=${ids.join(",")}&rettype=abstract&retmode=json`;
@@ -57,13 +86,14 @@ export const pubmedSearchTool = createTool({
     try {
       const abstractResult = await fetchJSON(abstractUrl);
       // Parse abstracts from the XML-like JSON structure
-      const fetchedAbstracts = abstractResult?.PubmedArticle ?? [];
+      const fetchedAbstracts: NcbiPubmedArticle[] = abstractResult?.PubmedArticle ?? [];
       for (const article of Array.isArray(fetchedAbstracts) ? fetchedAbstracts : [fetchedAbstracts]) {
-        const pmid = article?.MedlineCitation?.PMID?.["#text"] ?? article?.MedlineCitation?.PMID;
+        const rawPmid = article?.MedlineCitation?.PMID;
+        const pmid = typeof rawPmid === "object" ? rawPmid?.["#text"] : rawPmid;
         const abstractTexts = article?.MedlineCitation?.Article?.Abstract?.AbstractText;
         if (pmid && abstractTexts) {
           const texts = Array.isArray(abstractTexts) ? abstractTexts : [abstractTexts];
-          abstracts[String(pmid)] = texts.map((t: any) => (typeof t === "string" ? t : t["#text"] ?? "")).join(" ");
+          abstracts[String(pmid)] = texts.map((t: string | NcbiAbstractText) => (typeof t === "string" ? t : t["#text"] ?? "")).join(" ");
         }
       }
     } catch {
@@ -75,7 +105,7 @@ export const pubmedSearchTool = createTool({
       return {
         pmid: id,
         title: article.title ?? "",
-        authors: (article.authors ?? []).map((a: any) => a.name ?? "").filter(Boolean),
+        authors: (article.authors ?? []).map((a: NcbiAuthor) => a.name ?? "").filter(Boolean),
         journal: article.fulljournalname ?? article.source ?? "",
         pubDate: article.pubdate ?? "",
         abstract: abstracts[id],
@@ -131,12 +161,12 @@ export const relatedArticlesTool = createTool({
 
     const summaryUrl = `${EUTILS_BASE}/esummary.fcgi?db=pubmed&id=${limitedIds.join(",")}&retmode=json`;
     const summaryResult = await fetchJSON(summaryUrl);
-    const articles = summaryResult?.result ?? {};
+    const articles: Record<string, NcbiArticleSummary> = (summaryResult?.result as Record<string, NcbiArticleSummary>) ?? {};
 
     const results = limitedIds.map((id) => ({
       pmid: id,
       title: articles[id]?.title ?? "",
-      authors: (articles[id]?.authors ?? []).map((a: any) => a.name ?? "").filter(Boolean),
+      authors: (articles[id]?.authors ?? []).map((a: NcbiAuthor) => a.name ?? "").filter(Boolean),
       journal: articles[id]?.fulljournalname ?? articles[id]?.source ?? "",
       pubDate: articles[id]?.pubdate ?? "",
     }));
@@ -229,7 +259,7 @@ export const geneReviewsSearchTool = createTool({
     const results = ids.map((id) => ({
       bookId: id,
       title: entries[id]?.title ?? "",
-      authors: entries[id]?.authors?.map((a: any) => a.name).join(", ") ?? undefined,
+      authors: entries[id]?.authors?.map((a: NcbiAuthor) => a.name).join(", ") ?? undefined,
       pubDate: entries[id]?.pubdate ?? undefined,
     }));
 

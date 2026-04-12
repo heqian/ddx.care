@@ -2,6 +2,52 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { fetchJSON as baseFetchJSON } from "./utils/fetch";
 
+interface CtStudyIdentification {
+  nctId?: string;
+  briefTitle?: string;
+}
+
+interface CtStatusModule {
+  overallStatus?: string;
+  startDateStruct?: { date?: string };
+  completionDateStruct?: { date?: string };
+}
+
+interface CtDescriptionModule {
+  briefSummary?: string;
+}
+
+interface CtDesignModule {
+  phases?: string[];
+  studyType?: string;
+  interventions?: Array<{ name?: string }>;
+  enrollmentInfo?: { enrollmentCount?: string };
+}
+
+interface CtConditionsModule {
+  conditions?: string[];
+}
+
+interface CtEligibilityModule {
+  eligibilityCriteria?: string;
+}
+
+interface CtSponsorModule {
+  leadSponsor?: { name?: string };
+}
+
+interface CtStudy {
+  protocolSection?: {
+    identificationModule?: CtStudyIdentification;
+    statusModule?: CtStatusModule;
+    descriptionModule?: CtDescriptionModule;
+    designModule?: CtDesignModule;
+    conditionsModule?: CtConditionsModule;
+    eligibilityModule?: CtEligibilityModule;
+    sponsorCollaboratorsModule?: CtSponsorModule;
+  };
+}
+
 const CT_BASE = "https://clinicaltrials.gov/api/v2";
 
 async function fetchJSON(url: string) {
@@ -53,7 +99,7 @@ export const clinicalTrialsSearchTool = createTool({
 
     const result = await fetchJSON(url);
 
-    const results = (result.studies ?? []).map((study: any) => {
+    const results = (result.studies ?? []).map((study: CtStudy) => {
       const protocol = study.protocolSection ?? {};
       const identification = protocol.identificationModule ?? {};
       const statusModule = protocol.statusModule ?? {};
@@ -70,7 +116,7 @@ export const clinicalTrialsSearchTool = createTool({
         phase: designModule.phases?.join(", ") ?? undefined,
         studyType: designModule.studyType ?? undefined,
         conditions: conditionsModule.conditions ?? undefined,
-        interventions: designModule.interventions?.map((i: any) => i.name ?? i).filter(Boolean) ?? undefined,
+        interventions: designModule.interventions?.map((i) => i.name ?? "").filter(Boolean) ?? undefined,
         eligibilityCriteria: eligibilityModule.eligibilityCriteria ?? undefined,
         sponsor: sponsorModule.leadSponsor?.name ?? undefined,
         startDate: statusModule.startDateStruct?.date ?? undefined,

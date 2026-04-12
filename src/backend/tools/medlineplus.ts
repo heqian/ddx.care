@@ -3,6 +3,13 @@ import { z } from "zod";
 
 const MEDLINE_BASE = "https://connect.medlineplus.gov/service";
 
+interface MedlinePlusEntry {
+  title?: string | { _value?: string };
+  summary?: string | { _value?: string };
+  link?: Array<{ href?: string }>;
+  id?: string;
+}
+
 /** Common condition name to ICD-10-CM code mapping for MedlinePlus Connect */
 const CONDITION_ICD10: Record<string, string> = {
   diabetes: "E11.9",
@@ -98,9 +105,9 @@ export const medlinePlusSearchTool = createTool({
         const entries = data?.feed?.entry ?? [];
         const entryArray = Array.isArray(entries) ? entries : entries ? [entries] : [];
 
-        const results = entryArray.map((entry: any) => ({
-          title: entry.title?._value ?? entry.title ?? "",
-          summary: entry.summary?._value ?? entry.summary ?? "",
+        const results = entryArray.map((entry: MedlinePlusEntry) => ({
+          title: (typeof entry.title === "object" ? entry.title?._value : entry.title) ?? "",
+          summary: (typeof entry.summary === "object" ? entry.summary?._value : entry.summary) ?? "",
           url: entry.link?.[0]?.href ?? entry.id ?? undefined,
         }));
 

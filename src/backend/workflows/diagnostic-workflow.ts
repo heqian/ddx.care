@@ -32,7 +32,7 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelay = 10
 }
 
 // Step 1: Validate and structure the incoming patient data
-const parseInput = createStep({
+export const parseInput = createStep({
   id: "parse-input",
   inputSchema: z.object({
     medicalHistory: z.string(),
@@ -99,7 +99,7 @@ interface CmoDecision {
 }
 
 /** Split a possibly multi-line string into a list of trimmed, non-empty lines */
-function splitToList(value: string | undefined): string[] {
+export function splitToList(value: string | undefined): string[] {
   if (!value) return [];
   // If it already looks like a bullet list, split on bullets/newlines
   return value
@@ -338,7 +338,7 @@ ${contextHistory.join("\n\n")}`;
 });
 
 // Step 3: Format the final report for the frontend
-const formatReport = createStep({
+export const formatReport = createStep({
   id: "format-report",
   inputSchema: z.object({
     diagnosisReport: diagnosisReportSchema,

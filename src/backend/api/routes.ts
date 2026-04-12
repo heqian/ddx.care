@@ -31,6 +31,16 @@ const diagnoseSchema = z.object({
   labResults: z.string().max(MAX_INPUT_FIELD_LENGTH),
 });
 
+interface WorkflowRunResult {
+  report?: {
+    specialistsConsulted?: unknown[];
+  };
+}
+
+interface RouteRequest extends Request {
+  params: Record<string, string>;
+}
+
 export function createRoutes(server: { upgrade(req: Request, options: { data: unknown }): boolean }, appHtml: unknown) {
   return {
     "/": appHtml,
@@ -108,7 +118,7 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         run
           .start({ inputData: { medicalHistory, conversationTranscript, labResults } })
           .then((result) => {
-            const specialistCount = (result as any)?.report?.specialistsConsulted?.length ?? 0;
+            const specialistCount = (result as WorkflowRunResult)?.report?.specialistsConsulted?.length ?? 0;
             logger.workflowComplete(jobId, Date.now() - startTime, specialistCount);
             progressStore.complete(jobId, result);
           })
@@ -126,7 +136,7 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
     },
 
     "/v1/status/:jobId": {
-      GET: (req: any) => {
+      GET: (req: RouteRequest) => {
         const start = Date.now();
         const { jobId } = req.params;
         const entry = progressStore.getJob(jobId);

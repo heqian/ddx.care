@@ -6,6 +6,15 @@ export interface ProgressEvent {
   message: string;
 }
 
+interface JobRow {
+  id: string;
+  status: string;
+  result: string | null;
+  error: string | null;
+  createdAt: number;
+  progress: string;
+}
+
 export interface JobEntry {
   status: "pending" | "completed" | "failed";
   result?: unknown;
@@ -45,11 +54,11 @@ export class JobStore extends EventTarget {
 
   getJob(jobId: string): JobEntry | undefined {
     const stmt = this.db.prepare(`SELECT * FROM jobs WHERE id = ?`);
-    const row = stmt.get(jobId) as any;
+    const row = stmt.get(jobId) as JobRow | null;
     if (!row) return undefined;
 
     return {
-      status: row.status,
+      status: row.status as JobEntry["status"],
       result: row.result ? JSON.parse(row.result) : undefined,
       error: row.error || undefined,
       createdAt: row.createdAt,

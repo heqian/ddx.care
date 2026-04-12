@@ -120,21 +120,21 @@
 
 ### 🔵 P4 — Testing & DevEx
 
-- [ ] **Add unit tests for workflow steps** — The `diagnostic-workflow.ts` step functions (`parseInput`, `runDiagnosis`, `formatReport`) are not unit tested. The existing `api.test.ts` does E2E testing only (requires a running server + LLM).
+- [x] **Add unit tests for workflow steps** — The `diagnostic-workflow.ts` step functions (`parseInput`, `runDiagnosis`, `formatReport`) are not unit tested. The existing `api.test.ts` does E2E testing only (requires a running server + LLM).
   - Test `parseInput` with various input formats
   - Test `formatReport` with mock diagnosis data
   - Test `splitToList` edge cases (already a pure function)
   - Mock `mastra.getAgent()` to test `runDiagnosis` logic without LLM calls
 
-- [ ] **Add frontend component tests** — Zero frontend tests exist. Add tests for:
+- [x] **Add frontend component tests** — Zero frontend tests exist. Add tests for:
   - `DiagnosisCard` rendering with various urgency/confidence values
   - `useAutoLogout` timer behavior
   - `useJobStream` with mocked WebSocket messages
   - `FileDropZone` file handling
 
-- [ ] **Fix the `scripts/` directory — it's empty** — Remove or populate with useful dev scripts (e.g., seed data generation, mock server, lint, format).
+- [x] **Fix the `scripts/` directory — it's empty** — Remove or populate with useful dev scripts (e.g., seed data generation, mock server, lint, format).
 
-- [ ] **Eliminate remaining `any` casts** — `tsconfig.json` has `strict: true` but several files use `any`:
+- [x] **Eliminate remaining `any` casts** — `tsconfig.json` has `strict: true` but several files use `any`:
   - `progress-store.ts:48` — `stmt.get() as any` should use a typed `JobRow` interface
   - `index.ts:67` — `(req: any)` on the status GET handler; use Bun's typed route params
   - `index.ts:136,142` — `(ws as any).unsubscribe`; use `Bun.serve<WsData>` generic to type `ws.data`
@@ -142,14 +142,14 @@
   - `tools/index.ts:25` — `type AnyTool = any`
   - Tool implementations: numerous `(t: any)`, `(a: any)` callbacks in pubmed/open-fda/clinical-trials
 
-- [ ] **Add a `.env.example` file** — The project uses env vars (`SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL`, `MAX_DIAGNOSIS_ROUNDS`, `PORT`) but has no `.env.example` documenting them. The `.env` file is only 69 bytes and likely contains a single API key.
+- [x] **Add a `.env.example` file** — The project uses env vars (`SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL`, `MAX_DIAGNOSIS_ROUNDS`, `PORT`) but has no `.env.example` documenting them. The `.env` file is only 69 bytes and likely contains a single API key.
 
-- [ ] **No linting/typecheck scripts** — `package.json` has no `lint` or `typecheck` scripts.
+- [x] **No linting/typecheck scripts** — `package.json` has no `lint` or `typecheck` scripts.
   - Add `bunx tsc --noEmit` for type checking
   - Add `bunx eslint` or `bunx @biomejs/biome check` for linting
   - Add pre-commit hooks to run these checks
 
-- [ ] **Outdated README** — Current README is minimal and doesn't explain system architecture, usage, or setup requirements.
+- [x] **Outdated README** — Current README is minimal and doesn't explain system architecture, usage, or setup requirements.
 
 ---
 
