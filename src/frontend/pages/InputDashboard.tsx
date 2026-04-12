@@ -80,7 +80,6 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
   const [medicalHistory, setMedicalHistory] = useState(draft?.medicalHistory ?? "");
   const [transcript, setTranscript] = useState(draft?.transcript ?? "");
   const [labResults, setLabResults] = useState(draft?.labResults ?? "");
-  const [showPiiModal, setShowPiiModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeVoiceTarget, setActiveVoiceTarget] = useState<"history" | "transcript" | null>(null);
@@ -393,50 +392,12 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
       {/* Submit */}
       <div className="flex justify-end">
         <Button
-          onClick={() => setShowPiiModal(true)}
+          onClick={handleSubmit}
           disabled={!canSubmit || submitting}
         >
           {submitting ? "Submitting..." : "Submit for Diagnosis"}
         </Button>
       </div>
-
-      {/* PII Warning Modal */}
-      <Modal
-        open={showPiiModal}
-        onClose={() => setShowPiiModal(false)}
-        title="Privacy Reminder"
-      >
-        <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
-          <p>
-            Before submitting, please confirm that the case data does
-            <strong> not </strong> contain any of the following:
-          </p>
-          <ul className="list-disc list-inside space-y-1">
-            <li>Patient names</li>
-            <li>Dates of birth</li>
-            <li>Medical record numbers (MRNs)</li>
-            <li>Social security numbers</li>
-            <li>Any other direct identifiers</li>
-          </ul>
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            All data is processed ephemerally and cleared when you close this
-            session.
-          </p>
-        </div>
-        <div className="flex justify-end gap-3 mt-6">
-          <Button variant="secondary" onClick={() => setShowPiiModal(false)}>
-            Go Back
-          </Button>
-          <Button
-            onClick={() => {
-              setShowPiiModal(false);
-              handleSubmit();
-            }}
-          >
-            I Understand — Submit
-          </Button>
-        </div>
-      </Modal>
     </div>
   );
 }
