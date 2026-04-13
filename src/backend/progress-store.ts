@@ -31,7 +31,7 @@ export class JobStore extends EventTarget {
   private failStmt!: Statement;
   private cleanupStmt!: Statement;
 
-  constructor(dbPath = "jobs.sqlite") {
+  constructor(dbPath = process.env.DB_PATH || "jobs.sqlite") {
     super();
     this.db = new Database(dbPath, { create: true });
     this.init();

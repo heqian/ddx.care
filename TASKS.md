@@ -40,19 +40,19 @@
 
 ## P3 — Improvements / Developer Experience
 
-- [ ] **Fix and run `bun run typecheck` in CI** — The `tsconfig.json` include pattern fix (P0 above) is a prerequisite. After fixing it, run `bun run typecheck` and fix any type errors that surface. Add typecheck to the test pipeline (e.g. a `pretest` script or CI step).
+- [x] **Fix and run `bun run typecheck` in CI** — The `tsconfig.json` include pattern fix (P0 above) is a prerequisite. After fixing it, run `bun run typecheck` and fix any type errors that surface. Add typecheck to the test pipeline (e.g. a `pretest` script or CI step).
 
 - [x] **Add `bun run lint` script with Biome** — No linter is configured. Add `@biomejs/biome` as a dev dependency with a minimal `biome.json` config focused on catching real bugs: `noExplicitAny`, `noUnusedVariables`, `useConst`. Don't enable stylistic rules — just bug-catching. Add `"lint": "biome check src/"` script to `package.json`.
 
-- [ ] **Centralize environment variable validation** — [config.ts](src/backend/config.ts) does bare `parseInt` with no validation. Missing `GOOGLE_GENERATIVE_AI_API_KEY` silently fails at the first LLM call. Add a `validateConfig()` function that runs at server startup: assert `GOOGLE_GENERATIVE_AI_API_KEY` is set, assert parsed ints are positive numbers, assert `PORT` is in valid range. Fail fast with a clear error message.
+- [x] **Centralize environment variable validation** — [config.ts](src/backend/config.ts) does bare `parseInt` with no validation. Missing `GOOGLE_GENERATIVE_AI_API_KEY` silently fails at the first LLM call. Add a `validateConfig()` function that runs at server startup: assert `GOOGLE_GENERATIVE_AI_API_KEY` is set, assert parsed ints are positive numbers, assert `PORT` is in valid range. Fail fast with a clear error message.
 
-- [ ] **Add `.editorconfig`** — Ensure consistent basic formatting across contributors (indent style, trailing newline, charset). No need for Prettier or a full formatting config yet — Biome can handle formatting if desired later.
+- [x] **Add `.editorconfig`** — Ensure consistent basic formatting across contributors (indent style, trailing newline, charset). No need for Prettier or a full formatting config yet — Biome can handle formatting if desired later.
 
-- [ ] **Improve test isolation in progress-store tests** — Tests should use `:memory:` SQLite databases instead of the default `jobs.sqlite` file so tests don't contaminate each other or prod data. Pass the DB path via a constructor parameter or env var override.
+- [x] **Improve test isolation in progress-store tests** — Tests should use `:memory:` SQLite databases instead of the default `jobs.sqlite` file so tests don't contaminate each other or prod data. Pass the DB path via a constructor parameter or env var override.
 
-- [ ] **Add CI pipeline (GitHub Actions)** — No CI is configured. Create a `.github/workflows/ci.yml` that runs on PR and push to main: (1) `bun install`, (2) `bun run typecheck`, (3) `bun run test`, (4) `bun run test:e2e`. Use the official `oven-sh/setup-bun` action. Run E2E with `MOCK_LLM=1`.
+- [x] **Add CI pipeline (GitHub Actions)** — No CI is configured. Create a `.github/workflows/ci.yml` that runs on PR and push to main: (1) `bun install`, (2) `bun run typecheck`, (3) `bun run test`, (4) `bun run test:e2e`. Use the official `oven-sh/setup-bun` action. Run E2E with `MOCK_LLM=1`.
 
-- [ ] **Add `Dockerfile` for containerized deployment** — Use `oven/bun:latest` base image, copy source, `bun install --frozen-lockfile`, expose `PORT`, `CMD ["bun", "index.ts"]`. Add `.dockerignore` for `node_modules`, `dist`, `test-results`, `.git`.
+- [x] **Add `Dockerfile` for containerized deployment** — Use `oven/bun:latest` base image, copy source, `bun install --frozen-lockfile`, expose `PORT`, `CMD ["bun", "index.ts"]`. Add `.dockerignore` for `node_modules`, `dist`, `test-results`, `.git`.
 
 ## P4 — Feature Work
 
