@@ -162,6 +162,25 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
       },
     },
 
+    "/v1/health": {
+      OPTIONS: () => corsPreflightResponse(),
+      GET: () => {
+        const start = Date.now();
+        const uptime = process.uptime();
+        const activeWorkflows = rateLimiter.activeWorkflows;
+        const dbOk = progressStore.getJob("__health__") === undefined;
+        
+        const status = dbOk ? 200 : 500;
+        logger.request("GET", "/v1/health", status, Date.now() - start);
+        
+        return withCors(Response.json({
+          status: dbOk ? "ok" : "error",
+          uptime,
+          activeWorkflows
+        }, { status }));
+      },
+    },
+
     "/v1/agents": {
       OPTIONS: () => corsPreflightResponse(),
       GET: () => {

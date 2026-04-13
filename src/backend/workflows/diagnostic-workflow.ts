@@ -407,6 +407,27 @@ export const formatReport = createStep({
   },
 });
 
+export const reportSchema = z.object({
+  chiefComplaint: z.string(),
+  patientSummary: z.string(),
+  specialistsConsulted: z.array(z.object({
+    specialist: z.string(),
+    keyFindings: z.string(),
+  })),
+  diagnoses: z.array(z.object({
+    rank: z.number(),
+    name: z.string(),
+    confidence: z.number(),
+    urgency: z.enum(["emergent", "urgent", "routine"]),
+    rationale: z.string(),
+    supportingEvidence: z.array(z.string()),
+    contradictoryEvidence: z.array(z.string()),
+    nextSteps: z.array(z.string()),
+  })),
+  crossSpecialtyObservations: z.string(),
+  recommendedImmediateActions: z.string(),
+});
+
 export const diagnosticWorkflow = createWorkflow({
   id: "diagnostic-workflow",
   inputSchema: z.object({
@@ -415,26 +436,7 @@ export const diagnosticWorkflow = createWorkflow({
     labResults: z.string(),
   }),
   outputSchema: z.object({
-    report: z.object({
-      chiefComplaint: z.string(),
-      patientSummary: z.string(),
-      specialistsConsulted: z.array(z.object({
-        specialist: z.string(),
-        keyFindings: z.string(),
-      })),
-      diagnoses: z.array(z.object({
-        rank: z.number(),
-        name: z.string(),
-        confidence: z.number(),
-        urgency: z.enum(["emergent", "urgent", "routine"]),
-        rationale: z.string(),
-        supportingEvidence: z.array(z.string()),
-        contradictoryEvidence: z.array(z.string()),
-        nextSteps: z.array(z.string()),
-      })),
-      crossSpecialtyObservations: z.string(),
-      recommendedImmediateActions: z.string(),
-    }),
+    report: reportSchema,
     generatedAt: z.string(),
     disclaimer: z.string(),
   }),

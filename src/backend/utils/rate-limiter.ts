@@ -1,3 +1,5 @@
+import { logger } from "./logger";
+
 interface RateLimitEntry {
   timestamps: number[];
 }
@@ -8,6 +10,7 @@ export class RateLimiter {
   private clients = new Map<string, RateLimitEntry>();
   private activeCount = 0;
   private maxConcurrent: number;
+  private hasLoggedReset = false;
 
   constructor(opts: { maxRequests: number; windowMs: number; maxConcurrent: number }) {
     this.maxRequests = opts.maxRequests;
@@ -16,6 +19,11 @@ export class RateLimiter {
   }
 
   check(ip: string): { allowed: true } | { allowed: false; retryAfterMs: number } {
+    if (!this.hasLoggedReset) {
+      logger.warn("rate_limiter_reset", { message: "Rate limiter state was reset due to server startup" });
+      this.hasLoggedReset = true;
+    }
+
     const now = Date.now();
     const cutoff = now - this.windowMs;
 

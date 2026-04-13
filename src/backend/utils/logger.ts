@@ -8,6 +8,9 @@ interface LogEntry {
 }
 
 function formatLog(entry: LogEntry): string {
+  if (process.env.LOG_FORMAT === "json") {
+    return JSON.stringify(entry);
+  }
   const { timestamp, level, event, ...rest } = entry;
   const parts = [timestamp, level.toUpperCase(), event];
   const extras = Object.entries(rest);

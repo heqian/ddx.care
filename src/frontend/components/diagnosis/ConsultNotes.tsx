@@ -123,6 +123,7 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
     if (!printWindow) return;
     const isDark = document.documentElement.classList.contains("dark");
     printWindow.document.write(`<!DOCTYPE html><html><head><title>Diagnosis Report</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; color: #1e293b; font-size: 14px; line-height: 1.6; }
   h1 { font-size: 20px; margin-bottom: 4px; }

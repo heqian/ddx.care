@@ -1,3 +1,6 @@
+import type { z } from "zod";
+import type { reportSchema } from "../../backend/workflows/diagnostic-workflow";
+
 export interface DiagnoseRequest {
   medicalHistory: string;
   conversationTranscript: string;
@@ -14,25 +17,8 @@ export interface SpecialistConsulted {
   keyFindings: string;
 }
 
-export interface Diagnosis {
-  rank: number;
-  name: string;
-  confidence: number;
-  urgency: "emergent" | "urgent" | "routine";
-  rationale: string;
-  supportingEvidence: string[];
-  contradictoryEvidence: string[];
-  nextSteps: string[];
-}
-
-export interface DiagnosisReport {
-  chiefComplaint: string;
-  patientSummary: string;
-  specialistsConsulted: SpecialistConsulted[];
-  diagnoses: Diagnosis[];
-  crossSpecialtyObservations: string;
-  recommendedImmediateActions: string;
-}
+export type DiagnosisReport = z.infer<typeof reportSchema>;
+export type Diagnosis = DiagnosisReport["diagnoses"][number];
 
 export interface DiagnosisResult {
   report: DiagnosisReport;
