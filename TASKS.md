@@ -4,13 +4,13 @@
 
 ## P0 — Critical / Ship-Blocking
 
-- [ ] **Remove misleading "HIPAA Mode" badge** — [Header.tsx](src/frontend/components/layout/Header.tsx) displays a `ShieldCheckIcon` + "HIPAA Mode" label, but there is zero HIPAA compliance behind it. This is legally misleading for a medical tool. Either remove the badge entirely, or replace it with a neutral label like "Clinical Decision Support" or "Research Only".
+- [x] **Remove misleading "HIPAA Mode" badge** — [Header.tsx](src/frontend/components/layout/Header.tsx) displays a `ShieldCheckIcon` + "HIPAA Mode" label, but there is zero HIPAA compliance behind it. This is legally misleading for a medical tool. Either remove the badge entirely, or replace it with a neutral label like "Clinical Decision Support" or "Research Only".
 
-- [ ] **Remove stale PII docs from CLAUDE.md** — [CLAUDE.md](CLAUDE.md) still references `src/backend/utils/pii-detector.ts` and the routes description mentions "checks PII". It also still lists PII Detection in the Architecture section and describes the diagnose route as "checks PII". PII detection was deleted in commit `a79b4e9`. Update both files to match reality.
+- [x] **Remove stale PII docs from CLAUDE.md** — [CLAUDE.md](CLAUDE.md) still references `src/backend/utils/pii-detector.ts` and the routes description mentions "checks PII". It also still lists PII Detection in the Architecture section and describes the diagnose route as "checks PII". PII detection was deleted in commit `a79b4e9`. Update both files to match reality.
 
-- [ ] **Fix `limitConcurrency` race condition** — [diagnostic-workflow.ts](src/backend/workflows/diagnostic-workflow.ts) uses `index++` across concurrent async workers. Under V8 microtask scheduling this is safe today (JS is single-threaded and `index++` is atomic at the instruction level), but the code relies on an implicit engine guarantee that isn't expressed in the type system or documented. Add a comment explaining *why* it's safe, or restructure to use a single dispatcher (`for` loop) that feeds a bounded queue — this makes the concurrency contract explicit and future-proof.
+- [x] **Fix `limitConcurrency` race condition** — [diagnostic-workflow.ts](src/backend/workflows/diagnostic-workflow.ts) uses `index++` across concurrent async workers. Under V8 microtask scheduling this is safe today (JS is single-threaded and `index++` is atomic at the instruction level), but the code relies on an implicit engine guarantee that isn't expressed in the type system or documented. Add a comment explaining *why* it's safe, or restructure to use a single dispatcher (`for` loop) that feeds a bounded queue — this makes the concurrency contract explicit and future-proof.
 
-- [ ] **Fix `tsconfig.json` include pattern** — [tsconfig.json](tsconfig.json) includes `"frontend/**/*"` but the frontend directory is at `src/frontend/`. This means `bun run typecheck` will never check frontend files. Change to `"src/**/*"` (which already covers it) and remove the redundant `"frontend/**/*"` entry. Verify that `bun run typecheck` passes clean after the fix.
+- [x] **Fix `tsconfig.json` include pattern** — [tsconfig.json](tsconfig.json) includes `"frontend/**/*"` but the frontend directory is at `src/frontend/`. This means `bun run typecheck` will never check frontend files. Change to `"src/**/*"` (which already covers it) and remove the redundant `"frontend/**/*"` entry. Verify that `bun run typecheck` passes clean after the fix.
 
 ## P1 — High Priority / Quality
 

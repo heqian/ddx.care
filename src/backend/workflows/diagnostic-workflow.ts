@@ -6,14 +6,22 @@ import { logger } from "../utils/logger";
 
 export async function limitConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
-  let index = 0;
-  const workers = Array.from({ length: limit }, async () => {
-    while (index < items.length) {
-      const currentIndex = index++;
-      results[currentIndex] = await fn(items[currentIndex]);
+  const executing = new Set<Promise<void>>();
+
+  for (let i = 0; i < items.length; i++) {
+    // Each iteration gets its own `i` binding (JS `let` in `for` creates per-iteration scope)
+    const p = fn(items[i]).then((result) => {
+      results[i] = result;
+      executing.delete(p);
+    });
+    executing.add(p);
+
+    if (executing.size >= limit) {
+      await Promise.race(executing);
     }
-  });
-  await Promise.all(workers);
+  }
+
+  await Promise.all(executing);
   return results;
 }
 
