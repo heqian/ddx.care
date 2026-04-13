@@ -45,7 +45,6 @@ Default to using Bun instead of Node.js. You should NEVER use Python or any Pyth
   - MedlinePlus patient education
 - **Workflows** (`src/backend/workflows/`) — Multi-step diagnostic workflow with concurrency control (max 3 concurrent specialist calls) and retry logic
 - **Progress Store** (`src/backend/progress-store.ts`) — SQLite-backed job persistence with pub/sub for real-time updates and TTL-based cleanup
-- **PII Detection** (`src/backend/utils/pii-detector.ts`) — Server-side check for patient health information before processing
 
 ### Frontend (`src/frontend/`)
 
@@ -59,7 +58,7 @@ Default to using Bun instead of Node.js. You should NEVER use Python or any Pyth
 ### Server (`index.ts`)
 
 Routes:
-- `POST /v1/diagnose` — Submit a diagnostic case (validates input, checks PII, starts workflow)
+- `POST /v1/diagnose` — Submit a diagnostic case (validates input, starts workflow)
 - `GET /v1/status/:jobId` — Poll job status
 - `GET /v1/agents` — List available specialist agents
 - `GET /ws?jobId=...` — WebSocket for real-time progress streaming (replays history on connect)

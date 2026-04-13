@@ -20,7 +20,7 @@ export function Header() {
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
             <ShieldCheckIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">HIPAA Mode</span>
+            <span className="hidden sm:inline">Research Only</span>
           </span>
 
           <button

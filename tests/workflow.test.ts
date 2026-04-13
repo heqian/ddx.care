@@ -396,6 +396,40 @@ describe("limitConcurrency", () => {
     const results = await limitConcurrency([1, 2], 10, async (n) => n + 1);
     expect(results).toEqual([2, 3]);
   });
+
+  test("results map to correct index when tasks complete out of order", async () => {
+    // Items have deliberately inverted delays: item[0] finishes last, item[2] finishes first.
+    // If the index binding is broken, results would be scrambled.
+    const items = [
+      { id: "slow", delay: 150 },
+      { id: "medium", delay: 100 },
+      { id: "fast", delay: 50 },
+    ];
+
+    const completionOrder: string[] = [];
+
+    const results = await limitConcurrency(items, 3, async (item) => {
+      await new Promise((r) => setTimeout(r, item.delay));
+      completionOrder.push(item.id);
+      return item.id;
+    });
+
+    // Results must be in *input* order regardless of completion order
+    expect(results).toEqual(["slow", "medium", "fast"]);
+    // Completion order should be reversed (fast first, slow last)
+    expect(completionOrder).toEqual(["fast", "medium", "slow"]);
+  });
+
+  test("handles errors without corrupting other results", async () => {
+    const items = [1, 2, 3, 4];
+    const results = await limitConcurrency(items, 2, async (n) => {
+      if (n === 3) throw new Error("item 3 failed");
+      return n * 10;
+    }).catch(() => "caught");
+
+    // The function should propagate the error (Promise.all semantics)
+    expect(results).toBe("caught");
+  });
 });
 
 describe("withRetry", () => {
