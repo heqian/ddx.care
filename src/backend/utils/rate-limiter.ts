@@ -43,6 +43,10 @@ export class RateLimiter {
     }
   }
 
+  get activeWorkflows(): number {
+    return this.activeCount;
+  }
+
   canStartWorkflow(): boolean {
     return this.activeCount < this.maxConcurrent;
   }

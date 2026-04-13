@@ -15,6 +15,7 @@ function App() {
   const [jobResult, setJobResult] = useState<StatusResponse | null>(null);
   const lastPayload = useRef<DiagnoseRequest | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [deepLinkError, setDeepLinkError] = useState(false);
 
   // When navigating to results via router (deep link / back button), fetch the result
   const jobId =
@@ -22,14 +23,19 @@ function App() {
       ? route.jobId
       : null;
 
-  useEffect(() => {
+  const fetchDeepLink = useCallback(() => {
     if (route.screen === "results" && route.jobId && !jobResult) {
+      setDeepLinkError(false);
       getJobStatus(route.jobId)
         .then((res) => {
           if (res.status === "completed") setJobResult(res);
         })
-        .catch(() => {});
+        .catch(() => setDeepLinkError(true));
     }
+  }, [route, jobResult]);
+
+  useEffect(() => {
+    fetchDeepLink();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasPatientData = route.screen !== "input";
@@ -120,6 +126,27 @@ function App() {
       )}
       {route.screen === "results" && jobResult && (
         <ResultsView result={jobResult} onNewCase={handleReset} />
+      )}
+      {route.screen === "results" && !jobResult && deepLinkError && (
+        <div className="max-w-md mx-auto text-center py-16 space-y-4">
+          <p className="text-slate-700 dark:text-slate-300 text-sm">
+            Could not load results for this case.
+          </p>
+          <div className="flex justify-center gap-3">
+            <button
+              onClick={fetchDeepLink}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors"
+            >
+              Retry
+            </button>
+            <button
+              onClick={handleReset}
+              className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              New Case
+            </button>
+          </div>
+        </div>
       )}
     </AppShell>
   );

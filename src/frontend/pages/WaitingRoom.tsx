@@ -39,13 +39,14 @@ function deriveSpecialistStatuses(
 
 export function WaitingRoom({ jobId, onComplete, onCancel, onRetry }: WaitingRoomProps) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [agentsError, setAgentsError] = useState(false);
   const { status, error } = useJobStream(jobId);
   const isTerminal = status?.status === "failed" || status?.status === "completed";
 
   useEffect(() => {
     getAgents()
       .then((res) => setAgents(res.agents))
-      .catch(() => {});
+      .catch(() => setAgentsError(true));
   }, []);
 
   useEffect(() => {
@@ -86,6 +87,21 @@ export function WaitingRoom({ jobId, onComplete, onCancel, onRetry }: WaitingRoo
              ))}
            </div>
          </div>
+      )}
+
+      {agentsError && (
+        <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3">
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            Could not load specialist panel. The diagnosis is still running.
+          </p>
+          <button
+            onClick={() => setAgentsError(false)}
+            className="text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-200 ml-4 shrink-0"
+            aria-label="Dismiss"
+          >
+            <XMarkIcon className="h-4 w-4" />
+          </button>
+        </div>
       )}
 
       {agents.length > 0 && (

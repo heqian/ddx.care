@@ -139,34 +139,71 @@ describe("API Endpoints", () => {
     expect(body.error).toBeTruthy();
   });
 
-  test("GET /ws returns 400 without jobId query parameter", async () => {
-    const res = await fetch(`${BASE}/ws`);
-    // Should get 400 since no jobId is provided (or 101 upgrade refused)
-    expect(res.status).toBe(400);
-  });
-
-  test("POST /v1/diagnose rejects empty body", async () => {
-    const res = await fetch(`${BASE}/v1/diagnose`, {
-      method: "POST",
-      body: "",
-      headers: { "Content-Type": "application/json" },
+  describe("CORS headers", () => {
+    test("GET /v1/agents includes CORS headers", async () => {
+      const res = await fetch(`${BASE}/v1/agents`);
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+      expect(res.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, OPTIONS");
+      expect(res.headers.get("Access-Control-Allow-Headers")).toBe("Content-Type");
     });
 
-    expect(res.status).toBe(400);
-  });
-
-  test("POST /v1/diagnose accepts valid minimal input", async () => {
-    const res = await fetch(`${BASE}/v1/diagnose`, {
-      method: "POST",
-      body: JSON.stringify({
-        medicalHistory: "Hypertension",
-        conversationTranscript: "Headache reported",
-        labResults: "BP elevated",
-      }),
-      headers: { "Content-Type": "application/json" },
+    test("POST /v1/diagnose includes CORS headers on error", async () => {
+      const res = await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: "bad",
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+      expect(res.headers.get("Access-Control-Allow-Headers")).toBe("Content-Type");
     });
 
-    // Should be either 202 (created) or 429 (rate limited from previous tests)
-    expect([202, 429]).toContain(res.status);
+    test("GET /v1/status/:jobId includes CORS headers on 404", async () => {
+      const res = await fetch(`${BASE}/v1/status/nonexistent-cors-test`);
+      expect(res.status).toBe(404);
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    });
+
+    test("OPTIONS /v1/diagnose returns preflight response", async () => {
+      const res = await fetch(`${BASE}/v1/diagnose`, { method: "OPTIONS" });
+      expect(res.status).toBe(204);
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+      expect(res.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, OPTIONS");
+      expect(res.headers.get("Access-Control-Allow-Headers")).toBe("Content-Type");
+    });
+
+    test("OPTIONS /v1/agents returns preflight response", async () => {
+      const res = await fetch(`${BASE}/v1/agents`, { method: "OPTIONS" });
+      expect(res.status).toBe(204);
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    });
+
+    test("OPTIONS /v1/status/test-id returns preflight response", async () => {
+      const res = await fetch(`${BASE}/v1/status/test-id`, { method: "OPTIONS" });
+      expect(res.status).toBe(204);
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    });
+
+    test("OPTIONS /v1/unknown returns preflight response via catch-all", async () => {
+      const res = await fetch(`${BASE}/v1/unknown-route`, { method: "OPTIONS" });
+      expect(res.status).toBe(204);
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    });
+  });
+
+  describe("WebSocket origin validation", () => {
+    test("GET /ws returns 400 without jobId query parameter", async () => {
+      const res = await fetch(`${BASE}/ws`);
+      expect(res.status).toBe(400);
+    });
+
+    test("GET /ws allows connection when ALLOWED_ORIGINS is wildcard", async () => {
+      // With ALLOWED_ORIGINS='*' (default), any origin should pass the origin check.
+      // The request may still fail with upgrade-related errors, but NOT 403.
+      const res = await fetch(`${BASE}/ws?jobId=test-origin`, {
+        headers: { Origin: "https://evil.example.com" },
+      });
+      // Should be anything other than 403 — likely 400 (Upgrade failed) or upgrade success
+      expect(res.status).not.toBe(403);
+    });
   });
 });

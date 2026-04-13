@@ -1,4 +1,5 @@
 export const PORT = parseInt(process.env.PORT ?? "3000", 10);
+export const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ?? "*";
 export const JOB_TTL_MS = 30 * 60 * 1000;
 export const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 export const RATE_LIMIT_PRUNE_INTERVAL_MS = 10 * 60 * 1000;
