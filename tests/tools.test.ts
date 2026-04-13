@@ -45,18 +45,24 @@ describe("Agent Registry", () => {
 describe("Tool Assignments", () => {
   test("every specialist has a tool assignment entry", async () => {
     const { specialists } = await import("../src/backend/agents/index");
-    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const { getToolsForSpecialist } = await import(
+      "../src/backend/tools/index"
+    );
 
     const ids = Object.keys(specialists);
     for (const id of ids) {
       const tools = getToolsForSpecialist(id as keyof typeof specialists);
-      expect(Object.keys(tools).length, `${id} has no tools`).toBeGreaterThan(0);
+      expect(Object.keys(tools).length, `${id} has no tools`).toBeGreaterThan(
+        0,
+      );
     }
   });
 
   test("every specialist gets universal tools", async () => {
     const { specialists } = await import("../src/backend/agents/index");
-    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const { getToolsForSpecialist } = await import(
+      "../src/backend/tools/index"
+    );
 
     const ids = Object.keys(specialists);
     for (const id of ids) {
@@ -68,10 +74,15 @@ describe("Tool Assignments", () => {
   });
 
   test("prescribers get prescribing tools", async () => {
-    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const { getToolsForSpecialist } = await import(
+      "../src/backend/tools/index"
+    );
 
     const prescribers = [
-      "generalist", "cardiologist", "endocrinologist", "oncologist",
+      "generalist",
+      "cardiologist",
+      "endocrinologist",
+      "oncologist",
     ] as const;
 
     for (const id of prescribers) {
@@ -82,9 +93,15 @@ describe("Tool Assignments", () => {
   });
 
   test("non-prescribers do not get prescribing tools", async () => {
-    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const { getToolsForSpecialist } = await import(
+      "../src/backend/tools/index"
+    );
 
-    const nonPrescribers = ["dermatologist", "radiologist", "pathologist"] as const;
+    const nonPrescribers = [
+      "dermatologist",
+      "radiologist",
+      "pathologist",
+    ] as const;
 
     for (const id of nonPrescribers) {
       const tools = getToolsForSpecialist(id);
@@ -95,7 +112,9 @@ describe("Tool Assignments", () => {
 
 describe("Config", () => {
   test("model constants are strings", async () => {
-    const { SPECIALIST_MODEL, ORCHESTRATOR_MODEL } = await import("../src/backend/config");
+    const { SPECIALIST_MODEL, ORCHESTRATOR_MODEL } = await import(
+      "../src/backend/config"
+    );
 
     expect(typeof SPECIALIST_MODEL).toBe("string");
     expect(SPECIALIST_MODEL.length).toBeGreaterThan(0);

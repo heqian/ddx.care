@@ -46,8 +46,17 @@ export const pubmedSearchTool = createTool({
   description:
     "Search PubMed for biomedical literature. Returns article titles, authors, journals, PMIDs, and abstracts for evidence-based clinical decision making.",
   inputSchema: z.object({
-    query: z.string().describe("Search query (e.g. 'acute coronary syndrome treatment', 'sepsis biomarkers')"),
-    maxResults: z.number().min(1).max(20).default(5).describe("Maximum number of results to return"),
+    query: z
+      .string()
+      .describe(
+        "Search query (e.g. 'acute coronary syndrome treatment', 'sepsis biomarkers')",
+      ),
+    maxResults: z
+      .number()
+      .min(1)
+      .max(20)
+      .default(5)
+      .describe("Maximum number of results to return"),
   }),
   outputSchema: z.object({
     results: z.array(
@@ -73,7 +82,10 @@ export const pubmedSearchTool = createTool({
       return { results: [], totalResults: 0 };
     }
 
-    const totalResults = parseInt(searchResult?.esearchresult?.count ?? "0", 10);
+    const totalResults = parseInt(
+      searchResult?.esearchresult?.count ?? "0",
+      10,
+    );
 
     // Step 2 & 3: Fetch summaries and abstracts in parallel
     const summaryUrl = `${EUTILS_BASE}/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
@@ -84,20 +96,32 @@ export const pubmedSearchTool = createTool({
       fetchJSON(abstractUrl).catch(() => null),
     ]);
 
-    const articles: Record<string, NcbiArticleSummary> = (summaryResult?.result as Record<string, NcbiArticleSummary>) ?? {};
+    const articles: Record<string, NcbiArticleSummary> =
+      (summaryResult?.result as Record<string, NcbiArticleSummary>) ?? {};
 
-    let abstracts: Record<string, string> = {};
+    const abstracts: Record<string, string> = {};
     if (abstractResult) {
       try {
         // Parse abstracts from the XML-like JSON structure
-        const fetchedAbstracts: NcbiPubmedArticle[] = abstractResult?.PubmedArticle ?? [];
-        for (const article of Array.isArray(fetchedAbstracts) ? fetchedAbstracts : [fetchedAbstracts]) {
+        const fetchedAbstracts: NcbiPubmedArticle[] =
+          abstractResult?.PubmedArticle ?? [];
+        for (const article of Array.isArray(fetchedAbstracts)
+          ? fetchedAbstracts
+          : [fetchedAbstracts]) {
           const rawPmid = article?.MedlineCitation?.PMID;
-          const pmid = typeof rawPmid === "object" ? rawPmid?.["#text"] : rawPmid;
-          const abstractTexts = article?.MedlineCitation?.Article?.Abstract?.AbstractText;
+          const pmid =
+            typeof rawPmid === "object" ? rawPmid?.["#text"] : rawPmid;
+          const abstractTexts =
+            article?.MedlineCitation?.Article?.Abstract?.AbstractText;
           if (pmid && abstractTexts) {
-            const texts = Array.isArray(abstractTexts) ? abstractTexts : [abstractTexts];
-            abstracts[String(pmid)] = texts.map((t: string | NcbiAbstractText) => (typeof t === "string" ? t : t["#text"] ?? "")).join(" ");
+            const texts = Array.isArray(abstractTexts)
+              ? abstractTexts
+              : [abstractTexts];
+            abstracts[String(pmid)] = texts
+              .map((t: string | NcbiAbstractText) =>
+                typeof t === "string" ? t : (t["#text"] ?? ""),
+              )
+              .join(" ");
           }
         }
       } catch {
@@ -110,7 +134,9 @@ export const pubmedSearchTool = createTool({
       return {
         pmid: id,
         title: article.title ?? "",
-        authors: (article.authors ?? []).map((a: NcbiAuthor) => a.name ?? "").filter(Boolean),
+        authors: (article.authors ?? [])
+          .map((a: NcbiAuthor) => a.name ?? "")
+          .filter(Boolean),
         journal: article.fulljournalname ?? article.source ?? "",
         pubDate: article.pubdate ?? "",
         abstract: abstracts[id],
@@ -130,8 +156,15 @@ export const relatedArticlesTool = createTool({
   description:
     "Find articles related to a given PubMed article by PMID. Useful for exploring the evidence base around a specific paper.",
   inputSchema: z.object({
-    pmid: z.string().describe("The PubMed ID (PMID) to find related articles for"),
-    maxResults: z.number().min(1).max(20).default(5).describe("Maximum number of related articles"),
+    pmid: z
+      .string()
+      .describe("The PubMed ID (PMID) to find related articles for"),
+    maxResults: z
+      .number()
+      .min(1)
+      .max(20)
+      .default(5)
+      .describe("Maximum number of related articles"),
   }),
   outputSchema: z.object({
     results: z.array(
@@ -166,12 +199,15 @@ export const relatedArticlesTool = createTool({
 
     const summaryUrl = `${EUTILS_BASE}/esummary.fcgi?db=pubmed&id=${limitedIds.join(",")}&retmode=json`;
     const summaryResult = await fetchJSON(summaryUrl);
-    const articles: Record<string, NcbiArticleSummary> = (summaryResult?.result as Record<string, NcbiArticleSummary>) ?? {};
+    const articles: Record<string, NcbiArticleSummary> =
+      (summaryResult?.result as Record<string, NcbiArticleSummary>) ?? {};
 
     const results = limitedIds.map((id) => ({
       pmid: id,
       title: articles[id]?.title ?? "",
-      authors: (articles[id]?.authors ?? []).map((a: NcbiAuthor) => a.name ?? "").filter(Boolean),
+      authors: (articles[id]?.authors ?? [])
+        .map((a: NcbiAuthor) => a.name ?? "")
+        .filter(Boolean),
       journal: articles[id]?.fulljournalname ?? articles[id]?.source ?? "",
       pubDate: articles[id]?.pubdate ?? "",
     }));
@@ -188,8 +224,17 @@ export const omimSearchTool = createTool({
   description:
     "Search OMIM (Online Mendelian Inheritance in Man) for genetic conditions, inheritance patterns, and clinical descriptions. Returns OMIM IDs and summaries.",
   inputSchema: z.object({
-    query: z.string().describe("Search query (e.g. 'Marfan syndrome', 'BRCA1', 'cystic fibrosis')"),
-    maxResults: z.number().min(1).max(10).default(5).describe("Maximum number of results"),
+    query: z
+      .string()
+      .describe(
+        "Search query (e.g. 'Marfan syndrome', 'BRCA1', 'cystic fibrosis')",
+      ),
+    maxResults: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(5)
+      .describe("Maximum number of results"),
   }),
   outputSchema: z.object({
     results: z.array(
@@ -205,7 +250,10 @@ export const omimSearchTool = createTool({
     const searchUrl = `${EUTILS_BASE}/esearch.fcgi?db=omim&term=${encodeURIComponent(query)}&retmax=${maxResults}&retmode=json`;
     const searchResult = await fetchJSON(searchUrl);
     const ids: string[] = searchResult?.esearchresult?.idlist ?? [];
-    const totalResults = parseInt(searchResult?.esearchresult?.count ?? "0", 10);
+    const totalResults = parseInt(
+      searchResult?.esearchresult?.count ?? "0",
+      10,
+    );
 
     if (ids.length === 0) {
       return { results: [], totalResults: 0 };
@@ -233,8 +281,17 @@ export const geneReviewsSearchTool = createTool({
   description:
     "Search GeneReviews for comprehensive clinical genetic condition reviews. These are peer-reviewed, up-to-date articles on genetic diagnoses, management, and genetic counseling.",
   inputSchema: z.object({
-    query: z.string().describe("Search query (e.g. 'Huntington disease', 'hereditary cancer')"),
-    maxResults: z.number().min(1).max(10).default(5).describe("Maximum number of results"),
+    query: z
+      .string()
+      .describe(
+        "Search query (e.g. 'Huntington disease', 'hereditary cancer')",
+      ),
+    maxResults: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(5)
+      .describe("Maximum number of results"),
   }),
   outputSchema: z.object({
     results: z.array(
@@ -251,7 +308,10 @@ export const geneReviewsSearchTool = createTool({
     const searchUrl = `${EUTILS_BASE}/esearch.fcgi?db=books&term=${encodeURIComponent(query + " GeneReviews")}&retmax=${maxResults}&retmode=json`;
     const searchResult = await fetchJSON(searchUrl);
     const ids: string[] = searchResult?.esearchresult?.idlist ?? [];
-    const totalResults = parseInt(searchResult?.esearchresult?.count ?? "0", 10);
+    const totalResults = parseInt(
+      searchResult?.esearchresult?.count ?? "0",
+      10,
+    );
 
     if (ids.length === 0) {
       return { results: [], totalResults: 0 };
@@ -264,7 +324,9 @@ export const geneReviewsSearchTool = createTool({
     const results = ids.map((id) => ({
       bookId: id,
       title: entries[id]?.title ?? "",
-      authors: entries[id]?.authors?.map((a: NcbiAuthor) => a.name).join(", ") ?? undefined,
+      authors:
+        entries[id]?.authors?.map((a: NcbiAuthor) => a.name).join(", ") ??
+        undefined,
       pubDate: entries[id]?.pubdate ?? undefined,
     }));
 
@@ -280,8 +342,15 @@ export const clinVarSearchTool = createTool({
   description:
     "Search ClinVar for genetic variant clinical significance and pathogenicity assessments. Useful for interpreting genetic test results.",
   inputSchema: z.object({
-    query: z.string().describe("Search query (e.g. 'BRCA1 pathogenic', 'CFTR delta F508')"),
-    maxResults: z.number().min(1).max(10).default(5).describe("Maximum number of results"),
+    query: z
+      .string()
+      .describe("Search query (e.g. 'BRCA1 pathogenic', 'CFTR delta F508')"),
+    maxResults: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(5)
+      .describe("Maximum number of results"),
   }),
   outputSchema: z.object({
     results: z.array(
@@ -297,7 +366,10 @@ export const clinVarSearchTool = createTool({
     const searchUrl = `${EUTILS_BASE}/esearch.fcgi?db=clinvar&term=${encodeURIComponent(query)}&retmax=${maxResults}&retmode=json`;
     const searchResult = await fetchJSON(searchUrl);
     const ids: string[] = searchResult?.esearchresult?.idlist ?? [];
-    const totalResults = parseInt(searchResult?.esearchresult?.count ?? "0", 10);
+    const totalResults = parseInt(
+      searchResult?.esearchresult?.count ?? "0",
+      10,
+    );
 
     if (ids.length === 0) {
       return { results: [], totalResults: 0 };

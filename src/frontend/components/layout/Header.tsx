@@ -1,4 +1,8 @@
-import { SunIcon, MoonIcon, ShieldCheckIcon } from "@heroicons/react/24/outline";
+import {
+  SunIcon,
+  MoonIcon,
+  ShieldCheckIcon,
+} from "@heroicons/react/24/outline";
 import { useTheme } from "../../context/ThemeContext";
 
 export function Header() {

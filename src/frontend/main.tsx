@@ -18,7 +18,7 @@ function App() {
   const [deepLinkError, setDeepLinkError] = useState(false);
 
   // When navigating to results via router (deep link / back button), fetch the result
-  const jobId =
+  const _jobId =
     route.screen === "waiting" || route.screen === "results"
       ? route.jobId
       : null;
@@ -113,9 +113,7 @@ function App() {
         </div>
       )}
 
-      {route.screen === "input" && (
-        <InputDashboard onSubmit={handleSubmit} />
-      )}
+      {route.screen === "input" && <InputDashboard onSubmit={handleSubmit} />}
       {route.screen === "waiting" && (
         <WaitingRoom
           jobId={route.jobId}

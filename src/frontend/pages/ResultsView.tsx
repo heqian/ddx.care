@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { ArrowPathIcon, DocumentChartBarIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowPathIcon,
+  DocumentChartBarIcon,
+} from "@heroicons/react/24/outline";
 import { Button } from "../components/ui/Button";
 import { DiagnosisCard } from "../components/diagnosis/DiagnosisCard";
 import { ConsultNotes } from "../components/diagnosis/ConsultNotes";
@@ -77,12 +80,15 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
       {/* Tab Content */}
       {tab === "diagnoses" && (
         <div className="space-y-4">
-
           {report.chiefComplaint && (
-             <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
-               <h3 className="font-semibold text-sm text-slate-500 dark:text-slate-400 mb-2 uppercase">Chief Complaint</h3>
-               <p className="text-slate-800 dark:text-slate-200">{report.chiefComplaint}</p>
-             </div>
+            <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+              <h3 className="font-semibold text-sm text-slate-500 dark:text-slate-400 mb-2 uppercase">
+                Chief Complaint
+              </h3>
+              <p className="text-slate-800 dark:text-slate-200">
+                {report.chiefComplaint}
+              </p>
+            </div>
           )}
 
           {/* Top Diagnoses */}
@@ -118,28 +124,26 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
                 Cross-Specialty Observations
               </h2>
               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-200 rounded-lg border border-blue-200 dark:border-blue-800/50 text-sm">
-                 {report.crossSpecialtyObservations}
+                {report.crossSpecialtyObservations}
               </div>
             </div>
           )}
 
           {/* Immediate Actions */}
           {report.recommendedImmediateActions && (
-             <div className="mt-4">
-               <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
-                 Recommended Immediate Actions
-               </h2>
-               <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-200 rounded-lg border border-red-200 dark:border-red-800/50 text-sm font-semibold">
-                  {report.recommendedImmediateActions}
-               </div>
-             </div>
+            <div className="mt-4">
+              <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
+                Recommended Immediate Actions
+              </h2>
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-200 rounded-lg border border-red-200 dark:border-red-800/50 text-sm font-semibold">
+                {report.recommendedImmediateActions}
+              </div>
+            </div>
           )}
         </div>
       )}
 
-      {tab === "consult" && (
-        <ConsultNotes report={report} />
-      )}
+      {tab === "consult" && <ConsultNotes report={report} />}
 
       {/* Disclaimer */}
       {disclaimer && (

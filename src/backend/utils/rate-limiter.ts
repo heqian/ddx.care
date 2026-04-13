@@ -12,15 +12,23 @@ export class RateLimiter {
   private maxConcurrent: number;
   private hasLoggedReset = false;
 
-  constructor(opts: { maxRequests: number; windowMs: number; maxConcurrent: number }) {
+  constructor(opts: {
+    maxRequests: number;
+    windowMs: number;
+    maxConcurrent: number;
+  }) {
     this.maxRequests = opts.maxRequests;
     this.windowMs = opts.windowMs;
     this.maxConcurrent = opts.maxConcurrent;
   }
 
-  check(ip: string): { allowed: true } | { allowed: false; retryAfterMs: number } {
+  check(
+    ip: string,
+  ): { allowed: true } | { allowed: false; retryAfterMs: number } {
     if (!this.hasLoggedReset) {
-      logger.warn("rate_limiter_reset", { message: "Rate limiter state was reset due to server startup" });
+      logger.warn("rate_limiter_reset", {
+        message: "Rate limiter state was reset due to server startup",
+      });
       this.hasLoggedReset = true;
     }
 

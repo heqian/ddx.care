@@ -185,7 +185,9 @@ describe("JobStore — Cleanup", () => {
     store.createJob("old-job");
     // Manually update createdAt to be very old
     const db = (store as any).db;
-    db.exec(`UPDATE jobs SET createdAt = ${Date.now() - 100_000} WHERE id = 'old-job'`);
+    db.exec(
+      `UPDATE jobs SET createdAt = ${Date.now() - 100_000} WHERE id = 'old-job'`,
+    );
 
     store.createJob("new-job");
 

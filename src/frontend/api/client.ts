@@ -13,14 +13,14 @@ async function handleResponseText(res: Response): Promise<never> {
     if (errJson.error) {
       parsedError = errJson.error;
     }
-  } catch (e) {
+  } catch (_e) {
     // Ignore JSON parse error
   }
-  
+
   if (parsedError) {
     throw new Error(parsedError);
   }
-  
+
   throw new Error(errText || `Request failed with status ${res.status}`);
 }
 

@@ -2,7 +2,9 @@ import { describe, test, expect } from "bun:test";
 
 // These tests call live external APIs (PubMed, RxNav, OpenFDA, etc.).
 // They are skipped by default. Run with: RUN_INTEGRATION=1 bun test
-const describeIntegration = process.env.RUN_INTEGRATION ? describe : describe.skip;
+const describeIntegration = process.env.RUN_INTEGRATION
+  ? describe
+  : describe.skip;
 
 const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
 const RXNAV = "https://rxnav.nlm.nih.gov/REST";
@@ -28,30 +30,40 @@ async function fetchJSON(url: string) {
 
 describeIntegration("PubMed / NCBI E-utilities", () => {
   test("esearch returns results for a medical query", async () => {
-    const data = await fetchJSON(`${EUTILS}/esearch.fcgi?db=pubmed&term=sepsis+treatment&retmax=3&retmode=json`);
+    const data = await fetchJSON(
+      `${EUTILS}/esearch.fcgi?db=pubmed&term=sepsis+treatment&retmax=3&retmode=json`,
+    );
     expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
     expect(parseInt(data.esearchresult.count)).toBeGreaterThan(0);
   });
 
   test("esummary returns article metadata", async () => {
-    const data = await fetchJSON(`${EUTILS}/esummary.fcgi?db=pubmed&id=41934189&retmode=json`);
+    const data = await fetchJSON(
+      `${EUTILS}/esummary.fcgi?db=pubmed&id=41934189&retmode=json`,
+    );
     const article = data.result["41934189"];
     expect(article.title).toBeTruthy();
     expect(article.authors).toBeInstanceOf(Array);
   });
 
   test("OMIM search returns genetic conditions", async () => {
-    const data = await fetchJSON(`${EUTILS}/esearch.fcgi?db=omim&term=%22cystic+fibrosis%22&retmax=3&retmode=json`);
+    const data = await fetchJSON(
+      `${EUTILS}/esearch.fcgi?db=omim&term=%22cystic+fibrosis%22&retmax=3&retmode=json`,
+    );
     expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
   });
 
   test("ClinVar search returns genetic variants", async () => {
-    const data = await fetchJSON(`${EUTILS}/esearch.fcgi?db=clinvar&term=BRCA1&retmax=3&retmode=json`);
+    const data = await fetchJSON(
+      `${EUTILS}/esearch.fcgi?db=clinvar&term=BRCA1&retmax=3&retmode=json`,
+    );
     expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
   });
 
   test("GeneReviews search returns results", async () => {
-    const data = await fetchJSON(`${EUTILS}/esearch.fcgi?db=books&term=%22Huntington+disease%22+GeneReviews&retmax=3&retmode=json`);
+    const data = await fetchJSON(
+      `${EUTILS}/esearch.fcgi?db=books&term=%22Huntington+disease%22+GeneReviews&retmax=3&retmode=json`,
+    );
     expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
   });
 });
@@ -69,7 +81,9 @@ describeIntegration("RxNav Drug API", () => {
   });
 
   test("spelling suggestions correct misspelled drug names", async () => {
-    const data = await fetchJSON(`${RXNAV}/spellingsuggestions.json?name=aspririn`);
+    const data = await fetchJSON(
+      `${RXNAV}/spellingsuggestions.json?name=aspririn`,
+    );
     expect(data.suggestionGroup.suggestionList.suggestion).toContain("aspirin");
   });
 
@@ -82,14 +96,18 @@ describeIntegration("RxNav Drug API", () => {
 
 describeIntegration("OpenFDA API", () => {
   test("adverse events returns reports for a known drug", async () => {
-    const data = await fetchJSON(`${FDA}/drug/event.json?search=patient.drug.medicinalproduct:metformin&limit=1`);
+    const data = await fetchJSON(
+      `${FDA}/drug/event.json?search=patient.drug.medicinalproduct:metformin&limit=1`,
+    );
     expect(data.meta.results.total).toBeGreaterThan(0);
     expect(data.results).toBeInstanceOf(Array);
     expect(data.results.length).toBe(1);
   });
 
   test("drug labeling returns package insert data", async () => {
-    const data = await fetchJSON(`${FDA}/drug/label.json?search=openfda.generic_name:metformin&limit=1`);
+    const data = await fetchJSON(
+      `${FDA}/drug/label.json?search=openfda.generic_name:metformin&limit=1`,
+    );
     expect(data.meta.results.total).toBeGreaterThan(0);
     expect(data.results[0].openfda.generic_name).toBeDefined();
   });
@@ -101,7 +119,9 @@ describeIntegration("OpenFDA API", () => {
   });
 
   test("substance toxicology returns data", async () => {
-    const data = await fetchJSON(`${FDA}/other/substance.json?search=substance_name:ethylene+glycol&limit=1`);
+    const data = await fetchJSON(
+      `${FDA}/other/substance.json?search=substance_name:ethylene+glycol&limit=1`,
+    );
     expect(data.results).toBeInstanceOf(Array);
     expect(data.results.length).toBeGreaterThan(0);
   });
@@ -109,10 +129,14 @@ describeIntegration("OpenFDA API", () => {
 
 describeIntegration("ClinicalTrials.gov API v2", () => {
   test("search returns trials for a condition", async () => {
-    const data = await fetchJSON(`${CT}/studies?query.term=diabetes&pageSize=2`);
+    const data = await fetchJSON(
+      `${CT}/studies?query.term=diabetes&pageSize=2`,
+    );
     expect(data.studies).toBeInstanceOf(Array);
     expect(data.studies.length).toBeGreaterThan(0);
-    expect(data.studies[0].protocolSection.identificationModule.nctId).toBeTruthy();
+    expect(
+      data.studies[0].protocolSection.identificationModule.nctId,
+    ).toBeTruthy();
   });
 });
 

@@ -68,7 +68,10 @@ function CollapsibleDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
               </h5>
               <ul className="space-y-1.5">
                 {diagnosis.supportingEvidence.map((ev, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300"
+                  >
                     <CheckCircleIcon className="h-4 w-4 text-green-500 dark:text-green-400 mt-0.5 shrink-0" />
                     <span>{ev}</span>
                   </li>
@@ -84,7 +87,10 @@ function CollapsibleDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
               </h5>
               <ul className="space-y-1.5">
                 {diagnosis.contradictoryEvidence.map((ev, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-orange-700 dark:text-orange-300">
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm text-orange-700 dark:text-orange-300"
+                  >
                     <XCircleIcon className="h-4 w-4 text-orange-500 dark:text-orange-400 mt-0.5 shrink-0" />
                     <span>{ev}</span>
                   </li>
@@ -100,7 +106,10 @@ function CollapsibleDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
               </h5>
               <ul className="space-y-1.5">
                 {diagnosis.nextSteps.map((step, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300"
+                  >
                     <ArrowRightIcon className="h-4 w-4 text-primary dark:text-cyan-400 mt-0.5 shrink-0" />
                     <span>{step}</span>
                   </li>
@@ -121,7 +130,7 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
     if (!reportRef.current) return;
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-    const isDark = document.documentElement.classList.contains("dark");
+    const _isDark = document.documentElement.classList.contains("dark");
     printWindow.document.write(`<!DOCTYPE html><html><head><title>Diagnosis Report</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
 <style>
@@ -154,7 +163,8 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
     printWindow.print();
   }, []);
 
-  const hasUrgentAction = report.recommendedImmediateActions &&
+  const hasUrgentAction =
+    report.recommendedImmediateActions &&
     report.diagnoses.some((d) => d.urgency === "emergent");
 
   return (
@@ -201,32 +211,33 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
         </div>
 
         {/* Specialists Consulted */}
-        {report.specialistsConsulted && report.specialistsConsulted.length > 0 && (
-          <div className="pt-4 border-t dark:border-slate-700">
-            <h4 className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100 mb-4">
-              <UserGroupIcon className="h-4 w-4 text-purple-500" />
-              Specialists Consulted
-              <span className="text-xs font-normal text-slate-400 dark:text-slate-500">
-                ({report.specialistsConsulted.length})
-              </span>
-            </h4>
-            <div className="pl-6 grid gap-3 sm:grid-cols-2">
-              {report.specialistsConsulted.map((sc, idx) => (
-                <div
-                  key={idx}
-                  className="bg-purple-50 dark:bg-purple-900/10 p-3 rounded-lg border border-purple-100 dark:border-purple-800/30"
-                >
-                  <span className="font-medium text-purple-900 dark:text-purple-300 block mb-1">
-                    {sc.specialist}
-                  </span>
-                  <span className="text-slate-600 dark:text-slate-400 text-xs leading-relaxed block whitespace-pre-wrap">
-                    {sc.keyFindings}
-                  </span>
-                </div>
-              ))}
+        {report.specialistsConsulted &&
+          report.specialistsConsulted.length > 0 && (
+            <div className="pt-4 border-t dark:border-slate-700">
+              <h4 className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100 mb-4">
+                <UserGroupIcon className="h-4 w-4 text-purple-500" />
+                Specialists Consulted
+                <span className="text-xs font-normal text-slate-400 dark:text-slate-500">
+                  ({report.specialistsConsulted.length})
+                </span>
+              </h4>
+              <div className="pl-6 grid gap-3 sm:grid-cols-2">
+                {report.specialistsConsulted.map((sc, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-purple-50 dark:bg-purple-900/10 p-3 rounded-lg border border-purple-100 dark:border-purple-800/30"
+                  >
+                    <span className="font-medium text-purple-900 dark:text-purple-300 block mb-1">
+                      {sc.specialist}
+                    </span>
+                    <span className="text-slate-600 dark:text-slate-400 text-xs leading-relaxed block whitespace-pre-wrap">
+                      {sc.keyFindings}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Diagnoses - Collapsible */}
         {report.diagnoses && report.diagnoses.length > 0 && (
@@ -262,7 +273,9 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
         {report.recommendedImmediateActions && (
           <div className="pt-4 border-t dark:border-slate-700">
             <h4 className="flex items-center gap-2 font-medium text-slate-900 dark:text-slate-100 mb-2">
-              <ExclamationTriangleIcon className={`h-4 w-4 ${hasUrgentAction ? "text-red-500 animate-pulse" : "text-amber-500"}`} />
+              <ExclamationTriangleIcon
+                className={`h-4 w-4 ${hasUrgentAction ? "text-red-500 animate-pulse" : "text-amber-500"}`}
+              />
               Recommended Immediate Actions
               {hasUrgentAction && (
                 <span className="badge badge-emergent ml-1 text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400">

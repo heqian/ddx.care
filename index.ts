@@ -2,7 +2,12 @@ import appHtml from "./index.html";
 import { progressStore } from "./src/backend/progress-store";
 import { createRoutes, rateLimiter } from "./src/backend/api/routes";
 import { websocketHandlers, type WsData } from "./src/backend/api/websocket";
-import { PORT, JOB_TTL_MS, CLEANUP_INTERVAL_MS, RATE_LIMIT_PRUNE_INTERVAL_MS } from "./src/backend/config";
+import {
+  PORT,
+  JOB_TTL_MS,
+  CLEANUP_INTERVAL_MS,
+  RATE_LIMIT_PRUNE_INTERVAL_MS,
+} from "./src/backend/config";
 
 const cleanupTimer = setInterval(() => {
   progressStore.cleanupExpired(JOB_TTL_MS);
@@ -16,7 +21,10 @@ let server: ReturnType<typeof Bun.serve>;
 
 server = Bun.serve<WsData>({
   port: PORT,
-  routes: createRoutes({ upgrade: (req, opts) => server.upgrade(req, opts!) }, appHtml),
+  routes: createRoutes(
+    { upgrade: (req, opts) => server.upgrade(req, opts!) },
+    appHtml,
+  ),
   websocket: websocketHandlers,
   development: {
     hmr: true,
@@ -45,7 +53,9 @@ async function shutdown(signal: string) {
   const start = Date.now();
   while (rateLimiter.activeWorkflows > 0) {
     if (Date.now() - start > SHUTDOWN_TIMEOUT_MS) {
-      console.warn(`Shutdown timeout reached with ${rateLimiter.activeWorkflows} workflow(s) still in progress. Forcing exit.`);
+      console.warn(
+        `Shutdown timeout reached with ${rateLimiter.activeWorkflows} workflow(s) still in progress. Forcing exit.`,
+      );
       break;
     }
     await new Promise((resolve) => setTimeout(resolve, 500));

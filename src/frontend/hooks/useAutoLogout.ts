@@ -6,7 +6,9 @@ const WARNING_MS = 2 * 60 * 1000; // 2 minutes before logout
 export function useAutoLogout(onTimeout: () => void) {
   const [showWarning, setShowWarning] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const warningRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const warningRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const onTimeoutRef = useRef(onTimeout);
   onTimeoutRef.current = onTimeout;
 
@@ -27,7 +29,13 @@ export function useAutoLogout(onTimeout: () => void) {
   useEffect(() => {
     reset();
 
-    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"] as const;
+    const events = [
+      "mousemove",
+      "keydown",
+      "click",
+      "scroll",
+      "touchstart",
+    ] as const;
     for (const event of events) {
       window.addEventListener(event, reset);
     }

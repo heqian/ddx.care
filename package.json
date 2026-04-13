@@ -6,6 +6,7 @@
     "dev": "bun --hot index.ts",
     "build": "bun build ./index.html --outdir ./dist",
     "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
     "test": "bun test tests/api.test.ts tests/tools.test.ts tests/api-integration.test.ts tests/workflow.test.ts tests/progress-store.test.ts tests/rate-limiter.test.ts tests/logger.test.ts tests/fetch-utils.test.ts",
     "test:frontend": "bun test tests/frontend.test.tsx",
     "test:e2e": "bunx playwright test",
@@ -13,6 +14,7 @@
     "test:integration": "RUN_INTEGRATION=1 bun test tests/api-integration.test.ts"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.11",
     "@playwright/test": "^1.59.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

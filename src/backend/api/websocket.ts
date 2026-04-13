@@ -18,7 +18,9 @@ export const websocketHandlers = {
     const job = progressStore.getJob(jobId);
 
     if (!job) {
-      ws.send(JSON.stringify({ type: "failed", jobId, error: "Job not found" }));
+      ws.send(
+        JSON.stringify({ type: "failed", jobId, error: "Job not found" }),
+      );
       ws.close();
       return;
     }

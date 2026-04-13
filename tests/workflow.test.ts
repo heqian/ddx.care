@@ -42,15 +42,25 @@ describe("splitToList", () => {
   });
 
   test("trims whitespace", () => {
-    expect(splitToList("  spaced  \n  trimmed  ")).toEqual(["spaced", "trimmed"]);
+    expect(splitToList("  spaced  \n  trimmed  ")).toEqual([
+      "spaced",
+      "trimmed",
+    ]);
   });
 
   test("filters empty lines", () => {
-    expect(splitToList("item one\n\n\nitem two")).toEqual(["item one", "item two"]);
+    expect(splitToList("item one\n\n\nitem two")).toEqual([
+      "item one",
+      "item two",
+    ]);
   });
 
   test("handles mixed separators", () => {
-    expect(splitToList("alpha; beta\ngamma")).toEqual(["alpha", "beta", "gamma"]);
+    expect(splitToList("alpha; beta\ngamma")).toEqual([
+      "alpha",
+      "beta",
+      "gamma",
+    ]);
   });
 
   test("single item string", () => {
@@ -138,7 +148,8 @@ describe("formatReport", () => {
         rationale: "Severe headache with high BP",
         supportingEvidence: "BP 180/110\nHistory of hypertension",
         contradictoryEvidence: "None identified",
-        suggestedNextSteps: "Lower BP with IV meds\nCT head to rule out hemorrhage",
+        suggestedNextSteps:
+          "Lower BP with IV meds\nCT head to rule out hemorrhage",
       },
       {
         diagnosisName: "Migraine",
@@ -151,7 +162,8 @@ describe("formatReport", () => {
       },
     ],
     crossSpecialtyObservations: "BP control is the immediate priority.",
-    recommendedImmediateActions: "Administer IV antihypertensive. Order STAT CT head.",
+    recommendedImmediateActions:
+      "Administer IV antihypertensive. Order STAT CT head.",
   };
 
   test("formats ranked diagnoses with correct rank numbers", async () => {
@@ -182,9 +194,15 @@ describe("formatReport", () => {
     } as Parameters<typeof formatReport.execute>[0]);
 
     const first = result.report.diagnoses[0];
-    expect(first.supportingEvidence).toEqual(["BP 180/110", "History of hypertension"]);
+    expect(first.supportingEvidence).toEqual([
+      "BP 180/110",
+      "History of hypertension",
+    ]);
     expect(first.contradictoryEvidence).toEqual(["None identified"]);
-    expect(first.nextSteps).toEqual(["Lower BP with IV meds", "CT head to rule out hemorrhage"]);
+    expect(first.nextSteps).toEqual([
+      "Lower BP with IV meds",
+      "CT head to rule out hemorrhage",
+    ]);
   });
 
   test("handles semicolon-separated evidence", async () => {
@@ -194,7 +212,10 @@ describe("formatReport", () => {
 
     // Second diagnosis has semicolons in supportingEvidence
     const second = result.report.diagnoses[1];
-    expect(second.supportingEvidence).toEqual(["Severe headache", "Visual disturbances"]);
+    expect(second.supportingEvidence).toEqual([
+      "Severe headache",
+      "Visual disturbances",
+    ]);
   });
 
   test("normalizes urgency to lowercase", async () => {
@@ -224,10 +245,16 @@ describe("formatReport", () => {
     } as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.specialistsConsulted).toHaveLength(2);
-    expect(result.report.specialistsConsulted[0].specialist).toBe("cardiologist");
+    expect(result.report.specialistsConsulted[0].specialist).toBe(
+      "cardiologist",
+    );
     expect(result.report.chiefComplaint).toBe("Severe headache");
-    expect(result.report.crossSpecialtyObservations).toBe("BP control is the immediate priority.");
-    expect(result.report.recommendedImmediateActions).toContain("IV antihypertensive");
+    expect(result.report.crossSpecialtyObservations).toBe(
+      "BP control is the immediate priority.",
+    );
+    expect(result.report.recommendedImmediateActions).toContain(
+      "IV antihypertensive",
+    );
   });
 
   test("handles empty diagnoses array", async () => {
@@ -278,7 +305,9 @@ describe("diagnosisReportSchema", () => {
     const valid = {
       chiefComplaint: "Headache",
       patientSummary: "Test patient",
-      specialistsConsulted: [{ specialist: "neurologist", keyFindings: "Findings" }],
+      specialistsConsulted: [
+        { specialist: "neurologist", keyFindings: "Findings" },
+      ],
       rankedDiagnoses: [
         {
           diagnosisName: "Migraine",
@@ -435,10 +464,14 @@ describe("limitConcurrency", () => {
 describe("withRetry", () => {
   test("returns immediately on first success", async () => {
     let calls = 0;
-    const result = await withRetry(async () => {
-      calls++;
-      return "ok";
-    }, 3, 10);
+    const result = await withRetry(
+      async () => {
+        calls++;
+        return "ok";
+      },
+      3,
+      10,
+    );
 
     expect(result).toBe("ok");
     expect(calls).toBe(1);
@@ -446,11 +479,15 @@ describe("withRetry", () => {
 
   test("retries on failure and succeeds on nth attempt", async () => {
     let calls = 0;
-    const result = await withRetry(async () => {
-      calls++;
-      if (calls < 3) throw new Error("fail");
-      return "success";
-    }, 3, 10);
+    const result = await withRetry(
+      async () => {
+        calls++;
+        if (calls < 3) throw new Error("fail");
+        return "success";
+      },
+      3,
+      10,
+    );
 
     expect(result).toBe("success");
     expect(calls).toBe(3);
@@ -459,10 +496,14 @@ describe("withRetry", () => {
   test("throws after exhausting all retries", async () => {
     let calls = 0;
     await expect(
-      withRetry(async () => {
-        calls++;
-        throw new Error("always fails");
-      }, 3, 10),
+      withRetry(
+        async () => {
+          calls++;
+          throw new Error("always fails");
+        },
+        3,
+        10,
+      ),
     ).rejects.toThrow("always fails");
 
     expect(calls).toBe(3);
@@ -470,20 +511,28 @@ describe("withRetry", () => {
 
   test("preserves the original error", async () => {
     await expect(
-      withRetry(async () => {
-        throw new Error("specific error message");
-      }, 2, 10),
+      withRetry(
+        async () => {
+          throw new Error("specific error message");
+        },
+        2,
+        10,
+      ),
     ).rejects.toThrow("specific error message");
   });
 
   test("applies exponential backoff between retries", async () => {
     const callTimes: number[] = [];
-    
+
     try {
-      await withRetry(async () => {
-        callTimes.push(Date.now());
-        throw new Error("fail");
-      }, 3, 50); // baseDelay = 50ms
+      await withRetry(
+        async () => {
+          callTimes.push(Date.now());
+          throw new Error("fail");
+        },
+        3,
+        50,
+      ); // baseDelay = 50ms
     } catch {
       // expected
     }

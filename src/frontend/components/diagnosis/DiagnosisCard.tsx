@@ -17,10 +17,14 @@ const rankBadgeColors: Record<number, string> = {
 };
 
 export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
-  const rankColor = rankBadgeColors[diagnosis.rank] || "bg-slate-300 text-slate-700";
+  const rankColor =
+    rankBadgeColors[diagnosis.rank] || "bg-slate-300 text-slate-700";
 
   const rationaleHtml = useMemo(
-    () => diagnosis.rationale ? DOMPurify.sanitize(marked.parse(diagnosis.rationale) as string) : "",
+    () =>
+      diagnosis.rationale
+        ? DOMPurify.sanitize(marked.parse(diagnosis.rationale) as string)
+        : "",
     [diagnosis.rationale],
   );
 
@@ -58,7 +62,9 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
                   dangerouslySetInnerHTML={{ __html: rationaleHtml }}
                 />
               ) : (
-                <p className="text-sm text-slate-600 dark:text-slate-300">{diagnosis.rationale}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  {diagnosis.rationale}
+                </p>
               )}
             </div>
           )}
@@ -71,8 +77,13 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
               </h4>
               <ul className="space-y-1">
                 {diagnosis.supportingEvidence.map((item, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                    <span className="text-green-500 dark:text-green-400 mt-0.5">+</span>
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300"
+                  >
+                    <span className="text-green-500 dark:text-green-400 mt-0.5">
+                      +
+                    </span>
                     <span>{item}</span>
                   </li>
                 ))}
@@ -88,8 +99,13 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
               </h4>
               <ul className="space-y-1">
                 {diagnosis.contradictoryEvidence.map((item, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                    <span className="text-red-500 dark:text-red-400 mt-0.5">-</span>
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300"
+                  >
+                    <span className="text-red-500 dark:text-red-400 mt-0.5">
+                      -
+                    </span>
                     <span>{item}</span>
                   </li>
                 ))}
@@ -105,8 +121,13 @@ export function DiagnosisCard({ diagnosis }: DiagnosisCardProps) {
               </h4>
               <ul className="space-y-1">
                 {diagnosis.nextSteps.map((step, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300">
-                    <span className="text-primary dark:text-cyan-400">{"→"}</span>
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-300"
+                  >
+                    <span className="text-primary dark:text-cyan-400">
+                      {"→"}
+                    </span>
                     <span>{step}</span>
                   </li>
                 ))}

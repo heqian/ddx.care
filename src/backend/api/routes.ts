@@ -61,7 +61,10 @@ interface RouteRequest extends Request {
   params: Record<string, string>;
 }
 
-export function createRoutes(server: { upgrade(req: Request, options: { data: unknown }): boolean }, appHtml: unknown) {
+export function createRoutes(
+  server: { upgrade(req: Request, options: { data: unknown }): boolean },
+  appHtml: unknown,
+) {
   return {
     "/": appHtml,
 
@@ -74,45 +77,75 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         const ipCheck = rateLimiter.check(ip);
         if (!ipCheck.allowed) {
           const retryAfter = Math.ceil(ipCheck.retryAfterMs / 1000);
-          logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, { ip, reason: "rate_limited" });
-          return withCors(Response.json(
-            { error: "Rate limit exceeded. Please try again later." },
-            { status: 429, headers: { "Retry-After": String(retryAfter) } },
-          ));
+          logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, {
+            ip,
+            reason: "rate_limited",
+          });
+          return withCors(
+            Response.json(
+              { error: "Rate limit exceeded. Please try again later." },
+              { status: 429, headers: { "Retry-After": String(retryAfter) } },
+            ),
+          );
         }
 
         if (!rateLimiter.canStartWorkflow()) {
-          logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, { ip, reason: "at_capacity" });
-          return withCors(Response.json(
-            { error: "Server is at capacity. Please try again later." },
-            { status: 429, headers: { "Retry-After": "30" } },
-          ));
+          logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, {
+            ip,
+            reason: "at_capacity",
+          });
+          return withCors(
+            Response.json(
+              { error: "Server is at capacity. Please try again later." },
+              { status: 429, headers: { "Retry-After": "30" } },
+            ),
+          );
         }
 
         let body: unknown;
-        const contentLength = parseInt(req.headers.get("content-length") ?? "0", 10);
+        const contentLength = parseInt(
+          req.headers.get("content-length") ?? "0",
+          10,
+        );
         if (contentLength > MAX_PAYLOAD_BYTES) {
-          logger.request("POST", "/v1/diagnose", 413, Date.now() - startTime, { ip, contentLength });
-          return withCors(Response.json({ error: "Payload too large" }, { status: 413 }));
+          logger.request("POST", "/v1/diagnose", 413, Date.now() - startTime, {
+            ip,
+            contentLength,
+          });
+          return withCors(
+            Response.json({ error: "Payload too large" }, { status: 413 }),
+          );
         }
         try {
           body = await req.json();
         } catch {
-          logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, { ip });
-          return withCors(Response.json({ error: "Invalid JSON body" }, { status: 400 }));
+          logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, {
+            ip,
+          });
+          return withCors(
+            Response.json({ error: "Invalid JSON body" }, { status: 400 }),
+          );
         }
 
         const parsed = diagnoseSchema.safeParse(body);
         if (!parsed.success) {
-          const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-          logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, { ip, issues });
-          return withCors(Response.json(
-            { error: `Validation failed: ${issues}` },
-            { status: 400 },
-          ));
+          const issues = parsed.error.issues
+            .map((i) => `${i.path.join(".")}: ${i.message}`)
+            .join("; ");
+          logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, {
+            ip,
+            issues,
+          });
+          return withCors(
+            Response.json(
+              { error: `Validation failed: ${issues}` },
+              { status: 400 },
+            ),
+          );
         }
 
-        const { medicalHistory, conversationTranscript, labResults } = parsed.data;
+        const { medicalHistory, conversationTranscript, labResults } =
+          parsed.data;
 
         rateLimiter.record(ip);
         rateLimiter.startWorkflow();
@@ -120,20 +153,32 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         const jobId = crypto.randomUUID();
         progressStore.createJob(jobId);
         logger.workflowStart(jobId);
-        logger.request("POST", "/v1/diagnose", 202, Date.now() - startTime, { ip, jobId });
+        logger.request("POST", "/v1/diagnose", 202, Date.now() - startTime, {
+          ip,
+          jobId,
+        });
 
         const workflow = mastra.getWorkflow("diagnosticWorkflow");
         const run = await workflow.createRun({ runId: jobId });
 
         run
-          .start({ inputData: { medicalHistory, conversationTranscript, labResults } })
+          .start({
+            inputData: { medicalHistory, conversationTranscript, labResults },
+          })
           .then((result) => {
-            const specialistCount = (result as WorkflowRunResult)?.report?.specialistsConsulted?.length ?? 0;
-            logger.workflowComplete(jobId, Date.now() - startTime, specialistCount);
+            const specialistCount =
+              (result as WorkflowRunResult)?.report?.specialistsConsulted
+                ?.length ?? 0;
+            logger.workflowComplete(
+              jobId,
+              Date.now() - startTime,
+              specialistCount,
+            );
             progressStore.complete(jobId, result);
           })
           .catch((error) => {
-            const message = error instanceof Error ? error.message : "Unknown error";
+            const message =
+              error instanceof Error ? error.message : "Unknown error";
             logger.workflowFail(jobId, Date.now() - startTime, message);
             progressStore.fail(jobId, message);
           })
@@ -141,7 +186,9 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
             rateLimiter.finishWorkflow();
           });
 
-        return withCors(Response.json({ jobId, status: "pending" }, { status: 202 }));
+        return withCors(
+          Response.json({ jobId, status: "pending" }, { status: 202 }),
+        );
       },
     },
 
@@ -153,11 +200,18 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         const entry = progressStore.getJob(jobId);
 
         if (!entry) {
-          logger.request("GET", "/v1/status/:jobId", 404, Date.now() - start, { jobId });
-          return withCors(Response.json({ error: "Job not found" }, { status: 404 }));
+          logger.request("GET", "/v1/status/:jobId", 404, Date.now() - start, {
+            jobId,
+          });
+          return withCors(
+            Response.json({ error: "Job not found" }, { status: 404 }),
+          );
         }
 
-        logger.request("GET", "/v1/status/:jobId", 200, Date.now() - start, { jobId, status: entry.status });
+        logger.request("GET", "/v1/status/:jobId", 200, Date.now() - start, {
+          jobId,
+          status: entry.status,
+        });
         return withCors(Response.json({ jobId, ...entry }));
       },
     },
@@ -169,15 +223,20 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         const uptime = process.uptime();
         const activeWorkflows = rateLimiter.activeWorkflows;
         const dbOk = progressStore.getJob("__health__") === undefined;
-        
+
         const status = dbOk ? 200 : 500;
         logger.request("GET", "/v1/health", status, Date.now() - start);
-        
-        return withCors(Response.json({
-          status: dbOk ? "ok" : "error",
-          uptime,
-          activeWorkflows
-        }, { status }));
+
+        return withCors(
+          Response.json(
+            {
+              status: dbOk ? "ok" : "error",
+              uptime,
+              activeWorkflows,
+            },
+            { status },
+          ),
+        );
       },
     },
 
@@ -211,7 +270,10 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
           const origin = req.headers.get("origin");
           const allowed = ALLOWED_ORIGINS.split(",").map((o) => o.trim());
           if (!origin || !allowed.includes(origin)) {
-            logger.warn("ws_origin_rejected", { jobId, origin: origin ?? "none" });
+            logger.warn("ws_origin_rejected", {
+              jobId,
+              origin: origin ?? "none",
+            });
             return new Response("Forbidden origin", { status: 403 });
           }
         }

@@ -49,7 +49,7 @@ describe("fetchJSON — Error Handling", () => {
     }) as any;
 
     await expect(fetchJSON("https://example.com/api")).rejects.toThrow(
-      "API error: 500 Internal Server Error"
+      "API error: 500 Internal Server Error",
     );
   });
 
@@ -61,7 +61,7 @@ describe("fetchJSON — Error Handling", () => {
     }) as any;
 
     await expect(
-      fetchJSON("https://example.com/api", { errorPrefix: "PubMed" })
+      fetchJSON("https://example.com/api", { errorPrefix: "PubMed" }),
     ).rejects.toThrow("PubMed error: 503 Service Unavailable");
   });
 
@@ -72,7 +72,9 @@ describe("fetchJSON — Error Handling", () => {
       statusText: "Not Found",
     }) as any;
 
-    const result = await fetchJSON("https://example.com/api", { ignore404: true });
+    const result = await fetchJSON("https://example.com/api", {
+      ignore404: true,
+    });
     expect(result).toEqual({ error: true, results: [] });
   });
 
@@ -84,26 +86,28 @@ describe("fetchJSON — Error Handling", () => {
     }) as any;
 
     await expect(fetchJSON("https://example.com/api")).rejects.toThrow(
-      "API error: 404 Not Found"
+      "API error: 404 Not Found",
     );
   });
 });
 
 describe("fetchJSON — Timeout", () => {
   test("throws on timeout", async () => {
-    globalThis.fetch = vi.fn().mockImplementation(async (_url: string, opts: any) => {
-      // Wait until the abort signal fires
-      return new Promise((_, reject) => {
-        opts.signal.addEventListener("abort", () => {
-          const err = new Error("aborted");
-          err.name = "AbortError";
-          reject(err);
+    globalThis.fetch = vi
+      .fn()
+      .mockImplementation(async (_url: string, opts: any) => {
+        // Wait until the abort signal fires
+        return new Promise((_, reject) => {
+          opts.signal.addEventListener("abort", () => {
+            const err = new Error("aborted");
+            err.name = "AbortError";
+            reject(err);
+          });
         });
-      });
-    }) as any;
+      }) as any;
 
     await expect(
-      fetchJSON("https://slow.example.com/api", { timeoutMs: 50 })
+      fetchJSON("https://slow.example.com/api", { timeoutMs: 50 }),
     ).rejects.toThrow(/timeout/i);
   });
 });
@@ -118,8 +122,12 @@ describe("fetchJSON — NCBI Rate Limiting", () => {
     }) as any;
 
     // Make two sequential calls to an NCBI URL
-    await fetchJSON("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed");
-    await fetchJSON("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed");
+    await fetchJSON(
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed",
+    );
+    await fetchJSON(
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed",
+    );
 
     // The second call should have been delayed by at least ~300ms (NCBI_RATE_LIMIT_MS = 334)
     if (callTimes.length === 2) {

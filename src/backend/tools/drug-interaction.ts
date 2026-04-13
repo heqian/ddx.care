@@ -44,7 +44,9 @@ export const drugLookupTool = createTool({
   description:
     "Look up drug information by name. Returns RxCUI (drug identifier), generic name, brand names, and drug class. Use before checking interactions.",
   inputSchema: z.object({
-    drugName: z.string().describe("Drug name (generic or brand, e.g. 'aspirin', 'Lipitor')"),
+    drugName: z
+      .string()
+      .describe("Drug name (generic or brand, e.g. 'aspirin', 'Lipitor')"),
   }),
   outputSchema: z.object({
     rxcui: z.string().optional(),
@@ -53,22 +55,23 @@ export const drugLookupTool = createTool({
     drugGroup: z
       .object({
         name: z.string().nullable(),
-        conceptGroup: z.array(
-          z.object({
-            tty: z.string(),
-            conceptProperties: z
-              .array(
-                z.object({
-                  rxcui: z.string(),
-                  name: z.string(),
-                  synonym: z.string().optional(),
-                  tty: z.string(),
-                }),
-              )
-              .optional(),
-          }),
-        )
-        .optional(),
+        conceptGroup: z
+          .array(
+            z.object({
+              tty: z.string(),
+              conceptProperties: z
+                .array(
+                  z.object({
+                    rxcui: z.string(),
+                    name: z.string(),
+                    synonym: z.string().optional(),
+                    tty: z.string(),
+                  }),
+                )
+                .optional(),
+            }),
+          )
+          .optional(),
       })
       .optional(),
   }),
@@ -108,7 +111,9 @@ export const drugInteractionTool = createTool({
     rxcuis: z
       .array(z.string())
       .min(2)
-      .describe("Array of RxCUIs to check for interactions (at least 2). Use drug-lookup to get RxCUIs first."),
+      .describe(
+        "Array of RxCUIs to check for interactions (at least 2). Use drug-lookup to get RxCUIs first.",
+      ),
   }),
   outputSchema: z.object({
     interactions: z.array(
@@ -184,7 +189,8 @@ export const drugInteractionTool = createTool({
  */
 export const drugSpellingTool = createTool({
   id: "drug-spelling-suggestion",
-  description: "Get spelling suggestions for drug names. Use when a drug name might be misspelled.",
+  description:
+    "Get spelling suggestions for drug names. Use when a drug name might be misspelled.",
   inputSchema: z.object({
     drugName: z.string().describe("Possibly misspelled drug name"),
   }),
@@ -194,7 +200,8 @@ export const drugSpellingTool = createTool({
   execute: async ({ drugName }) => {
     const url = `${RXNAV_BASE}/spellingsuggestions.json?name=${encodeURIComponent(drugName)}`;
     const result = await fetchJSON(url);
-    const suggestions: string[] = result?.suggestionGroup?.suggestionList?.suggestion ?? [];
+    const suggestions: string[] =
+      result?.suggestionGroup?.suggestionList?.suggestion ?? [];
     return { suggestions };
   },
 });

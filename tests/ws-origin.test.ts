@@ -12,7 +12,7 @@ import { test, expect, describe } from "bun:test";
  */
 function isOriginAllowed(
   allowedOrigins: string,
-  requestOrigin: string | null
+  requestOrigin: string | null,
 ): boolean {
   if (allowedOrigins === "*") return true;
   if (!requestOrigin) return false;
@@ -51,7 +51,9 @@ describe("WebSocket origin validation logic", () => {
     });
 
     test("rejects origin that is a substring of allowed", () => {
-      expect(isOriginAllowed(ORIGINS, "https://app.ddx.care.evil.com")).toBe(false);
+      expect(isOriginAllowed(ORIGINS, "https://app.ddx.care.evil.com")).toBe(
+        false,
+      );
     });
 
     test("rejects origin with different scheme", () => {
@@ -65,7 +67,9 @@ describe("WebSocket origin validation logic", () => {
     });
 
     test("is case-sensitive", () => {
-      expect(isOriginAllowed("https://App.DDX.Care", "https://app.ddx.care")).toBe(false);
+      expect(
+        isOriginAllowed("https://App.DDX.Care", "https://app.ddx.care"),
+      ).toBe(false);
     });
 
     test("rejects empty origin list", () => {
@@ -73,21 +77,29 @@ describe("WebSocket origin validation logic", () => {
     });
 
     test("rejects origin with trailing slash mismatch", () => {
-      expect(isOriginAllowed("https://app.ddx.care", "https://app.ddx.care/")).toBe(false);
+      expect(
+        isOriginAllowed("https://app.ddx.care", "https://app.ddx.care/"),
+      ).toBe(false);
     });
 
     test("rejects origin with port number", () => {
-      expect(isOriginAllowed("https://app.ddx.care", "https://app.ddx.care:443")).toBe(false);
+      expect(
+        isOriginAllowed("https://app.ddx.care", "https://app.ddx.care:443"),
+      ).toBe(false);
     });
   });
 
   describe("single origin mode", () => {
     test("allows exact match", () => {
-      expect(isOriginAllowed("https://app.ddx.care", "https://app.ddx.care")).toBe(true);
+      expect(
+        isOriginAllowed("https://app.ddx.care", "https://app.ddx.care"),
+      ).toBe(true);
     });
 
     test("rejects non-match", () => {
-      expect(isOriginAllowed("https://app.ddx.care", "https://other.com")).toBe(false);
+      expect(isOriginAllowed("https://app.ddx.care", "https://other.com")).toBe(
+        false,
+      );
     });
   });
 });
