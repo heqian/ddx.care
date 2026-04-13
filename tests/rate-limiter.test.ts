@@ -1,5 +1,6 @@
-import { test, expect, describe, beforeEach } from "bun:test";
+import { test, expect, describe, beforeEach, vi, afterEach } from "bun:test";
 import { RateLimiter } from "../src/backend/utils/rate-limiter";
+import { logger } from "../src/backend/utils/logger";
 
 describe("RateLimiter — IP Rate Limiting", () => {
   test("allows requests under the limit", () => {

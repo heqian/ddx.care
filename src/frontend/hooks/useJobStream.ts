@@ -12,6 +12,7 @@ export function useJobStream(jobId: string | null) {
     let cancelled = false;
     let ws: WebSocket | null = null;
     let fallbackInterval: number | null = null;
+    let retryCount = 0;
 
     const connectWebSocket = () => {
       // Build absolute websocket URL handling http/https -> ws/wss
@@ -70,15 +71,23 @@ export function useJobStream(jobId: string | null) {
       ws.onerror = () => {
         // Fallback to polling if WS fails
         if (cancelled) return;
-        console.warn("WebSocket failed. Falling back to HTTP polling.");
-        startPolling();
+        console.warn("WebSocket error occurred.");
+        // Let onclose handle the fallback or reconnection
       };
       
       ws.onclose = (event) => {
         if (cancelled) return;
-        // If closed abnormally, fallback
+        // If closed abnormally, try to reconnect or fallback
         if (event.code !== 1000 && event.code !== 1005) {
-          startPolling();
+          if (retryCount < 3) {
+            const delay = Math.pow(2, retryCount) * 1000;
+            retryCount++;
+            console.log(`WebSocket closed. Reconnecting in ${delay}ms (attempt ${retryCount}/3)...`);
+            setTimeout(connectWebSocket, delay);
+          } else {
+            console.warn("WebSocket max retries reached. Falling back to HTTP polling.");
+            startPolling();
+          }
         }
       };
     };

@@ -70,6 +70,18 @@ describe("Logger — Output Format", () => {
     // timestamp, INFO, simple — no more
     expect(parts.length).toBe(3);
   });
+
+  test("formats as JSON when LOG_FORMAT=json", () => {
+    process.env.LOG_FORMAT = "json";
+    logger.info("json_event", { key: "value" });
+    const output = logSpy.mock.calls[0][0] as string;
+    const parsed = JSON.parse(output);
+    expect(parsed.level).toBe("info");
+    expect(parsed.event).toBe("json_event");
+    expect(parsed.key).toBe("value");
+    expect(parsed.timestamp).toBeDefined();
+    delete process.env.LOG_FORMAT;
+  });
 });
 
 describe("Logger — Specialized Methods", () => {
