@@ -84,7 +84,7 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
   const [error, setError] = useState<string | null>(null);
   const [activeVoiceTarget, setActiveVoiceTarget] = useState<"history" | "transcript" | null>(null);
   const [touched, setTouched] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   // Persist draft on change
   useEffect(() => {
@@ -158,15 +158,15 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
     (target: "history" | "transcript") => {
       stopVoiceInput();
 
-      const SpeechRecognition =
-        (window as any).SpeechRecognition ||
-        (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) {
+      const SpeechRecognitionCtor =
+        window.SpeechRecognition ||
+        window.webkitSpeechRecognition;
+      if (!SpeechRecognitionCtor) {
         alert("Voice input is not supported in this browser.");
         return;
       }
 
-      const recognition = new SpeechRecognition();
+      const recognition = new SpeechRecognitionCtor();
       recognition.continuous = true;
       recognition.interimResults = false;
       recognitionRef.current = recognition;
@@ -174,10 +174,10 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
 
       let lastIndex = 0;
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         const text = Array.from(event.results)
           .slice(lastIndex)
-          .map((r: any) => r[0].transcript)
+          .map((r: SpeechRecognitionResult) => r[0].transcript)
           .join(" ");
         lastIndex = event.results.length;
 

@@ -10,7 +10,28 @@ import {
   MAX_CONCURRENT_WORKFLOWS,
   MAX_INPUT_FIELD_LENGTH,
   MAX_PAYLOAD_BYTES,
+  ALLOWED_ORIGINS,
 } from "../config";
+
+function corsHeaders(): Record<string, string> {
+  return {
+    "Access-Control-Allow-Origin": ALLOWED_ORIGINS,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
+
+function withCors(response: Response): Response {
+  const headers = corsHeaders();
+  for (const [key, value] of Object.entries(headers)) {
+    response.headers.set(key, value);
+  }
+  return response;
+}
+
+function corsPreflightResponse(): Response {
+  return new Response(null, { status: 204, headers: corsHeaders() });
+}
 
 export const rateLimiter = new RateLimiter({
   maxRequests: RATE_LIMIT_MAX_REQUESTS,
@@ -45,6 +66,7 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
     "/": appHtml,
 
     "/v1/diagnose": {
+      OPTIONS: () => corsPreflightResponse(),
       POST: async (req: Request) => {
         const startTime = Date.now();
         const ip = getClientIp(req);
@@ -53,41 +75,41 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         if (!ipCheck.allowed) {
           const retryAfter = Math.ceil(ipCheck.retryAfterMs / 1000);
           logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, { ip, reason: "rate_limited" });
-          return Response.json(
+          return withCors(Response.json(
             { error: "Rate limit exceeded. Please try again later." },
             { status: 429, headers: { "Retry-After": String(retryAfter) } },
-          );
+          ));
         }
 
         if (!rateLimiter.canStartWorkflow()) {
           logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, { ip, reason: "at_capacity" });
-          return Response.json(
+          return withCors(Response.json(
             { error: "Server is at capacity. Please try again later." },
             { status: 429, headers: { "Retry-After": "30" } },
-          );
+          ));
         }
 
         let body: unknown;
         const contentLength = parseInt(req.headers.get("content-length") ?? "0", 10);
         if (contentLength > MAX_PAYLOAD_BYTES) {
           logger.request("POST", "/v1/diagnose", 413, Date.now() - startTime, { ip, contentLength });
-          return Response.json({ error: "Payload too large" }, { status: 413 });
+          return withCors(Response.json({ error: "Payload too large" }, { status: 413 }));
         }
         try {
           body = await req.json();
         } catch {
           logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, { ip });
-          return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+          return withCors(Response.json({ error: "Invalid JSON body" }, { status: 400 }));
         }
 
         const parsed = diagnoseSchema.safeParse(body);
         if (!parsed.success) {
           const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
           logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, { ip, issues });
-          return Response.json(
+          return withCors(Response.json(
             { error: `Validation failed: ${issues}` },
             { status: 400 },
-          );
+          ));
         }
 
         const { medicalHistory, conversationTranscript, labResults } = parsed.data;
@@ -119,11 +141,12 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
             rateLimiter.finishWorkflow();
           });
 
-        return Response.json({ jobId, status: "pending" }, { status: 202 });
+        return withCors(Response.json({ jobId, status: "pending" }, { status: 202 }));
       },
     },
 
     "/v1/status/:jobId": {
+      OPTIONS: () => corsPreflightResponse(),
       GET: (req: RouteRequest) => {
         const start = Date.now();
         const { jobId } = req.params;
@@ -131,20 +154,26 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
 
         if (!entry) {
           logger.request("GET", "/v1/status/:jobId", 404, Date.now() - start, { jobId });
-          return Response.json({ error: "Job not found" }, { status: 404 });
+          return withCors(Response.json({ error: "Job not found" }, { status: 404 }));
         }
 
         logger.request("GET", "/v1/status/:jobId", 200, Date.now() - start, { jobId, status: entry.status });
-        return Response.json({ jobId, ...entry });
+        return withCors(Response.json({ jobId, ...entry }));
       },
     },
 
     "/v1/agents": {
+      OPTIONS: () => corsPreflightResponse(),
       GET: () => {
         const start = Date.now();
         logger.request("GET", "/v1/agents", 200, Date.now() - start);
-        return Response.json({ agents: agentList });
+        return withCors(Response.json({ agents: agentList }));
       },
+    },
+
+    // CORS preflight catch-all for any future /v1/* routes
+    "/v1/*": {
+      OPTIONS: () => corsPreflightResponse(),
     },
 
     // SPA fallback — serve index.html for all non-API routes
@@ -156,6 +185,16 @@ export function createRoutes(server: { upgrade(req: Request, options: { data: un
         const jobId = url.searchParams.get("jobId");
         if (!jobId) {
           return new Response("Missing jobId", { status: 400 });
+        }
+
+        // Validate Origin header to prevent cross-site WebSocket hijacking
+        if (ALLOWED_ORIGINS !== "*") {
+          const origin = req.headers.get("origin");
+          const allowed = ALLOWED_ORIGINS.split(",").map((o) => o.trim());
+          if (!origin || !allowed.includes(origin)) {
+            logger.warn("ws_origin_rejected", { jobId, origin: origin ?? "none" });
+            return new Response("Forbidden origin", { status: 403 });
+          }
         }
 
         if (server.upgrade(req, { data: { jobId } })) {
