@@ -68,7 +68,11 @@ export const medlinePlusSearchTool = createTool({
   description:
     "Search MedlinePlus for patient-friendly health information on diseases, conditions, and wellness topics. Returns plain-language summaries of causes, symptoms, diagnosis, and treatment.",
   inputSchema: z.object({
-    condition: z.string().describe("Disease or condition name (e.g. 'diabetes', 'heart failure', 'pneumonia')"),
+    condition: z
+      .string()
+      .describe(
+        "Disease or condition name (e.g. 'diabetes', 'heart failure', 'pneumonia')",
+      ),
   }),
   outputSchema: z.object({
     results: z.array(
@@ -103,11 +107,21 @@ export const medlinePlusSearchTool = createTool({
         const data = await result.json();
 
         const entries = data?.feed?.entry ?? [];
-        const entryArray = Array.isArray(entries) ? entries : entries ? [entries] : [];
+        const entryArray = Array.isArray(entries)
+          ? entries
+          : entries
+            ? [entries]
+            : [];
 
         const results = entryArray.map((entry: MedlinePlusEntry) => ({
-          title: (typeof entry.title === "object" ? entry.title?._value : entry.title) ?? "",
-          summary: (typeof entry.summary === "object" ? entry.summary?._value : entry.summary) ?? "",
+          title:
+            (typeof entry.title === "object"
+              ? entry.title?._value
+              : entry.title) ?? "",
+          summary:
+            (typeof entry.summary === "object"
+              ? entry.summary?._value
+              : entry.summary) ?? "",
           url: entry.link?.[0]?.href ?? entry.id ?? undefined,
         }));
 

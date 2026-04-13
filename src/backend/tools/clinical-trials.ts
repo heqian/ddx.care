@@ -70,8 +70,15 @@ export const clinicalTrialsSearchTool = createTool({
     status: z
       .enum(["RECRUITING", "ACTIVE_NOT_RECRUITING", "COMPLETED", "ALL"])
       .default("RECRUITING")
-      .describe("Filter by trial status. RECRUITING shows currently enrolling trials."),
-    pageSize: z.number().min(1).max(10).default(5).describe("Number of trials to return"),
+      .describe(
+        "Filter by trial status. RECRUITING shows currently enrolling trials.",
+      ),
+    pageSize: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(5)
+      .describe("Number of trials to return"),
   }),
   outputSchema: z.object({
     results: z.array(
@@ -94,7 +101,8 @@ export const clinicalTrialsSearchTool = createTool({
     totalCount: z.number().optional(),
   }),
   execute: async ({ query, status, pageSize }) => {
-    const statusFilter = status === "ALL" ? "" : `&filter.overallStatus=${status}`;
+    const statusFilter =
+      status === "ALL" ? "" : `&filter.overallStatus=${status}`;
     const url = `${CT_BASE}/studies?query.term=${encodeURIComponent(query)}${statusFilter}&pageSize=${pageSize}&fields=NCTId,BriefTitle,OverallStatus,Phase,StudyType,Condition,InterventionName,EligibilityCriteria,LeadSponsorName,StartDate,CompletionDate,EnrollmentCount,BriefSummary`;
 
     const result = await fetchJSON(url);
@@ -116,7 +124,10 @@ export const clinicalTrialsSearchTool = createTool({
         phase: designModule.phases?.join(", ") ?? undefined,
         studyType: designModule.studyType ?? undefined,
         conditions: conditionsModule.conditions ?? undefined,
-        interventions: designModule.interventions?.map((i) => i.name ?? "").filter(Boolean) ?? undefined,
+        interventions:
+          designModule.interventions
+            ?.map((i) => i.name ?? "")
+            .filter(Boolean) ?? undefined,
         eligibilityCriteria: eligibilityModule.eligibilityCriteria ?? undefined,
         sponsor: sponsorModule.leadSponsor?.name ?? undefined,
         startDate: statusModule.startDateStruct?.date ?? undefined,

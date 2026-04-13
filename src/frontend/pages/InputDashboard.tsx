@@ -36,20 +36,26 @@ function loadDraft(): Draft | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null;
 }
 
 function saveDraft(d: Draft) {
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(d));
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 function clearDraft() {
   try {
     sessionStorage.removeItem(STORAGE_KEY);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 function CharCount({ value, max }: { value: string; max: number }) {
@@ -76,19 +82,32 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
   const draft = loadDraft();
   const [age, setAge] = useState(draft?.age ?? "");
   const [sex, setSex] = useState(draft?.sex ?? "");
-  const [chiefComplaint, setChiefComplaint] = useState(draft?.chiefComplaint ?? "");
-  const [medicalHistory, setMedicalHistory] = useState(draft?.medicalHistory ?? "");
+  const [chiefComplaint, setChiefComplaint] = useState(
+    draft?.chiefComplaint ?? "",
+  );
+  const [medicalHistory, setMedicalHistory] = useState(
+    draft?.medicalHistory ?? "",
+  );
   const [transcript, setTranscript] = useState(draft?.transcript ?? "");
   const [labResults, setLabResults] = useState(draft?.labResults ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeVoiceTarget, setActiveVoiceTarget] = useState<"history" | "transcript" | null>(null);
+  const [activeVoiceTarget, setActiveVoiceTarget] = useState<
+    "history" | "transcript" | null
+  >(null);
   const [touched, setTouched] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   // Persist draft on change
   useEffect(() => {
-    saveDraft({ age, sex, chiefComplaint, medicalHistory, transcript, labResults });
+    saveDraft({
+      age,
+      sex,
+      chiefComplaint,
+      medicalHistory,
+      transcript,
+      labResults,
+    });
   }, [age, sex, chiefComplaint, medicalHistory, transcript, labResults]);
 
   const ageError = touched && age !== "" && !/^\d{1,3}$/.test(age);
@@ -96,7 +115,8 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
   const historyLen = medicalHistory.length;
   const transcriptLen = transcript.length;
   const labLen = labResults.length;
-  const anyOverLimit = historyLen > MAX_CHARS || transcriptLen > MAX_CHARS || labLen > MAX_CHARS;
+  const anyOverLimit =
+    historyLen > MAX_CHARS || transcriptLen > MAX_CHARS || labLen > MAX_CHARS;
 
   const canSubmit =
     !anyOverLimit &&
@@ -105,7 +125,11 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
 
   const stopVoiceInput = useCallback(() => {
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch { /* already stopped */ }
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        /* already stopped */
+      }
       recognitionRef.current = null;
     }
     setActiveVoiceTarget(null);
@@ -140,7 +164,15 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
     } finally {
       setSubmitting(false);
     }
-  }, [age, sex, chiefComplaint, medicalHistory, transcript, labResults, onSubmit]);
+  }, [
+    age,
+    sex,
+    chiefComplaint,
+    medicalHistory,
+    transcript,
+    labResults,
+    onSubmit,
+  ]);
 
   const handleClearAll = useCallback(() => {
     setAge("");
@@ -159,8 +191,7 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
       stopVoiceInput();
 
       const SpeechRecognitionCtor =
-        window.SpeechRecognition ||
-        window.webkitSpeechRecognition;
+        window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognitionCtor) {
         alert("Voice input is not supported in this browser.");
         return;
@@ -236,7 +267,9 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
               className={`${inputClass} ${ageError ? "border-danger focus:ring-danger" : ""}`}
             />
             {ageError && (
-              <p className="text-xs text-danger mt-1">Age must be a number (1–3 digits)</p>
+              <p className="text-xs text-danger mt-1">
+                Age must be a number (1–3 digits)
+              </p>
             )}
           </div>
           <div>
@@ -274,13 +307,19 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
             Medical History
           </h2>
           <button
-            onClick={() => activeVoiceTarget === "history" ? stopVoiceInput() : handleVoiceInput("history")}
+            onClick={() =>
+              activeVoiceTarget === "history"
+                ? stopVoiceInput()
+                : handleVoiceInput("history")
+            }
             className={`flex items-center gap-1 text-xs transition-colors ${
               activeVoiceTarget === "history"
                 ? "text-red-500 hover:text-red-600"
                 : "text-primary hover:text-primary-dark"
             }`}
-            title={activeVoiceTarget === "history" ? "Stop dictation" : "Voice input"}
+            title={
+              activeVoiceTarget === "history" ? "Stop dictation" : "Voice input"
+            }
           >
             <MicrophoneIcon className="h-4 w-4" />
             {activeVoiceTarget === "history" ? "Stop" : "Dictate"}
@@ -300,7 +339,9 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
           <FileDropZone
             label="Upload medical history file"
             onFileContent={(content) =>
-              setMedicalHistory((prev) => (prev ? prev + "\n\n" + content : content))
+              setMedicalHistory((prev) =>
+                prev ? prev + "\n\n" + content : content,
+              )
             }
           />
         </div>
@@ -314,13 +355,21 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
             Conversation Transcript
           </h2>
           <button
-            onClick={() => activeVoiceTarget === "transcript" ? stopVoiceInput() : handleVoiceInput("transcript")}
+            onClick={() =>
+              activeVoiceTarget === "transcript"
+                ? stopVoiceInput()
+                : handleVoiceInput("transcript")
+            }
             className={`flex items-center gap-1 text-xs transition-colors ${
               activeVoiceTarget === "transcript"
                 ? "text-red-500 hover:text-red-600"
                 : "text-primary hover:text-primary-dark"
             }`}
-            title={activeVoiceTarget === "transcript" ? "Stop dictation" : "Voice input"}
+            title={
+              activeVoiceTarget === "transcript"
+                ? "Stop dictation"
+                : "Voice input"
+            }
           >
             <MicrophoneIcon className="h-4 w-4" />
             {activeVoiceTarget === "transcript" ? "Stop" : "Dictate"}
@@ -340,7 +389,9 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
           <FileDropZone
             label="Upload transcript file"
             onFileContent={(content) =>
-              setTranscript((prev) => (prev ? prev + "\n\n" + content : content))
+              setTranscript((prev) =>
+                prev ? prev + "\n\n" + content : content,
+              )
             }
           />
         </div>
@@ -369,7 +420,9 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
           <FileDropZone
             label="Upload lab results file"
             onFileContent={(content) =>
-              setLabResults((prev) => (prev ? prev + "\n\n" + content : content))
+              setLabResults((prev) =>
+                prev ? prev + "\n\n" + content : content,
+              )
             }
           />
         </div>
@@ -385,16 +438,14 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
       {/* Validation hint */}
       {anyOverLimit && (
         <div className="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3">
-          One or more fields exceed the character limit. Please shorten before submitting.
+          One or more fields exceed the character limit. Please shorten before
+          submitting.
         </div>
       )}
 
       {/* Submit */}
       <div className="flex justify-end">
-        <Button
-          onClick={handleSubmit}
-          disabled={!canSubmit || submitting}
-        >
+        <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
           {submitting ? "Submitting..." : "Submit for Diagnosis"}
         </Button>
       </div>

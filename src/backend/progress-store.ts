@@ -50,17 +50,17 @@ export class JobStore extends EventTarget {
     `);
 
     this.insertStmt = this.db.prepare(
-      `INSERT INTO jobs (id, status, createdAt, progress) VALUES (?, ?, ?, ?)`
+      `INSERT INTO jobs (id, status, createdAt, progress) VALUES (?, ?, ?, ?)`,
     );
     this.getStmt = this.db.prepare(`SELECT * FROM jobs WHERE id = ?`);
     this.emitStmt = this.db.prepare(
-      `UPDATE jobs SET progress = json_insert(progress, '$[#]', json(?)) WHERE id = ?`
+      `UPDATE jobs SET progress = json_insert(progress, '$[#]', json(?)) WHERE id = ?`,
     );
     this.completeStmt = this.db.prepare(
-      `UPDATE jobs SET status = ?, result = ? WHERE id = ?`
+      `UPDATE jobs SET status = ?, result = ? WHERE id = ?`,
     );
     this.failStmt = this.db.prepare(
-      `UPDATE jobs SET status = ?, error = ? WHERE id = ?`
+      `UPDATE jobs SET status = ?, error = ? WHERE id = ?`,
     );
     this.cleanupStmt = this.db.prepare(`DELETE FROM jobs WHERE createdAt < ?`);
   }
@@ -89,7 +89,7 @@ export class JobStore extends EventTarget {
     this.dispatchEvent(
       new CustomEvent(`progress-${jobId}`, {
         detail: { type: "progress", jobId, event },
-      })
+      }),
     );
   }
 
@@ -99,7 +99,7 @@ export class JobStore extends EventTarget {
     this.dispatchEvent(
       new CustomEvent(`progress-${jobId}`, {
         detail: { type: "completed", jobId, result },
-      })
+      }),
     );
   }
 
@@ -109,7 +109,7 @@ export class JobStore extends EventTarget {
     this.dispatchEvent(
       new CustomEvent(`progress-${jobId}`, {
         detail: { type: "failed", jobId, error },
-      })
+      }),
     );
   }
 

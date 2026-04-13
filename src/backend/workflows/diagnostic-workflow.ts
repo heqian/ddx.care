@@ -4,7 +4,11 @@ import { DIAGNOSIS_TIMEOUT_MS, MAX_DIAGNOSIS_ROUNDS } from "../config";
 import { progressStore } from "../progress-store";
 import { logger } from "../utils/logger";
 
-export async function limitConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+export async function limitConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
   const results: R[] = new Array(items.length);
   const executing = new Set<Promise<void>>();
 
@@ -25,7 +29,11 @@ export async function limitConcurrency<T, R>(items: T[], limit: number, fn: (ite
   return results;
 }
 
-export async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, baseDelay = 1000): Promise<T> {
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  baseDelay = 1000,
+): Promise<T> {
   let attempt = 0;
   while (true) {
     try {
@@ -81,19 +89,23 @@ export const parseInput = createStep({
 export const diagnosisReportSchema = z.object({
   chiefComplaint: z.string(),
   patientSummary: z.string(),
-  specialistsConsulted: z.array(z.object({
-    specialist: z.string(),
-    keyFindings: z.string(),
-  })),
-  rankedDiagnoses: z.array(z.object({
-    diagnosisName: z.string(),
-    confidencePercentage: z.number(),
-    urgency: z.enum(["Emergent", "Urgent", "Routine"]),
-    rationale: z.string(),
-    supportingEvidence: z.string(),
-    contradictoryEvidence: z.string(),
-    suggestedNextSteps: z.string(),
-  })),
+  specialistsConsulted: z.array(
+    z.object({
+      specialist: z.string(),
+      keyFindings: z.string(),
+    }),
+  ),
+  rankedDiagnoses: z.array(
+    z.object({
+      diagnosisName: z.string(),
+      confidencePercentage: z.number(),
+      urgency: z.enum(["Emergent", "Urgent", "Routine"]),
+      rationale: z.string(),
+      supportingEvidence: z.string(),
+      contradictoryEvidence: z.string(),
+      suggestedNextSteps: z.string(),
+    }),
+  ),
   crossSpecialtyObservations: z.string(),
   recommendedImmediateActions: z.string(),
 });
@@ -123,7 +135,9 @@ async function mockDiagnosis(
 ): Promise<{ diagnosisReport: DiagnosisReport }> {
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  emitProgress("Round 1 Analysis: Asking CMO for decision on needed specialists...");
+  emitProgress(
+    "Round 1 Analysis: Asking CMO for decision on needed specialists...",
+  );
   await delay(100);
 
   const specialists = ["cardiologist", "neurologist", "nephrologist"];
@@ -133,49 +147,75 @@ async function mockDiagnosis(
     emitProgress(`Received analysis from ${id}`);
   }
 
-  emitProgress("CMO has determined no further consultations are needed and finalized the report.");
+  emitProgress(
+    "CMO has determined no further consultations are needed and finalized the report.",
+  );
   await delay(50);
 
   return {
     diagnosisReport: {
       chiefComplaint: "Severe headache with blurred vision",
-      patientSummary: "45-year-old male with history of hypertension presenting with 3-day severe headache and blurred vision.",
+      patientSummary:
+        "45-year-old male with history of hypertension presenting with 3-day severe headache and blurred vision.",
       specialistsConsulted: [
-        { specialist: "cardiologist", keyFindings: "Severe hypertension likely contributing to headache. BP 180/110 suggests hypertensive urgency." },
-        { specialist: "neurologist", keyFindings: "Blurred vision with severe headache raises concern for papilledema and increased intracranial pressure." },
-        { specialist: "nephrologist", keyFindings: "Elevated BP with possible renal involvement. Recommend basic metabolic panel and urinalysis." },
+        {
+          specialist: "cardiologist",
+          keyFindings:
+            "Severe hypertension likely contributing to headache. BP 180/110 suggests hypertensive urgency.",
+        },
+        {
+          specialist: "neurologist",
+          keyFindings:
+            "Blurred vision with severe headache raises concern for papilledema and increased intracranial pressure.",
+        },
+        {
+          specialist: "nephrologist",
+          keyFindings:
+            "Elevated BP with possible renal involvement. Recommend basic metabolic panel and urinalysis.",
+        },
       ],
       rankedDiagnoses: [
         {
           diagnosisName: "Hypertensive Urgency",
           confidencePercentage: 85,
           urgency: "Emergent" as const,
-          rationale: "Severe headache with BP 180/110 and blurred vision strongly suggest hypertensive urgency.",
-          supportingEvidence: "BP 180/110\nHistory of hypertension\nBlurred vision",
+          rationale:
+            "Severe headache with BP 180/110 and blurred vision strongly suggest hypertensive urgency.",
+          supportingEvidence:
+            "BP 180/110\nHistory of hypertension\nBlurred vision",
           contradictoryEvidence: "None identified",
-          suggestedNextSteps: "Lower BP with IV antihypertensives\nOphthalmologic exam\nCT head to rule out hemorrhage",
+          suggestedNextSteps:
+            "Lower BP with IV antihypertensives\nOphthalmologic exam\nCT head to rule out hemorrhage",
         },
         {
           diagnosisName: "Migraine with Aura",
           confidencePercentage: 45,
           urgency: "Urgent" as const,
-          rationale: "Severe headache with visual changes could represent migraine, though less likely given BP readings.",
+          rationale:
+            "Severe headache with visual changes could represent migraine, though less likely given BP readings.",
           supportingEvidence: "Severe headache\nVisual disturbances",
-          contradictoryEvidence: "No prior migraine history\nBP 180/110 suggests secondary cause",
-          suggestedNextSteps: "Consider migraine workup if BP control does not resolve symptoms\nTrial of analgesics",
+          contradictoryEvidence:
+            "No prior migraine history\nBP 180/110 suggests secondary cause",
+          suggestedNextSteps:
+            "Consider migraine workup if BP control does not resolve symptoms\nTrial of analgesics",
         },
         {
           diagnosisName: "Tension-Type Headache",
           confidencePercentage: 20,
           urgency: "Routine" as const,
-          rationale: "Less likely given severity and associated visual symptoms, but possible comorbid condition.",
+          rationale:
+            "Less likely given severity and associated visual symptoms, but possible comorbid condition.",
           supportingEvidence: "Headache as primary symptom",
-          contradictoryEvidence: "Blurred vision not typical\nBP elevation suggests secondary cause",
-          suggestedNextSteps: "Stress management\nFollow up if symptoms persist",
+          contradictoryEvidence:
+            "Blurred vision not typical\nBP elevation suggests secondary cause",
+          suggestedNextSteps:
+            "Stress management\nFollow up if symptoms persist",
         },
       ],
-      crossSpecialtyObservations: "All consultants agree that blood pressure control is the immediate priority. Neurology and cardiology both recommend neuroimaging.",
-      recommendedImmediateActions: "Administer IV antihypertensive medication. Order STAT CT head. Consult ophthalmology for fundoscopic exam.",
+      crossSpecialtyObservations:
+        "All consultants agree that blood pressure control is the immediate priority. Neurology and cardiology both recommend neuroimaging.",
+      recommendedImmediateActions:
+        "Administer IV antihypertensive medication. Order STAT CT head. Consult ophthalmology for fundoscopic exam.",
     },
   };
 }
@@ -208,12 +248,9 @@ const runDiagnosis = createStep({
 
     const MAX_ROUNDS = MAX_DIAGNOSIS_ROUNDS;
     let round = 1;
-    let allConsultedSpecialists = new Set<string>();
-    let contextHistory = [
-      "=== PATIENT CASE ===",
-      inputData.patientSummary,
-    ];
-    
+    const allConsultedSpecialists = new Set<string>();
+    const contextHistory = ["=== PATIENT CASE ===", inputData.patientSummary];
+
     let finalDiagnosisReport: DiagnosisReport | null = null;
 
     const runLoop = async () => {
@@ -229,94 +266,136 @@ Only return a list of specialists that have NOT been consulted yet if you need t
 Specialists consulted so far: ${Array.from(allConsultedSpecialists).join(", ") || "None"}
 `;
 
-        emitProgress(`Round ${round} Analysis: Asking CMO for decision on needed specialists...`);
+        emitProgress(
+          `Round ${round} Analysis: Asking CMO for decision on needed specialists...`,
+        );
         const cmoDecision = await cmo.generate(prompt, {
           structuredOutput: {
             jsonPromptInjection: true,
             schema: z.object({
-              specialistsToConsult: z.array(z.string()).describe("List of specialist IDs (e.g. 'generalist', 'cardiologist') to consult in this round. Empty if no more needed."),
-              isFinal: z.boolean().describe("True if you are ready to produce the final report."),
-              finalReport: diagnosisReportSchema.optional().describe("The final comprehensive differential diagnosis report. Only required if isFinal is true."),
-            })
-          }
+              specialistsToConsult: z
+                .array(z.string())
+                .describe(
+                  "List of specialist IDs (e.g. 'generalist', 'cardiologist') to consult in this round. Empty if no more needed.",
+                ),
+              isFinal: z
+                .boolean()
+                .describe("True if you are ready to produce the final report."),
+              finalReport: diagnosisReportSchema
+                .optional()
+                .describe(
+                  "The final comprehensive differential diagnosis report. Only required if isFinal is true.",
+                ),
+            }),
+          },
         });
-        
-        const { specialistsToConsult, isFinal, finalReport } = cmoDecision.object as CmoDecision;
+
+        const { specialistsToConsult, isFinal, finalReport } =
+          cmoDecision.object as CmoDecision;
 
         if (isFinal && finalReport) {
-          emitProgress(`CMO has determined no further consultations are needed and finalized the report.`);
+          emitProgress(
+            `CMO has determined no further consultations are needed and finalized the report.`,
+          );
           finalDiagnosisReport = finalReport;
           break;
         }
-        
+
         // Filter out already consulted specialists
-        const newSpecialists = (specialistsToConsult || []).filter((id: string) => !allConsultedSpecialists.has(id));
-        
+        const newSpecialists = (specialistsToConsult || []).filter(
+          (id: string) => !allConsultedSpecialists.has(id),
+        );
+
         if (newSpecialists.length === 0) {
-          emitProgress(`No new specialists requested. Compiling final report...`);
+          emitProgress(
+            `No new specialists requested. Compiling final report...`,
+          );
           // No new specialists added, force final report
           const finalPrompt = `You did not request any new specialists, or there are no more to consult. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
 
 ${contextHistory.join("\n\n")}`;
           const finalResponse = await cmo.generate(finalPrompt, {
-             structuredOutput: {
-               jsonPromptInjection: true,
-               schema: diagnosisReportSchema
-             }
+            structuredOutput: {
+              jsonPromptInjection: true,
+              schema: diagnosisReportSchema,
+            },
           });
           finalDiagnosisReport = finalResponse.object;
           break;
         }
-        
+
         // Call the new specialists
-        emitProgress(`CMO requested consultations from: ${newSpecialists.join(", ")}`);
-        
-        const results = await limitConcurrency(newSpecialists, 3, async (specId: string) => {
-          try {
-            const specAgent = mastra.getAgent(specId);
-            if (specAgent) {
-              allConsultedSpecialists.add(specId);
-              emitProgress(`Calling specialist ${specId}...`);
-              
-              const specStart = Date.now();
-              const specResponse = await withRetry(async () => {
-                return await specAgent.generate(`Please analyze this case from the perspective of a ${specId}:\n\n${inputData.patientSummary}`);
-              }, 3, 1000);
-              logger.specialistCall(specId, runId ?? "unknown", Date.now() - specStart, true);
-              
-              emitProgress(`Received analysis from ${specId}`);
-              return `=== ${specId} Consult ===\n${specResponse.text}`;
-            } else {
-               return `=== ${specId} Consult ===\nFailed to reach specialist (Not Found).`;
+        emitProgress(
+          `CMO requested consultations from: ${newSpecialists.join(", ")}`,
+        );
+
+        const results = await limitConcurrency(
+          newSpecialists,
+          3,
+          async (specId: string) => {
+            try {
+              const specAgent = mastra.getAgent(specId);
+              if (specAgent) {
+                allConsultedSpecialists.add(specId);
+                emitProgress(`Calling specialist ${specId}...`);
+
+                const specStart = Date.now();
+                const specResponse = await withRetry(
+                  async () => {
+                    return await specAgent.generate(
+                      `Please analyze this case from the perspective of a ${specId}:\n\n${inputData.patientSummary}`,
+                    );
+                  },
+                  3,
+                  1000,
+                );
+                logger.specialistCall(
+                  specId,
+                  runId ?? "unknown",
+                  Date.now() - specStart,
+                  true,
+                );
+
+                emitProgress(`Received analysis from ${specId}`);
+                return `=== ${specId} Consult ===\n${specResponse.text}`;
+              } else {
+                return `=== ${specId} Consult ===\nFailed to reach specialist (Not Found).`;
+              }
+            } catch (e) {
+              const message = e instanceof Error ? e.message : "Unknown error";
+              logger.specialistCall(specId, runId ?? "unknown", 0, false);
+              logger.warn("specialist_call_failed", {
+                specialistId: specId,
+                jobId: runId,
+                error: message,
+              });
+              emitProgress(`Failed to receive analysis from ${specId}`);
+              return `=== ${specId} Consult ===\nFailed to consult specialist: ${message}`;
             }
-          } catch (e) {
-            const message = e instanceof Error ? e.message : "Unknown error";
-            logger.specialistCall(specId, runId ?? "unknown", 0, false);
-            logger.warn("specialist_call_failed", { specialistId: specId, jobId: runId, error: message });
-            emitProgress(`Failed to receive analysis from ${specId}`);
-            return `=== ${specId} Consult ===\nFailed to consult specialist: ${message}`;
-          }
-        });
-        
+          },
+        );
+
         if (results.length > 0) {
-           contextHistory.push(`=== Results from Round ${round} ===\n\n` + results.join("\n\n"));
+          contextHistory.push(
+            `=== Results from Round ${round} ===\n\n` + results.join("\n\n"),
+          );
         }
-        
+
         round++;
       }
 
       if (!finalDiagnosisReport) {
-         // Reached max rounds without final report
-         const finalPrompt = `Maximum diagnostic rounds (${MAX_ROUNDS}) reached. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
+        // Reached max rounds without final report
+        const finalPrompt = `Maximum diagnostic rounds (${MAX_ROUNDS}) reached. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
           
 ${contextHistory.join("\n\n")}`;
-         const finalResponse = await cmo.generate(finalPrompt, {
-            structuredOutput: {
-              jsonPromptInjection: true,
-              schema: diagnosisReportSchema
-            }
-         });
-         finalDiagnosisReport = finalResponse.object;
+        const finalResponse = await cmo.generate(finalPrompt, {
+          structuredOutput: {
+            jsonPromptInjection: true,
+            schema: diagnosisReportSchema,
+          },
+        });
+        finalDiagnosisReport = finalResponse.object;
       }
     };
 
@@ -325,7 +404,12 @@ ${contextHistory.join("\n\n")}`;
         runLoop(),
         new Promise<never>((_, reject) =>
           setTimeout(
-            () => reject(new Error(`Diagnosis timed out after ${DIAGNOSIS_TIMEOUT_MS}ms`)),
+            () =>
+              reject(
+                new Error(
+                  `Diagnosis timed out after ${DIAGNOSIS_TIMEOUT_MS}ms`,
+                ),
+              ),
             DIAGNOSIS_TIMEOUT_MS,
           ),
         ),
@@ -355,20 +439,24 @@ export const formatReport = createStep({
     report: z.object({
       chiefComplaint: z.string(),
       patientSummary: z.string(),
-      specialistsConsulted: z.array(z.object({
-        specialist: z.string(),
-        keyFindings: z.string(),
-      })),
-      diagnoses: z.array(z.object({
-        rank: z.number(),
-        name: z.string(),
-        confidence: z.number(),
-        urgency: z.enum(["emergent", "urgent", "routine"]),
-        rationale: z.string(),
-        supportingEvidence: z.array(z.string()),
-        contradictoryEvidence: z.array(z.string()),
-        nextSteps: z.array(z.string()),
-      })),
+      specialistsConsulted: z.array(
+        z.object({
+          specialist: z.string(),
+          keyFindings: z.string(),
+        }),
+      ),
+      diagnoses: z.array(
+        z.object({
+          rank: z.number(),
+          name: z.string(),
+          confidence: z.number(),
+          urgency: z.enum(["emergent", "urgent", "routine"]),
+          rationale: z.string(),
+          supportingEvidence: z.array(z.string()),
+          contradictoryEvidence: z.array(z.string()),
+          nextSteps: z.array(z.string()),
+        }),
+      ),
       crossSpecialtyObservations: z.string(),
       recommendedImmediateActions: z.string(),
     }),
@@ -388,16 +476,21 @@ export const formatReport = createStep({
         chiefComplaint: raw.chiefComplaint ?? "",
         patientSummary: raw.patientSummary ?? "",
         specialistsConsulted: raw.specialistsConsulted ?? [],
-        diagnoses: (raw.rankedDiagnoses ?? []).map((d: DiagnosisReport["rankedDiagnoses"][number], i: number) => ({
-          rank: i + 1,
-          name: d.diagnosisName ?? "",
-          confidence: d.confidencePercentage ?? 0,
-          urgency: (d.urgency?.toLowerCase() ?? "routine") as "emergent" | "urgent" | "routine",
-          rationale: d.rationale ?? "",
-          supportingEvidence: splitToList(d.supportingEvidence),
-          contradictoryEvidence: splitToList(d.contradictoryEvidence),
-          nextSteps: splitToList(d.suggestedNextSteps),
-        })),
+        diagnoses: (raw.rankedDiagnoses ?? []).map(
+          (d: DiagnosisReport["rankedDiagnoses"][number], i: number) => ({
+            rank: i + 1,
+            name: d.diagnosisName ?? "",
+            confidence: d.confidencePercentage ?? 0,
+            urgency: (d.urgency?.toLowerCase() ?? "routine") as
+              | "emergent"
+              | "urgent"
+              | "routine",
+            rationale: d.rationale ?? "",
+            supportingEvidence: splitToList(d.supportingEvidence),
+            contradictoryEvidence: splitToList(d.contradictoryEvidence),
+            nextSteps: splitToList(d.suggestedNextSteps),
+          }),
+        ),
         crossSpecialtyObservations: raw.crossSpecialtyObservations ?? "",
         recommendedImmediateActions: raw.recommendedImmediateActions ?? "",
       },
@@ -410,20 +503,24 @@ export const formatReport = createStep({
 export const reportSchema = z.object({
   chiefComplaint: z.string(),
   patientSummary: z.string(),
-  specialistsConsulted: z.array(z.object({
-    specialist: z.string(),
-    keyFindings: z.string(),
-  })),
-  diagnoses: z.array(z.object({
-    rank: z.number(),
-    name: z.string(),
-    confidence: z.number(),
-    urgency: z.enum(["emergent", "urgent", "routine"]),
-    rationale: z.string(),
-    supportingEvidence: z.array(z.string()),
-    contradictoryEvidence: z.array(z.string()),
-    nextSteps: z.array(z.string()),
-  })),
+  specialistsConsulted: z.array(
+    z.object({
+      specialist: z.string(),
+      keyFindings: z.string(),
+    }),
+  ),
+  diagnoses: z.array(
+    z.object({
+      rank: z.number(),
+      name: z.string(),
+      confidence: z.number(),
+      urgency: z.enum(["emergent", "urgent", "routine"]),
+      rationale: z.string(),
+      supportingEvidence: z.array(z.string()),
+      contradictoryEvidence: z.array(z.string()),
+      nextSteps: z.array(z.string()),
+    }),
+  ),
   crossSpecialtyObservations: z.string(),
   recommendedImmediateActions: z.string(),
 });

@@ -42,7 +42,7 @@
 
 - [ ] **Fix and run `bun run typecheck` in CI** — The `tsconfig.json` include pattern fix (P0 above) is a prerequisite. After fixing it, run `bun run typecheck` and fix any type errors that surface. Add typecheck to the test pipeline (e.g. a `pretest` script or CI step).
 
-- [ ] **Add `bun run lint` script with Biome** — No linter is configured. Add `@biomejs/biome` as a dev dependency with a minimal `biome.json` config focused on catching real bugs: `noExplicitAny`, `noUnusedVariables`, `useConst`. Don't enable stylistic rules — just bug-catching. Add `"lint": "biome check src/"` script to `package.json`.
+- [x] **Add `bun run lint` script with Biome** — No linter is configured. Add `@biomejs/biome` as a dev dependency with a minimal `biome.json` config focused on catching real bugs: `noExplicitAny`, `noUnusedVariables`, `useConst`. Don't enable stylistic rules — just bug-catching. Add `"lint": "biome check src/"` script to `package.json`.
 
 - [ ] **Centralize environment variable validation** — [config.ts](src/backend/config.ts) does bare `parseInt` with no validation. Missing `GOOGLE_GENERATIVE_AI_API_KEY` silently fails at the first LLM call. Add a `validateConfig()` function that runs at server startup: assert `GOOGLE_GENERATIVE_AI_API_KEY` is set, assert parsed ints are positive numbers, assert `PORT` is in valid range. Fail fast with a clear error message.
 

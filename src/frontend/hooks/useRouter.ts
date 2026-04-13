@@ -29,7 +29,9 @@ function routeToPath(route: Route): string {
 }
 
 export function useRouter() {
-  const [route, setRoute] = useState<Route>(() => parsePath(window.location.pathname));
+  const [route, setRoute] = useState<Route>(() =>
+    parsePath(window.location.pathname),
+  );
 
   const navigate = useCallback((next: Route) => {
     const path = routeToPath(next);

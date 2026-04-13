@@ -66,8 +66,15 @@ export const adverseEventsTool = createTool({
   inputSchema: z.object({
     drugName: z
       .string()
-      .describe("Drug generic name (e.g. 'metformin', 'ibuprofen'). Use generic names for best results."),
-    limit: z.number().min(1).max(10).default(3).describe("Number of reports to return"),
+      .describe(
+        "Drug generic name (e.g. 'metformin', 'ibuprofen'). Use generic names for best results.",
+      ),
+    limit: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(3)
+      .describe("Number of reports to return"),
   }),
   outputSchema: z.object({
     results: z.array(
@@ -95,7 +102,10 @@ export const adverseEventsTool = createTool({
     const result = await fetchJSON(url);
 
     if (result.error) {
-      return { results: [], error: "No adverse event reports found for this drug." };
+      return {
+        results: [],
+        error: "No adverse event reports found for this drug.",
+      };
     }
 
     const meta = result.meta
@@ -108,21 +118,33 @@ export const adverseEventsTool = createTool({
     const results = (result.results ?? []).map((r: FdaAdverseEventReport) => ({
       reportId: r.safetyreportid ?? undefined,
       serious: r.serious === "1" ? true : r.serious === "2" ? false : undefined,
-      seriousnessDescription: r.seriousnesscongenitalanomali === "1"
-        ? "Congenital anomaly"
-        : r.seriousnessdeath === "1"
-          ? "Death"
-          : r.seriousnesshospitalization === "1"
-            ? "Hospitalization"
-            : r.seriousnesslifethreatening === "1"
-              ? "Life threatening"
-              : r.seriousnessdisabling === "1"
-                ? "Disabling"
-                : undefined,
-      reactions: r.patient?.reaction?.map((rx) => rx.reactionmeddrapt ?? "").filter(Boolean) ?? [],
-      outcomes: r.patient?.reaction?.map((rx) => rx.reactionoutcome ?? "").filter(Boolean) ?? [],
+      seriousnessDescription:
+        r.seriousnesscongenitalanomali === "1"
+          ? "Congenital anomaly"
+          : r.seriousnessdeath === "1"
+            ? "Death"
+            : r.seriousnesshospitalization === "1"
+              ? "Hospitalization"
+              : r.seriousnesslifethreatening === "1"
+                ? "Life threatening"
+                : r.seriousnessdisabling === "1"
+                  ? "Disabling"
+                  : undefined,
+      reactions:
+        r.patient?.reaction
+          ?.map((rx) => rx.reactionmeddrapt ?? "")
+          .filter(Boolean) ?? [],
+      outcomes:
+        r.patient?.reaction
+          ?.map((rx) => rx.reactionoutcome ?? "")
+          .filter(Boolean) ?? [],
       patientAge: r.patient?.patientonsetage?.toString() ?? undefined,
-      patientSex: r.patient?.patientsex === "1" ? "Male" : r.patient?.patientsex === "2" ? "Female" : undefined,
+      patientSex:
+        r.patient?.patientsex === "1"
+          ? "Male"
+          : r.patient?.patientsex === "2"
+            ? "Female"
+            : undefined,
       receiveDate: r.receivedate ?? undefined,
     }));
 
@@ -139,7 +161,12 @@ export const drugLabelingTool = createTool({
     "Search FDA drug labeling (package insert) for official indications, contraindications, warnings, adverse reactions, dosing, and mechanism of action.",
   inputSchema: z.object({
     drugName: z.string().describe("Drug generic or brand name"),
-    limit: z.number().min(1).max(5).default(1).describe("Number of labeling records"),
+    limit: z
+      .number()
+      .min(1)
+      .max(5)
+      .default(1)
+      .describe("Number of labeling records"),
   }),
   outputSchema: z.object({
     results: z.array(
@@ -163,7 +190,10 @@ export const drugLabelingTool = createTool({
     const result = await fetchJSON(url);
 
     if (result.error) {
-      return { results: [], error: "No labeling information found for this drug." };
+      return {
+        results: [],
+        error: "No labeling information found for this drug.",
+      };
     }
 
     const results = (result.results ?? []).map((r: FdaDrugLabelRecord) => ({
@@ -176,7 +206,10 @@ export const drugLabelingTool = createTool({
       adverseReactions: r.adverse_reactions?.join(" ") ?? undefined,
       dosage: r.dosage_and_administration?.join(" ") ?? undefined,
       mechanismOfAction: r.mechanism_of_action?.join(" ") ?? undefined,
-      pregnancyCategory: (Array.isArray(r.pregnancy) ? r.pregnancy.join(" ") : r.pregnancy) ?? r.openfda?.pregnancy_category?.join(", ") ?? undefined,
+      pregnancyCategory:
+        (Array.isArray(r.pregnancy) ? r.pregnancy.join(" ") : r.pregnancy) ??
+        r.openfda?.pregnancy_category?.join(", ") ??
+        undefined,
     }));
 
     return { results };
@@ -192,7 +225,12 @@ export const drugRecallTool = createTool({
     "Search FDA drug recalls and enforcement reports. Returns recall reason, classification, and product details.",
   inputSchema: z.object({
     drugName: z.string().describe("Drug name to search recalls for"),
-    limit: z.number().min(1).max(10).default(5).describe("Number of recall records"),
+    limit: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(5)
+      .describe("Number of recall records"),
   }),
   outputSchema: z.object({
     results: z.array(
@@ -238,7 +276,11 @@ export const substanceToxicologyTool = createTool({
   description:
     "Search FDA Substance Data System for toxicology and pharmacology data on chemicals and substances. Useful for toxicology and poisoning cases.",
   inputSchema: z.object({
-    substanceName: z.string().describe("Chemical or substance name (e.g. 'ethylene glycol', 'arsenic')"),
+    substanceName: z
+      .string()
+      .describe(
+        "Chemical or substance name (e.g. 'ethylene glycol', 'arsenic')",
+      ),
     limit: z.number().min(1).max(5).default(3).describe("Number of records"),
   }),
   outputSchema: z.object({

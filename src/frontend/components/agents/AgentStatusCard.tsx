@@ -10,7 +10,10 @@ interface AgentStatusCardProps {
   status?: SpecialistStatus;
 }
 
-const statusStyles: Record<SpecialistStatus, { bg: string; icon: string; dot: string; text: string }> = {
+const statusStyles: Record<
+  SpecialistStatus,
+  { bg: string; icon: string; dot: string; text: string }
+> = {
   idle: {
     bg: "bg-slate-100 dark:bg-slate-800",
     icon: "text-slate-400",
@@ -58,13 +61,19 @@ export function AgentStatusCard({
           )}
         </div>
         {styles.dot && (
-          <span className={`absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ${styles.dot}`} />
+          <span
+            className={`absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ${styles.dot}`}
+          />
         )}
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium truncate">{name}</p>
         <p className={`text-xs truncate ${styles.text}`}>
-          {status === "idle" ? "Waiting..." : status === "active" ? "Consulting..." : "Analysis complete"}
+          {status === "idle"
+            ? "Waiting..."
+            : status === "active"
+              ? "Consulting..."
+              : "Analysis complete"}
         </p>
       </div>
     </div>

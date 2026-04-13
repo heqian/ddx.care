@@ -63,7 +63,8 @@ describe("API Endpoints", () => {
     const startRes = await fetch(`${BASE}/v1/diagnose`, {
       method: "POST",
       body: JSON.stringify({
-        medicalHistory: "45-year-old with history of hypertension on lisinopril.",
+        medicalHistory:
+          "45-year-old with history of hypertension on lisinopril.",
         conversationTranscript:
           "The individual reports a severe headache for 3 days. Clinician noted blurred vision.",
         labResults: "BP: 180 over 110. Heart rate: 90.",
@@ -72,7 +73,10 @@ describe("API Endpoints", () => {
     });
 
     expect(startRes.status).toBe(202);
-    const startBody = (await startRes.json()) as { jobId: string; status: string };
+    const startBody = (await startRes.json()) as {
+      jobId: string;
+      status: string;
+    };
     expect(startBody.jobId).toBeDefined();
     expect(startBody.status).toBe("pending");
 
@@ -149,7 +153,7 @@ describe("API Endpoints", () => {
       try {
         const body = JSON.parse(text) as { error: string };
         expect(body.error).toBeTruthy();
-      } catch (e) {
+      } catch (_e) {
         // ignore JSON parse error if body is plain text or empty
       }
     }
@@ -159,8 +163,12 @@ describe("API Endpoints", () => {
     test("GET /v1/agents includes CORS headers", async () => {
       const res = await fetch(`${BASE}/v1/agents`);
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
-      expect(res.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, OPTIONS");
-      expect(res.headers.get("Access-Control-Allow-Headers")).toBe("Content-Type");
+      expect(res.headers.get("Access-Control-Allow-Methods")).toBe(
+        "GET, POST, OPTIONS",
+      );
+      expect(res.headers.get("Access-Control-Allow-Headers")).toBe(
+        "Content-Type",
+      );
     });
 
     test("POST /v1/diagnose includes CORS headers on error", async () => {
@@ -170,7 +178,9 @@ describe("API Endpoints", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
-      expect(res.headers.get("Access-Control-Allow-Headers")).toBe("Content-Type");
+      expect(res.headers.get("Access-Control-Allow-Headers")).toBe(
+        "Content-Type",
+      );
     });
 
     test("GET /v1/status/:jobId includes CORS headers on 404", async () => {
@@ -183,8 +193,12 @@ describe("API Endpoints", () => {
       const res = await fetch(`${BASE}/v1/diagnose`, { method: "OPTIONS" });
       expect(res.status).toBe(204);
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
-      expect(res.headers.get("Access-Control-Allow-Methods")).toBe("GET, POST, OPTIONS");
-      expect(res.headers.get("Access-Control-Allow-Headers")).toBe("Content-Type");
+      expect(res.headers.get("Access-Control-Allow-Methods")).toBe(
+        "GET, POST, OPTIONS",
+      );
+      expect(res.headers.get("Access-Control-Allow-Headers")).toBe(
+        "Content-Type",
+      );
     });
 
     test("OPTIONS /v1/agents returns preflight response", async () => {
@@ -194,13 +208,17 @@ describe("API Endpoints", () => {
     });
 
     test("OPTIONS /v1/status/test-id returns preflight response", async () => {
-      const res = await fetch(`${BASE}/v1/status/test-id`, { method: "OPTIONS" });
+      const res = await fetch(`${BASE}/v1/status/test-id`, {
+        method: "OPTIONS",
+      });
       expect(res.status).toBe(204);
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
     });
 
     test("OPTIONS /v1/unknown returns preflight response via catch-all", async () => {
-      const res = await fetch(`${BASE}/v1/unknown-route`, { method: "OPTIONS" });
+      const res = await fetch(`${BASE}/v1/unknown-route`, {
+        method: "OPTIONS",
+      });
       expect(res.status).toBe(204);
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
     });

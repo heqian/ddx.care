@@ -13,7 +13,9 @@ function getNcbiToken(): Promise<void> {
     const now = Date.now();
     const elapsed = now - lastNcbiTime;
     if (elapsed < NCBI_RATE_LIMIT_MS) {
-      await new Promise((resolve) => setTimeout(resolve, NCBI_RATE_LIMIT_MS - elapsed));
+      await new Promise((resolve) =>
+        setTimeout(resolve, NCBI_RATE_LIMIT_MS - elapsed),
+      );
     }
     lastNcbiTime = Date.now();
   });
@@ -21,7 +23,12 @@ function getNcbiToken(): Promise<void> {
 }
 
 export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
-  const { timeoutMs = 10000, ignore404 = false, errorPrefix = "API", ...fetchOptions } = options;
+  const {
+    timeoutMs = 10000,
+    ignore404 = false,
+    errorPrefix = "API",
+    ...fetchOptions
+  } = options;
 
   // Rate limiting for NCBI APIs
   if (url.includes("ncbi.nlm.nih.gov")) {

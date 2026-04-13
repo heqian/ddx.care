@@ -40,13 +40,17 @@ function resetBody() {
 
 // Helper: query rendered output for text content
 // Uses recursive descent to match against element textContent (handles split React text nodes)
-function queryByText(container: Element, text: string | RegExp): Element | null {
+function queryByText(
+  container: Element,
+  text: string | RegExp,
+): Element | null {
   const queue: Element[] = [container];
   while (queue.length > 0) {
     const el = queue.shift()!;
     // Check this element's direct text (not children's)
     const ownText = el.textContent ?? "";
-    const matches = typeof text === "string" ? ownText.includes(text) : text.test(ownText);
+    const matches =
+      typeof text === "string" ? ownText.includes(text) : text.test(ownText);
     if (matches && el !== container) {
       return el;
     }
@@ -64,12 +68,16 @@ function getByText(container: Element, text: string | RegExp): Element {
   return el;
 }
 
-function queryAllByText(container: Element, text: string | RegExp): Element[] {
+function _queryAllByText(container: Element, text: string | RegExp): Element[] {
   const results: Element[] = [];
-  const walker = happyDocument.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+  const walker = happyDocument.createTreeWalker(
+    container,
+    NodeFilter.SHOW_TEXT,
+  );
   while (walker.nextNode()) {
     const nodeText = walker.currentNode.textContent ?? "";
-    const matches = typeof text === "string" ? nodeText.includes(text) : text.test(nodeText);
+    const matches =
+      typeof text === "string" ? nodeText.includes(text) : text.test(nodeText);
     if (matches && walker.currentNode.parentElement) {
       results.push(walker.currentNode.parentElement);
     }
@@ -103,20 +111,32 @@ function makeDiagnosis(overrides: Partial<Diagnosis> = {}): Diagnosis {
 describe("DiagnosisCard", () => {
   test("renders diagnosis name and rank", () => {
     resetBody();
-    const { container } = render(createElement(DiagnosisCard, { diagnosis: makeDiagnosis({ name: "Migraine" }) }));
+    const { container } = render(
+      createElement(DiagnosisCard, {
+        diagnosis: makeDiagnosis({ name: "Migraine" }),
+      }),
+    );
     expect(getByText(container, "Migraine")).toBeTruthy();
     expect(getByText(container, "1")).toBeTruthy();
   });
 
   test("renders confidence badge text", () => {
     resetBody();
-    const { container } = render(createElement(DiagnosisCard, { diagnosis: makeDiagnosis({ confidence: 85 }) }));
+    const { container } = render(
+      createElement(DiagnosisCard, {
+        diagnosis: makeDiagnosis({ confidence: 85 }),
+      }),
+    );
     expect(getByText(container, "85% confidence")).toBeTruthy();
   });
 
   test("renders urgency badge text", () => {
     resetBody();
-    const { container } = render(createElement(DiagnosisCard, { diagnosis: makeDiagnosis({ urgency: "emergent" }) }));
+    const { container } = render(
+      createElement(DiagnosisCard, {
+        diagnosis: makeDiagnosis({ urgency: "emergent" }),
+      }),
+    );
     expect(getByText(container, "Emergent")).toBeTruthy();
   });
 
@@ -137,7 +157,9 @@ describe("DiagnosisCard", () => {
     resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
-        diagnosis: makeDiagnosis({ contradictoryEvidence: ["No prior history"] }),
+        diagnosis: makeDiagnosis({
+          contradictoryEvidence: ["No prior history"],
+        }),
       }),
     );
     expect(getByText(container, "No prior history")).toBeTruthy();
@@ -147,7 +169,9 @@ describe("DiagnosisCard", () => {
     resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
-        diagnosis: makeDiagnosis({ nextSteps: ["Order CT scan", "Administer meds"] }),
+        diagnosis: makeDiagnosis({
+          nextSteps: ["Order CT scan", "Administer meds"],
+        }),
       }),
     );
     expect(getByText(container, "Order CT scan")).toBeTruthy();
@@ -172,13 +196,17 @@ describe("DiagnosisCard", () => {
 
   test("renders rank 2 with correct badge", () => {
     resetBody();
-    const { container } = render(createElement(DiagnosisCard, { diagnosis: makeDiagnosis({ rank: 2 }) }));
+    const { container } = render(
+      createElement(DiagnosisCard, { diagnosis: makeDiagnosis({ rank: 2 }) }),
+    );
     expect(getByText(container, "2")).toBeTruthy();
   });
 
   test("renders rank 3 with correct badge", () => {
     resetBody();
-    const { container } = render(createElement(DiagnosisCard, { diagnosis: makeDiagnosis({ rank: 3 }) }));
+    const { container } = render(
+      createElement(DiagnosisCard, { diagnosis: makeDiagnosis({ rank: 3 }) }),
+    );
     expect(getByText(container, "3")).toBeTruthy();
   });
 
@@ -186,7 +214,9 @@ describe("DiagnosisCard", () => {
     resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
-        diagnosis: makeDiagnosis({ rationale: "Patient has classic symptoms." }),
+        diagnosis: makeDiagnosis({
+          rationale: "Patient has classic symptoms.",
+        }),
       }),
     );
     expect(getByText(container, /classic symptoms/)).toBeTruthy();
@@ -201,33 +231,43 @@ import { ConfidenceBadge } from "../src/frontend/components/diagnosis/Confidence
 describe("ConfidenceBadge", () => {
   test("renders confidence percentage", () => {
     resetBody();
-    const { container } = render(createElement(ConfidenceBadge, { confidence: 75 }));
+    const { container } = render(
+      createElement(ConfidenceBadge, { confidence: 75 }),
+    );
     expect(getByText(container, "75% confidence")).toBeTruthy();
   });
 
   test("returns null for null confidence", () => {
     resetBody();
-    const { container } = render(createElement(ConfidenceBadge, { confidence: null }));
+    const { container } = render(
+      createElement(ConfidenceBadge, { confidence: null }),
+    );
     expect(container.innerHTML).toBe("");
   });
 
   test("high confidence gets green styling", () => {
     resetBody();
-    const { container } = render(createElement(ConfidenceBadge, { confidence: 90 }));
+    const { container } = render(
+      createElement(ConfidenceBadge, { confidence: 90 }),
+    );
     const badge = getByText(container, "90% confidence");
     expect(badge.className).toContain("bg-green");
   });
 
   test("medium confidence gets yellow styling", () => {
     resetBody();
-    const { container } = render(createElement(ConfidenceBadge, { confidence: 50 }));
+    const { container } = render(
+      createElement(ConfidenceBadge, { confidence: 50 }),
+    );
     const badge = getByText(container, "50% confidence");
     expect(badge.className).toContain("bg-yellow");
   });
 
   test("low confidence gets red styling", () => {
     resetBody();
-    const { container } = render(createElement(ConfidenceBadge, { confidence: 20 }));
+    const { container } = render(
+      createElement(ConfidenceBadge, { confidence: 20 }),
+    );
     const badge = getByText(container, "20% confidence");
     expect(badge.className).toContain("bg-red");
   });
@@ -241,25 +281,33 @@ import { UrgencyBadge } from "../src/frontend/components/diagnosis/UrgencyBadge"
 describe("UrgencyBadge", () => {
   test("renders emergent label", () => {
     resetBody();
-    const { container } = render(createElement(UrgencyBadge, { urgency: "emergent" }));
+    const { container } = render(
+      createElement(UrgencyBadge, { urgency: "emergent" }),
+    );
     expect(getByText(container, "Emergent")).toBeTruthy();
   });
 
   test("renders urgent label", () => {
     resetBody();
-    const { container } = render(createElement(UrgencyBadge, { urgency: "urgent" }));
+    const { container } = render(
+      createElement(UrgencyBadge, { urgency: "urgent" }),
+    );
     expect(getByText(container, "Urgent")).toBeTruthy();
   });
 
   test("renders routine label", () => {
     resetBody();
-    const { container } = render(createElement(UrgencyBadge, { urgency: "routine" }));
+    const { container } = render(
+      createElement(UrgencyBadge, { urgency: "routine" }),
+    );
     expect(getByText(container, "Routine")).toBeTruthy();
   });
 
   test("returns null for null urgency", () => {
     resetBody();
-    const { container } = render(createElement(UrgencyBadge, { urgency: null }));
+    const { container } = render(
+      createElement(UrgencyBadge, { urgency: null }),
+    );
     expect(container.innerHTML).toBe("");
   });
 });
@@ -272,25 +320,42 @@ import { FileDropZone } from "../src/frontend/components/ui/FileDropZone";
 describe("FileDropZone", () => {
   test("renders label text", () => {
     resetBody();
-    const { container } = render(createElement(FileDropZone, { onFileContent: () => {}, label: "Upload lab results" }));
+    const { container } = render(
+      createElement(FileDropZone, {
+        onFileContent: () => {},
+        label: "Upload lab results",
+      }),
+    );
     expect(getByText(container, "Upload lab results")).toBeTruthy();
   });
 
   test("renders accept hint", () => {
     resetBody();
-    const { container } = render(createElement(FileDropZone, { onFileContent: () => {}, label: "Upload", accept: ".txt,.csv" }));
+    const { container } = render(
+      createElement(FileDropZone, {
+        onFileContent: () => {},
+        label: "Upload",
+        accept: ".txt,.csv",
+      }),
+    );
     expect(getByText(container, /\.txt,\.csv/)).toBeTruthy();
   });
 
   test("calls onFileContent when file is selected", async () => {
     resetBody();
     const onFileContent = vi.fn();
-    const { container } = render(createElement(FileDropZone, { onFileContent, label: "Upload" }));
+    const { container } = render(
+      createElement(FileDropZone, { onFileContent, label: "Upload" }),
+    );
 
-    const file = new happyWindow.File(["file content"], "test.txt", { type: "text/plain" });
+    const file = new happyWindow.File(["file content"], "test.txt", {
+      type: "text/plain",
+    });
 
     // Find the hidden input by traversing children
-    const input = Array.from(container.getElementsByTagName("input"))[0] as HTMLInputElement;
+    const input = Array.from(
+      container.getElementsByTagName("input"),
+    )[0] as HTMLInputElement;
 
     // Simulate file selection via DataTransfer
     const dataTransfer = new happyWindow.DataTransfer();
@@ -471,9 +536,7 @@ import { Badge } from "../src/frontend/components/ui/Badge";
 describe("Badge", () => {
   test("renders children text", () => {
     resetBody();
-    const { container } = render(
-      createElement(Badge, {}, "Test Label"),
-    );
+    const { container } = render(createElement(Badge, {}, "Test Label"));
     expect(getByText(container, "Test Label")).toBeTruthy();
   });
 
@@ -488,9 +551,7 @@ describe("Badge", () => {
 
   test("applies red color classes", () => {
     resetBody();
-    const { container } = render(
-      createElement(Badge, { color: "red" }, "Red"),
-    );
+    const { container } = render(createElement(Badge, { color: "red" }, "Red"));
     const badge = getByText(container, "Red");
     expect(badge.className).toContain("bg-red-100");
   });
@@ -506,9 +567,7 @@ describe("Badge", () => {
 
   test("defaults to gray color (no color prop)", () => {
     resetBody();
-    const { container } = render(
-      createElement(Badge, {}, "Default"),
-    );
+    const { container } = render(createElement(Badge, {}, "Default"));
     const badge = getByText(container, "Default");
     expect(badge.className).toContain("bg-slate-100");
   });
@@ -532,8 +591,11 @@ describe("Modal", () => {
   test("renders when open is true", () => {
     resetBody();
     const { container } = render(
-      createElement(Modal, { open: true, onClose: () => {}, title: "Test Modal" },
-        createElement("p", {}, "Modal content")),
+      createElement(
+        Modal,
+        { open: true, onClose: () => {}, title: "Test Modal" },
+        createElement("p", {}, "Modal content"),
+      ),
     );
     expect(getByText(container, "Test Modal")).toBeTruthy();
     expect(getByText(container, "Modal content")).toBeTruthy();
@@ -542,8 +604,11 @@ describe("Modal", () => {
   test("does not render when open is false", () => {
     resetBody();
     const { container } = render(
-      createElement(Modal, { open: false, onClose: () => {}, title: "Hidden" },
-        createElement("p", {}, "Should not show")),
+      createElement(
+        Modal,
+        { open: false, onClose: () => {}, title: "Hidden" },
+        createElement("p", {}, "Should not show"),
+      ),
     );
     expect(queryByText(container, "Hidden")).toBeNull();
     expect(queryByText(container, "Should not show")).toBeNull();
@@ -552,8 +617,11 @@ describe("Modal", () => {
   test("renders title correctly", () => {
     resetBody();
     const { container } = render(
-      createElement(Modal, { open: true, onClose: () => {}, title: "Important Dialog" },
-        createElement("p", {}, "Content")),
+      createElement(
+        Modal,
+        { open: true, onClose: () => {}, title: "Important Dialog" },
+        createElement("p", {}, "Content"),
+      ),
     );
     expect(getByText(container, "Important Dialog")).toBeTruthy();
   });
@@ -562,8 +630,11 @@ describe("Modal", () => {
     resetBody();
     const onClose = vi.fn();
     const { container } = render(
-      createElement(Modal, { open: true, onClose, title: "Closable" },
-        createElement("p", {}, "Content")),
+      createElement(
+        Modal,
+        { open: true, onClose, title: "Closable" },
+        createElement("p", {}, "Content"),
+      ),
     );
     // Find all buttons and click the one that's not the main title area
     const buttons = Array.from(container.getElementsByTagName("button"));
@@ -579,8 +650,11 @@ describe("Modal", () => {
     resetBody();
     const onClose = vi.fn();
     const { container } = render(
-      createElement(Modal, { open: true, onClose, title: "Backdrop Test" },
-        createElement("p", {}, "Content")),
+      createElement(
+        Modal,
+        { open: true, onClose, title: "Backdrop Test" },
+        createElement("p", {}, "Content"),
+      ),
     );
     // The backdrop is the second div inside the fixed container
     // It has an onClick={onClose} handler

@@ -4,7 +4,11 @@ import { logger } from "../src/backend/utils/logger";
 
 describe("RateLimiter — IP Rate Limiting", () => {
   test("allows requests under the limit", () => {
-    const limiter = new RateLimiter({ maxRequests: 3, windowMs: 60_000, maxConcurrent: 5 });
+    const limiter = new RateLimiter({
+      maxRequests: 3,
+      windowMs: 60_000,
+      maxConcurrent: 5,
+    });
 
     // First check should be allowed (no previous requests recorded)
     expect(limiter.check("1.2.3.4")).toEqual({ allowed: true });
@@ -18,7 +22,11 @@ describe("RateLimiter — IP Rate Limiting", () => {
   });
 
   test("blocks requests at the limit", () => {
-    const limiter = new RateLimiter({ maxRequests: 2, windowMs: 60_000, maxConcurrent: 5 });
+    const limiter = new RateLimiter({
+      maxRequests: 2,
+      windowMs: 60_000,
+      maxConcurrent: 5,
+    });
 
     // Record 2 requests
     limiter.check("1.2.3.4");
@@ -36,7 +44,11 @@ describe("RateLimiter — IP Rate Limiting", () => {
   });
 
   test("retryAfterMs is reasonable", () => {
-    const limiter = new RateLimiter({ maxRequests: 1, windowMs: 10_000, maxConcurrent: 5 });
+    const limiter = new RateLimiter({
+      maxRequests: 1,
+      windowMs: 10_000,
+      maxConcurrent: 5,
+    });
 
     limiter.check("ip1");
     limiter.record("ip1");
@@ -51,7 +63,11 @@ describe("RateLimiter — IP Rate Limiting", () => {
   });
 
   test("different IPs are tracked independently", () => {
-    const limiter = new RateLimiter({ maxRequests: 1, windowMs: 60_000, maxConcurrent: 5 });
+    const limiter = new RateLimiter({
+      maxRequests: 1,
+      windowMs: 60_000,
+      maxConcurrent: 5,
+    });
 
     limiter.check("ip-a");
     limiter.record("ip-a");
@@ -64,19 +80,31 @@ describe("RateLimiter — IP Rate Limiting", () => {
   });
 
   test("unknown IP gets allowed on first check", () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 5 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 5,
+    });
     expect(limiter.check("never-seen")).toEqual({ allowed: true });
   });
 });
 
 describe("RateLimiter — Concurrent Workflow Limiting", () => {
   test("canStartWorkflow returns true under limit", () => {
-    const limiter = new RateLimiter({ maxRequests: 100, windowMs: 60_000, maxConcurrent: 3 });
+    const limiter = new RateLimiter({
+      maxRequests: 100,
+      windowMs: 60_000,
+      maxConcurrent: 3,
+    });
     expect(limiter.canStartWorkflow()).toBe(true);
   });
 
   test("canStartWorkflow returns false at capacity", () => {
-    const limiter = new RateLimiter({ maxRequests: 100, windowMs: 60_000, maxConcurrent: 2 });
+    const limiter = new RateLimiter({
+      maxRequests: 100,
+      windowMs: 60_000,
+      maxConcurrent: 2,
+    });
 
     limiter.startWorkflow();
     limiter.startWorkflow();
@@ -85,7 +113,11 @@ describe("RateLimiter — Concurrent Workflow Limiting", () => {
   });
 
   test("finishWorkflow frees capacity", () => {
-    const limiter = new RateLimiter({ maxRequests: 100, windowMs: 60_000, maxConcurrent: 1 });
+    const limiter = new RateLimiter({
+      maxRequests: 100,
+      windowMs: 60_000,
+      maxConcurrent: 1,
+    });
 
     limiter.startWorkflow();
     expect(limiter.canStartWorkflow()).toBe(false);
@@ -95,7 +127,11 @@ describe("RateLimiter — Concurrent Workflow Limiting", () => {
   });
 
   test("finishWorkflow does not go below zero", () => {
-    const limiter = new RateLimiter({ maxRequests: 100, windowMs: 60_000, maxConcurrent: 5 });
+    const limiter = new RateLimiter({
+      maxRequests: 100,
+      windowMs: 60_000,
+      maxConcurrent: 5,
+    });
 
     // Call finish without start — should not go negative
     limiter.finishWorkflow();
@@ -112,7 +148,11 @@ describe("RateLimiter — Concurrent Workflow Limiting", () => {
 
 describe("RateLimiter — Prune", () => {
   test("prune removes expired client entries", async () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 100, maxConcurrent: 5 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 100,
+      maxConcurrent: 5,
+    });
 
     limiter.check("stale-ip");
     limiter.record("stale-ip");
@@ -128,7 +168,11 @@ describe("RateLimiter — Prune", () => {
   });
 
   test("prune keeps IPs with recent requests", () => {
-    const limiter = new RateLimiter({ maxRequests: 2, windowMs: 60_000, maxConcurrent: 5 });
+    const limiter = new RateLimiter({
+      maxRequests: 2,
+      windowMs: 60_000,
+      maxConcurrent: 5,
+    });
 
     limiter.check("active-ip");
     limiter.record("active-ip");

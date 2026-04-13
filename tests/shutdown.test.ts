@@ -3,12 +3,20 @@ import { RateLimiter } from "../src/backend/utils/rate-limiter";
 
 describe("RateLimiter — activeWorkflows tracking", () => {
   test("activeWorkflows is 0 initially", () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 3 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 3,
+    });
     expect(limiter.activeWorkflows).toBe(0);
   });
 
   test("activeWorkflows increments on startWorkflow", () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 3 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 3,
+    });
     limiter.startWorkflow();
     expect(limiter.activeWorkflows).toBe(1);
     limiter.startWorkflow();
@@ -16,7 +24,11 @@ describe("RateLimiter — activeWorkflows tracking", () => {
   });
 
   test("activeWorkflows decrements on finishWorkflow", () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 3 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 3,
+    });
     limiter.startWorkflow();
     limiter.startWorkflow();
     limiter.finishWorkflow();
@@ -26,7 +38,11 @@ describe("RateLimiter — activeWorkflows tracking", () => {
   });
 
   test("activeWorkflows does not go below zero", () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 3 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 3,
+    });
     limiter.finishWorkflow();
     expect(limiter.activeWorkflows).toBe(0);
   });
@@ -34,7 +50,11 @@ describe("RateLimiter — activeWorkflows tracking", () => {
 
 describe("RateLimiter — canStartWorkflow", () => {
   test("allows workflows up to maxConcurrent", () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 2 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 2,
+    });
     expect(limiter.canStartWorkflow()).toBe(true);
     limiter.startWorkflow();
     expect(limiter.canStartWorkflow()).toBe(true);
@@ -43,7 +63,11 @@ describe("RateLimiter — canStartWorkflow", () => {
   });
 
   test("allows new workflow after one finishes", () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 1 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 1,
+    });
     limiter.startWorkflow();
     expect(limiter.canStartWorkflow()).toBe(false);
     limiter.finishWorkflow();
@@ -53,7 +77,11 @@ describe("RateLimiter — canStartWorkflow", () => {
 
 describe("Shutdown wait-loop pattern", () => {
   test("resolves immediately when no active workflows", async () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 3 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 3,
+    });
     const timeout = 5_000;
     const start = Date.now();
 
@@ -68,7 +96,11 @@ describe("Shutdown wait-loop pattern", () => {
   });
 
   test("waits for workflow to finish before proceeding", async () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 3 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 3,
+    });
     limiter.startWorkflow();
 
     const timeout = 5_000;
@@ -89,7 +121,11 @@ describe("Shutdown wait-loop pattern", () => {
   });
 
   test("times out when workflows never finish", async () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 3 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 3,
+    });
     limiter.startWorkflow();
 
     const timeout = 500; // Short timeout for test speed
@@ -108,7 +144,9 @@ describe("Shutdown wait-loop pattern", () => {
 
   test("clearInterval prevents timer from firing after shutdown", () => {
     let callCount = 0;
-    const timer = setInterval(() => { callCount++; }, 10);
+    const timer = setInterval(() => {
+      callCount++;
+    }, 10);
 
     // Clear immediately
     clearInterval(timer);
@@ -123,7 +161,11 @@ describe("Shutdown wait-loop pattern", () => {
   });
 
   test("multiple concurrent workflows tracked correctly", async () => {
-    const limiter = new RateLimiter({ maxRequests: 5, windowMs: 60_000, maxConcurrent: 3 });
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 3,
+    });
     limiter.startWorkflow();
     limiter.startWorkflow();
     limiter.startWorkflow();

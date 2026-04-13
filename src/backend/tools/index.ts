@@ -1,11 +1,26 @@
 // PubMed / NCBI E-utilities
-export { pubmedSearchTool, relatedArticlesTool, omimSearchTool, geneReviewsSearchTool, clinVarSearchTool } from "./pubmed-search";
+export {
+  pubmedSearchTool,
+  relatedArticlesTool,
+  omimSearchTool,
+  geneReviewsSearchTool,
+  clinVarSearchTool,
+} from "./pubmed-search";
 
 // Drug interactions (RxNav)
-export { drugLookupTool, drugInteractionTool, drugSpellingTool } from "./drug-interaction";
+export {
+  drugLookupTool,
+  drugInteractionTool,
+  drugSpellingTool,
+} from "./drug-interaction";
 
 // FDA drug safety (OpenFDA)
-export { adverseEventsTool, drugLabelingTool, drugRecallTool, substanceToxicologyTool } from "./open-fda";
+export {
+  adverseEventsTool,
+  drugLabelingTool,
+  drugRecallTool,
+  substanceToxicologyTool,
+} from "./open-fda";
 
 // Clinical trials
 export { clinicalTrialsSearchTool } from "./clinical-trials";
@@ -18,9 +33,22 @@ export { medlinePlusSearchTool } from "./medlineplus";
 import type { SpecialistId } from "../agents";
 import type { ToolsInput } from "@mastra/core/agent";
 
-import { pubmedSearchTool, omimSearchTool, geneReviewsSearchTool, clinVarSearchTool } from "./pubmed-search";
-import { drugLookupTool, drugInteractionTool, drugSpellingTool } from "./drug-interaction";
-import { adverseEventsTool, drugLabelingTool, substanceToxicologyTool } from "./open-fda";
+import {
+  pubmedSearchTool,
+  omimSearchTool,
+  geneReviewsSearchTool,
+  clinVarSearchTool,
+} from "./pubmed-search";
+import {
+  drugLookupTool,
+  drugInteractionTool,
+  drugSpellingTool,
+} from "./drug-interaction";
+import {
+  adverseEventsTool,
+  drugLabelingTool,
+  substanceToxicologyTool,
+} from "./open-fda";
 import { clinicalTrialsSearchTool } from "./clinical-trials";
 import { medlinePlusSearchTool } from "./medlineplus";
 

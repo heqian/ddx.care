@@ -15,7 +15,8 @@ interface WaitingRoomProps {
 }
 
 const CALLING_RE = /^Calling specialist (\w+)\.\.\.$/;
-const RECEIVED_RE = /^(?:Received analysis from|Failed to receive analysis from) (\w+)$/;
+const RECEIVED_RE =
+  /^(?:Received analysis from|Failed to receive analysis from) (\w+)$/;
 
 function deriveSpecialistStatuses(
   progress: { time: string; message: string }[] | undefined,
@@ -37,11 +38,17 @@ function deriveSpecialistStatuses(
   return map;
 }
 
-export function WaitingRoom({ jobId, onComplete, onCancel, onRetry }: WaitingRoomProps) {
+export function WaitingRoom({
+  jobId,
+  onComplete,
+  onCancel,
+  onRetry,
+}: WaitingRoomProps) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentsError, setAgentsError] = useState(false);
   const { status, error } = useJobStream(jobId);
-  const isTerminal = status?.status === "failed" || status?.status === "completed";
+  const isTerminal =
+    status?.status === "failed" || status?.status === "completed";
 
   useEffect(() => {
     getAgents()
@@ -75,18 +82,20 @@ export function WaitingRoom({ jobId, onComplete, onCancel, onRetry }: WaitingRoo
             : "Our specialist panel is reviewing the patient data. This typically takes a few minutes."}
         </p>
       </div>
-      
+
       {status?.progress && status.progress.length > 0 && (
-         <div className="max-w-2xl mx-auto mb-8 bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-y-auto h-64 flex flex-col shadow-inner">
-           <div className="space-y-2 mt-auto">
-             {status.progress.map((p, i) => (
-                <div key={i} className="text-cyan-300 opacity-90 break-words">
-                  <span className="text-slate-500 text-xs mr-2">[{new Date(p.time).toLocaleTimeString()}]</span>
-                  {p.message}
-                </div>
-             ))}
-           </div>
-         </div>
+        <div className="max-w-2xl mx-auto mb-8 bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-y-auto h-64 flex flex-col shadow-inner">
+          <div className="space-y-2 mt-auto">
+            {status.progress.map((p, i) => (
+              <div key={i} className="text-cyan-300 opacity-90 break-words">
+                <span className="text-slate-500 text-xs mr-2">
+                  [{new Date(p.time).toLocaleTimeString()}]
+                </span>
+                {p.message}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {agentsError && (

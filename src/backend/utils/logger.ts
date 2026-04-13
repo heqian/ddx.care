@@ -20,7 +20,11 @@ function formatLog(entry: LogEntry): string {
   return parts.join(" ");
 }
 
-function log(level: LogLevel, event: string, data?: Record<string, unknown>): void {
+function log(
+  level: LogLevel,
+  event: string,
+  data?: Record<string, unknown>,
+): void {
   const entry: LogEntry = {
     timestamp: new Date().toISOString(),
     level,
@@ -41,11 +45,20 @@ function log(level: LogLevel, event: string, data?: Record<string, unknown>): vo
 }
 
 export const logger = {
-  info: (event: string, data?: Record<string, unknown>) => log("info", event, data),
-  warn: (event: string, data?: Record<string, unknown>) => log("warn", event, data),
-  error: (event: string, data?: Record<string, unknown>) => log("error", event, data),
+  info: (event: string, data?: Record<string, unknown>) =>
+    log("info", event, data),
+  warn: (event: string, data?: Record<string, unknown>) =>
+    log("warn", event, data),
+  error: (event: string, data?: Record<string, unknown>) =>
+    log("error", event, data),
 
-  request(method: string, path: string, status: number, durationMs: number, data?: Record<string, unknown>): void {
+  request(
+    method: string,
+    path: string,
+    status: number,
+    durationMs: number,
+    data?: Record<string, unknown>,
+  ): void {
     this.info("http_request", { method, path, status, durationMs, ...data });
   },
 
@@ -53,7 +66,11 @@ export const logger = {
     this.info("workflow_start", { jobId });
   },
 
-  workflowComplete(jobId: string, durationMs: number, specialistCount: number): void {
+  workflowComplete(
+    jobId: string,
+    durationMs: number,
+    specialistCount: number,
+  ): void {
     this.info("workflow_complete", { jobId, durationMs, specialistCount });
   },
 
@@ -61,7 +78,17 @@ export const logger = {
     this.error("workflow_fail", { jobId, durationMs, error });
   },
 
-  specialistCall(specialistId: string, jobId: string, durationMs: number, success: boolean): void {
-    this.info("specialist_call", { specialistId, jobId, durationMs, success: String(success) });
+  specialistCall(
+    specialistId: string,
+    jobId: string,
+    durationMs: number,
+    success: boolean,
+  ): void {
+    this.info("specialist_call", {
+      specialistId,
+      jobId,
+      durationMs,
+      success: String(success),
+    });
   },
 };

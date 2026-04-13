@@ -12,6 +12,7 @@ Default to using Bun instead of Node.js. You should NEVER use Python or any Pyth
 - Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
 - Use `bunx <package> <command>` instead of `npx <package> <command>`
 - Bun automatically loads `.env`, so don't use `dotenv`.
+- **Always run the linter (`bun run lint`) after making any code changes.**
 
 ## Scripts
 
