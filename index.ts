@@ -7,7 +7,10 @@ import {
   JOB_TTL_MS,
   CLEANUP_INTERVAL_MS,
   RATE_LIMIT_PRUNE_INTERVAL_MS,
+  validateConfig,
 } from "./src/backend/config";
+
+validateConfig();
 
 const cleanupTimer = setInterval(() => {
   progressStore.cleanupExpired(JOB_TTL_MS);
