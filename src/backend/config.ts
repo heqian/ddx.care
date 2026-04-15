@@ -17,7 +17,7 @@ export const RATE_LIMIT_MAX_REQUESTS = parseInt(
   10,
 );
 export const RATE_LIMIT_WINDOW_MS = parseInt(
-  process.env.RATE_LIMIT_WINDOW_MS ?? String(60 * 60 * 1000),
+  process.env.RATE_LIMIT_WINDOW_MS ?? String(60 * 1000),
   10,
 );
 export const MAX_CONCURRENT_WORKFLOWS = parseInt(
