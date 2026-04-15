@@ -1,6 +1,11 @@
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z, type infer as zInfer } from "zod";
-import { DIAGNOSIS_TIMEOUT_MS, MAX_DIAGNOSIS_ROUNDS } from "../config";
+import {
+  AGENT_GENERATE_MAX_RETRIES,
+  AGENT_GENERATE_RETRY_BASE_DELAY,
+  DIAGNOSIS_TIMEOUT_MS,
+  MAX_DIAGNOSIS_ROUNDS,
+} from "../config";
 import { progressStore } from "../progress-store";
 import { logger } from "../utils/logger";
 
@@ -31,8 +36,8 @@ export async function limitConcurrency<T, R>(
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  maxRetries = 3,
-  baseDelay = 1000,
+  maxRetries = AGENT_GENERATE_MAX_RETRIES,
+  baseDelay = AGENT_GENERATE_RETRY_BASE_DELAY,
 ): Promise<T> {
   let attempt = 0;
   while (true) {
@@ -269,26 +274,40 @@ Specialists consulted so far: ${Array.from(allConsultedSpecialists).join(", ") |
         emitProgress(
           `Round ${round} Analysis: Asking CMO for decision on needed specialists...`,
         );
-        const cmoDecision = await cmo.generate(prompt, {
-          structuredOutput: {
-            jsonPromptInjection: true,
-            schema: z.object({
-              specialistsToConsult: z
-                .array(z.string())
-                .describe(
-                  "List of specialist IDs (e.g. 'generalist', 'cardiologist') to consult in this round. Empty if no more needed.",
-                ),
-              isFinal: z
-                .boolean()
-                .describe("True if you are ready to produce the final report."),
-              finalReport: diagnosisReportSchema
-                .optional()
-                .describe(
-                  "The final comprehensive differential diagnosis report. Only required if isFinal is true.",
-                ),
+        const cmoDecision = await withRetry(
+          () =>
+            cmo.generate(prompt, {
+              structuredOutput: {
+                jsonPromptInjection: true,
+                schema: z.object({
+                  specialistsToConsult: z
+                    .array(z.string())
+                    .describe(
+                      "List of specialist IDs (e.g. 'generalist', 'cardiologist') to consult in this round. Empty if no more needed.",
+                    ),
+                  isFinal: z
+                    .boolean()
+                    .describe(
+                      "True if you are ready to produce the final report.",
+                    ),
+                  finalReport: diagnosisReportSchema
+                    .optional()
+                    .describe(
+                      "The final comprehensive differential diagnosis report. Only required if isFinal is true.",
+                    ),
+                }),
+              },
             }),
-          },
-        });
+          AGENT_GENERATE_MAX_RETRIES,
+          AGENT_GENERATE_RETRY_BASE_DELAY,
+        );
+
+        if (!cmoDecision.object) {
+          emitProgress(
+            `CMO returned an unparseable response in round ${round}, retrying...`,
+          );
+          continue;
+        }
 
         const { specialistsToConsult, isFinal, finalReport } =
           cmoDecision.object as CmoDecision;
@@ -314,12 +333,17 @@ Specialists consulted so far: ${Array.from(allConsultedSpecialists).join(", ") |
           const finalPrompt = `You did not request any new specialists, or there are no more to consult. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
 
 ${contextHistory.join("\n\n")}`;
-          const finalResponse = await cmo.generate(finalPrompt, {
-            structuredOutput: {
-              jsonPromptInjection: true,
-              schema: diagnosisReportSchema,
-            },
-          });
+          const finalResponse = await withRetry(
+            () =>
+              cmo.generate(finalPrompt, {
+                structuredOutput: {
+                  jsonPromptInjection: true,
+                  schema: diagnosisReportSchema,
+                },
+              }),
+            AGENT_GENERATE_MAX_RETRIES,
+            AGENT_GENERATE_RETRY_BASE_DELAY,
+          );
           finalDiagnosisReport = finalResponse.object;
           break;
         }
@@ -341,13 +365,12 @@ ${contextHistory.join("\n\n")}`;
 
                 const specStart = Date.now();
                 const specResponse = await withRetry(
-                  async () => {
-                    return await specAgent.generate(
+                  () =>
+                    specAgent.generate(
                       `Please analyze this case from the perspective of a ${specId}:\n\n${inputData.patientSummary}`,
-                    );
-                  },
-                  3,
-                  1000,
+                    ),
+                  AGENT_GENERATE_MAX_RETRIES,
+                  AGENT_GENERATE_RETRY_BASE_DELAY,
                 );
                 logger.specialistCall(
                   specId,
@@ -389,12 +412,17 @@ ${contextHistory.join("\n\n")}`;
         const finalPrompt = `Maximum diagnostic rounds (${MAX_ROUNDS}) reached. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
           
 ${contextHistory.join("\n\n")}`;
-        const finalResponse = await cmo.generate(finalPrompt, {
-          structuredOutput: {
-            jsonPromptInjection: true,
-            schema: diagnosisReportSchema,
-          },
-        });
+        const finalResponse = await withRetry(
+          () =>
+            cmo.generate(finalPrompt, {
+              structuredOutput: {
+                jsonPromptInjection: true,
+                schema: diagnosisReportSchema,
+              },
+            }),
+          AGENT_GENERATE_MAX_RETRIES,
+          AGENT_GENERATE_RETRY_BASE_DELAY,
+        );
         finalDiagnosisReport = finalResponse.object;
       }
     };
