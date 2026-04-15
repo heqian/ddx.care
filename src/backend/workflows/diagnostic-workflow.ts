@@ -8,6 +8,18 @@ import {
 } from "../config";
 import { progressStore } from "../progress-store";
 import { logger } from "../utils/logger";
+import { agentList } from "../agents";
+
+const specialistNameMap = new Map<string, string>();
+for (const agent of agentList) {
+  specialistNameMap.set(agent.id.toLowerCase(), agent.name);
+}
+
+export function normalizeSpecialistName(name: string): string {
+  const lookedUp = specialistNameMap.get(name.toLowerCase());
+  if (lookedUp) return lookedUp;
+  return name.replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export async function limitConcurrency<T, R>(
   items: T[],
@@ -503,7 +515,12 @@ export const formatReport = createStep({
       report: {
         chiefComplaint: raw.chiefComplaint ?? "",
         patientSummary: raw.patientSummary ?? "",
-        specialistsConsulted: raw.specialistsConsulted ?? [],
+        specialistsConsulted: (raw.specialistsConsulted ?? []).map(
+          (sc: { specialist: string; keyFindings: string }) => ({
+            ...sc,
+            specialist: normalizeSpecialistName(sc.specialist),
+          }),
+        ),
         diagnoses: (raw.rankedDiagnoses ?? []).map(
           (d: DiagnosisReport["rankedDiagnoses"][number], i: number) => ({
             rank: i + 1,
