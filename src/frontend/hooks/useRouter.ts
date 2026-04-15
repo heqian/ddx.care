@@ -5,7 +5,7 @@ export type Route =
   | { screen: "waiting"; jobId: string }
   | { screen: "results"; jobId: string };
 
-function parsePath(path: string): Route {
+export function parsePath(path: string): Route {
   if (path.startsWith("/results/")) {
     const jobId = path.slice("/results/".length);
     if (jobId) return { screen: "results", jobId };
@@ -17,7 +17,7 @@ function parsePath(path: string): Route {
   return { screen: "input" };
 }
 
-function routeToPath(route: Route): string {
+export function routeToPath(route: Route): string {
   switch (route.screen) {
     case "waiting":
       return `/waiting/${route.jobId}`;

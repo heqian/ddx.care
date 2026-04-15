@@ -6,6 +6,7 @@ import {
   diagnosisReportSchema,
   limitConcurrency,
   withRetry,
+  normalizeSpecialistName,
 } from "../src/backend/workflows/diagnostic-workflow";
 
 describe("splitToList", () => {
@@ -246,7 +247,7 @@ describe("formatReport", () => {
 
     expect(result.report.specialistsConsulted).toHaveLength(2);
     expect(result.report.specialistsConsulted[0].specialist).toBe(
-      "cardiologist",
+      "Cardiologist",
     );
     expect(result.report.chiefComplaint).toBe("Severe headache");
     expect(result.report.crossSpecialtyObservations).toBe(
@@ -542,8 +543,36 @@ describe("withRetry", () => {
     if (callTimes.length === 3) {
       const gap1 = callTimes[1] - callTimes[0];
       const gap2 = callTimes[2] - callTimes[1];
-      expect(gap1).toBeGreaterThanOrEqual(40); // ~50ms with some tolerance
-      expect(gap2).toBeGreaterThanOrEqual(80); // ~100ms with some tolerance
+      expect(gap1).toBeGreaterThanOrEqual(40);
+      expect(gap2).toBeGreaterThanOrEqual(80);
     }
+  });
+});
+
+describe("normalizeSpecialistName", () => {
+  test("maps known specialist IDs to display names", () => {
+    expect(normalizeSpecialistName("cardiologist")).toBe("Cardiologist");
+    expect(normalizeSpecialistName("neurologist")).toBe("Neurologist");
+    expect(normalizeSpecialistName("generalist")).toBe("Generalist");
+    expect(normalizeSpecialistName("emergencyPhysician")).toBe(
+      "Emergency Physician",
+    );
+    expect(normalizeSpecialistName("obstetricianGynecologist")).toBe(
+      "Obstetrician-Gynecologist",
+    );
+  });
+
+  test("is case-insensitive for known specialists", () => {
+    expect(normalizeSpecialistName("Cardiologist")).toBe("Cardiologist");
+    expect(normalizeSpecialistName("CARDIOLOGIST")).toBe("Cardiologist");
+    expect(normalizeSpecialistName("Neurologist")).toBe("Neurologist");
+  });
+
+  test("title-cases unknown specialist names", () => {
+    expect(normalizeSpecialistName("some-unknown")).toBe("Some-Unknown");
+    expect(normalizeSpecialistName("newrole")).toBe("Newrole");
+    expect(normalizeSpecialistName("custom specialist")).toBe(
+      "Custom Specialist",
+    );
   });
 });
