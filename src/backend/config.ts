@@ -4,10 +4,10 @@ export const JOB_TTL_MS = 30 * 60 * 1000;
 export const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 export const RATE_LIMIT_PRUNE_INTERVAL_MS = 10 * 60 * 1000;
 export const SPECIALIST_MODEL =
-  process.env.SPECIALIST_MODEL ?? "togetherai/openai/gpt-oss-120b";
+  process.env.SPECIALIST_MODEL ?? "opencode-go/qwen3.6-plus";
 export const ORCHESTRATOR_MODEL =
-  process.env.ORCHESTRATOR_MODEL ?? "togetherai/openai/gpt-oss-120b";
-export const DIAGNOSIS_TIMEOUT_MS = 300_000;
+  process.env.ORCHESTRATOR_MODEL ?? "opencode-go/qwen3.6-plus";
+export const DIAGNOSIS_TIMEOUT_MS = 15 * 60 * 1000;
 export const MAX_DIAGNOSIS_ROUNDS = parseInt(
   process.env.MAX_DIAGNOSIS_ROUNDS ?? "3",
   10,
@@ -33,9 +33,9 @@ export const AGENT_GENERATE_MAX_RETRIES = parseInt(
 export const AGENT_GENERATE_RETRY_BASE_DELAY = 1000;
 
 export function validateConfig() {
-  if (!process.env.TOGETHER_API_KEY && process.env.MOCK_LLM !== "1") {
+  if (!process.env.OPENCODE_API_KEY && process.env.MOCK_LLM !== "1") {
     throw new Error(
-      "Missing TOGETHER_API_KEY environment variable. It must be set unless MOCK_LLM=1 is used.",
+      "Missing OPENCODE_API_KEY environment variable. It must be set unless MOCK_LLM=1 is used.",
     );
   }
   if (Number.isNaN(PORT) || PORT <= 0 || PORT > 65535) {

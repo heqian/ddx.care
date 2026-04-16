@@ -48,7 +48,7 @@ Default to using Bun instead of Node.js. You should NEVER use Python or any Pyth
 ### Backend (`src/backend/`)
 
 - **Mastra framework** (`@mastra/core`) — agent orchestration, workflows, tool definitions
-- **AI Model**: Together AI (default: `togetherai/openai/gpt-oss-120b`), configured via `TOGETHER_API_KEY`. Model string uses `provider/model-name` format as required by Mastra.
+- **AI Model**: OpenCode Go (default: `opencode-go/qwen3.6-plus`), configured via `OPENCODE_API_KEY`. Model string uses `provider/model-name` format as required by Mastra.
 - **Mastra instance** (`src/backend/index.ts`) — Registers all agents (CMO + 35 specialists) and the `diagnosticWorkflow` into a single `Mastra` instance.
 
 #### Agents (`src/backend/agents/`)
@@ -111,7 +111,7 @@ Shared utilities:
 
 All constants centralized here, read from environment variables with defaults:
 - `PORT` (3000), `ALLOWED_ORIGINS` (`*`), `JOB_TTL_MS` (30min), `CLEANUP_INTERVAL_MS` (5min), `RATE_LIMIT_PRUNE_INTERVAL_MS` (10min)
-- `SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL` (both `togetherai/openai/gpt-oss-120b`)
+- `SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL` (both `opencode-go/qwen3.6-plus`)
 - `DIAGNOSIS_TIMEOUT_MS` (300s), `MAX_DIAGNOSIS_ROUNDS` (3)
 - `RATE_LIMIT_MAX_REQUESTS` (5), `RATE_LIMIT_WINDOW_MS` (1h), `MAX_CONCURRENT_WORKFLOWS` (3)
 - `MAX_INPUT_FIELD_LENGTH` (50,000 chars), `MAX_PAYLOAD_BYTES` (1MB)
@@ -181,11 +181,11 @@ Entry point. Creates the `Bun.serve()` instance with:
 
 | Variable | Default | Description |
 |---|---|---|
-| `TOGETHER_API_KEY` | *required* | Together AI API key |
+| `OPENCODE_API_KEY` | *required* | OpenCode API key |
 | `PORT` | `3000` | Server port |
 | `ALLOWED_ORIGINS` | `*` | CORS + WebSocket origin whitelist (comma-separated) |
-| `SPECIALIST_MODEL` | `togetherai/openai/gpt-oss-120b` | Override specialist agent model |
-| `ORCHESTRATOR_MODEL` | `togetherai/openai/gpt-oss-120b` | Override CMO agent model |
+| `SPECIALIST_MODEL` | `opencode-go/qwen3.6-plus` | Override specialist agent model |
+| `ORCHESTRATOR_MODEL` | `opencode-go/qwen3.6-plus` | Override CMO agent model |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max CMO consultation rounds |
 | `RATE_LIMIT_MAX_REQUESTS` | `5` | Max diagnosis requests per IP per window |
 | `RATE_LIMIT_WINDOW_MS` | `3600000` (1h) | Rate limit sliding window |

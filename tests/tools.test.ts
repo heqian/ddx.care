@@ -126,6 +126,6 @@ describe("Config", () => {
     const { DIAGNOSIS_TIMEOUT_MS } = await import("../src/backend/config");
 
     expect(DIAGNOSIS_TIMEOUT_MS).toBeGreaterThan(0);
-    expect(DIAGNOSIS_TIMEOUT_MS).toBeLessThanOrEqual(600_000);
+    expect(DIAGNOSIS_TIMEOUT_MS).toBeLessThanOrEqual(900_000);
   });
 });

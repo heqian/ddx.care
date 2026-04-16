@@ -72,20 +72,20 @@ describe("Config — validateConfig", () => {
     expect(() => validateConfig()).not.toThrow();
   });
 
-  test("passes with TOGETHER_API_KEY set", () => {
-    process.env.TOGETHER_API_KEY = "test-key";
+  test("passes with OPENCODE_API_KEY set", () => {
+    process.env.OPENCODE_API_KEY = "test-key";
     expect(() => validateConfig()).not.toThrow();
   });
 
-  test("throws when TOGETHER_API_KEY is missing and MOCK_LLM is not 1", () => {
-    const original = process.env.TOGETHER_API_KEY;
+  test("throws when OPENCODE_API_KEY is missing and MOCK_LLM is not 1", () => {
+    const original = process.env.OPENCODE_API_KEY;
     const originalMock = process.env.MOCK_LLM;
-    delete process.env.TOGETHER_API_KEY;
+    delete process.env.OPENCODE_API_KEY;
     process.env.MOCK_LLM = "0";
     try {
-      expect(() => validateConfig()).toThrow("Missing TOGETHER_API_KEY");
+      expect(() => validateConfig()).toThrow("Missing OPENCODE_API_KEY");
     } finally {
-      process.env.TOGETHER_API_KEY = original;
+      process.env.OPENCODE_API_KEY = original;
       process.env.MOCK_LLM = originalMock;
     }
   });
