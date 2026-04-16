@@ -1,7 +1,7 @@
 import {
   SunIcon,
   MoonIcon,
-  ShieldCheckIcon,
+  ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 import { useTheme } from "../../context/ThemeContext";
 
@@ -17,14 +17,17 @@ export function Header() {
             ddx.care
           </span>
           <span className="hidden sm:inline text-sm text-slate-500 dark:text-slate-400 border-l border-slate-200 dark:border-slate-700 pl-3">
-            Differential Diagnosis Support
+            Differential Diagnosis
           </span>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-            <ShieldCheckIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Research Only</span>
+          <span className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700">
+            <ExclamationTriangleIcon className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">
+              Research Demo — NOT HIPAA Compliant
+            </span>
+            <span className="sm:hidden">Not Clinical Use</span>
           </span>
 
           <button

@@ -31,9 +31,12 @@ Object.assign(globalThis, {
   File: happyWindow.File,
   FileReader: happyWindow.FileReader,
   DataTransfer: happyWindow.DataTransfer,
+  sessionStorage: happyWindow.sessionStorage,
 });
 
-// Create a fresh body for each test render
+// Fix happy-dom bug: HTMLLabelElement.dispatchEvent uses this.window.SyntaxError
+// which is undefined by default. Polyfill it.
+happyWindow.SyntaxError = SyntaxError;
 function resetBody() {
   happyDocument.body.innerHTML = "";
 }
@@ -657,7 +660,7 @@ describe("Modal", () => {
       ),
     );
     // The backdrop is the second div inside the fixed container
-    // It has an onClick={onClose} handler
+    // It has an onClick handler
     const fixedDivs = Array.from(container.getElementsByTagName("div"));
     // Find the backdrop div — it will be a div with the onClick handler
     // The first fixed div is the wrapper, the backdrop is its first child div
@@ -668,5 +671,266 @@ describe("Modal", () => {
       fireEvent.click(backdrop);
       expect(onClose).toHaveBeenCalledTimes(1);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useConsent hook
+// ---------------------------------------------------------------------------
+import { useConsent } from "../src/frontend/components/layout/ConsentGate";
+
+describe("useConsent", () => {
+  beforeEach(() => {
+    try {
+      happyWindow.sessionStorage.removeItem("ddx_consent_accepted");
+    } catch {
+      /* ignore */
+    }
+  });
+
+  test("starts with accepted=false when no session storage", () => {
+    resetBody();
+    const { result } = renderHook(() => useConsent());
+    expect(result.current.accepted).toBe(false);
+  });
+
+  test("grant() sets accepted to true and writes sessionStorage", () => {
+    resetBody();
+    const { result } = renderHook(() => useConsent());
+    hookAct(() => {
+      result.current.grant();
+    });
+    expect(result.current.accepted).toBe(true);
+    expect(happyWindow.sessionStorage.getItem("ddx_consent_accepted")).toBe(
+      "true",
+    );
+  });
+
+  test("revoke() sets accepted to false and clears sessionStorage", () => {
+    resetBody();
+    const { result } = renderHook(() => useConsent());
+    hookAct(() => {
+      result.current.grant();
+    });
+    expect(result.current.accepted).toBe(true);
+    hookAct(() => {
+      result.current.revoke();
+    });
+    expect(result.current.accepted).toBe(false);
+    expect(
+      happyWindow.sessionStorage.getItem("ddx_consent_accepted"),
+    ).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ConsentGate
+// ---------------------------------------------------------------------------
+import { ConsentGate } from "../src/frontend/components/layout/ConsentGate";
+
+describe("ConsentGate", () => {
+  test("renders legal disclaimer heading", () => {
+    resetBody();
+    const { container } = render(
+      createElement(ConsentGate, {
+        onAccept: () => {},
+        onDecline: () => {},
+      }),
+    );
+    expect(getByText(container, "Legal Disclaimer")).toBeTruthy();
+  });
+
+  test("renders warning about research demo", () => {
+    resetBody();
+    const { container } = render(
+      createElement(ConsentGate, {
+        onAccept: () => {},
+        onDecline: () => {},
+      }),
+    );
+    expect(getByText(container, /NOT A MEDICAL DEVICE/)).toBeTruthy();
+  });
+
+  test("renders all 8 terms sections", () => {
+    resetBody();
+    const { container } = render(
+      createElement(ConsentGate, {
+        onAccept: () => {},
+        onDecline: () => {},
+      }),
+    );
+    expect(getByText(container, "1. Nature of This Tool")).toBeTruthy();
+    expect(getByText(container, "2. Not Medical Advice")).toBeTruthy();
+    expect(getByText(container, "3. No HIPAA Compliance")).toBeTruthy();
+    expect(getByText(container, "4. Assumption of All Risk")).toBeTruthy();
+    expect(getByText(container, "5. Limitation of Liability")).toBeTruthy();
+    expect(getByText(container, "6. Indemnification")).toBeTruthy();
+    expect(
+      getByText(container, "7. No Doctor-Patient Relationship"),
+    ).toBeTruthy();
+    expect(
+      getByText(container, "8. Severability & General Provisions"),
+    ).toBeTruthy();
+  });
+
+  test("accept button is disabled without checkbox", () => {
+    resetBody();
+    const { container } = render(
+      createElement(ConsentGate, {
+        onAccept: () => {},
+        onDecline: () => {},
+      }),
+    );
+    const buttons = Array.from(container.getElementsByTagName("button"));
+    const acceptBtn = buttons.find((b) =>
+      b.textContent?.includes("I Accept"),
+    );
+    expect(acceptBtn).toBeTruthy();
+    expect(acceptBtn!.disabled).toBe(true);
+  });
+
+  test("checking the checkbox enables accept button", async () => {
+    resetBody();
+    const { container } = render(
+      createElement(ConsentGate, {
+        onAccept: () => {},
+        onDecline: () => {},
+      }),
+    );
+    const checkbox = container.getElementsByTagName("input")[0];
+    expect(checkbox).toBeTruthy();
+
+    // Use the native click() method which properly toggles and fires events
+    await act(async () => {
+      (checkbox as HTMLInputElement).click();
+    });
+
+    const buttons = Array.from(container.getElementsByTagName("button"));
+    const acceptBtn = buttons.find((b) =>
+      b.textContent?.includes("I Accept"),
+    );
+    expect(acceptBtn!.disabled).toBe(false);
+  });
+
+  test("clicking accept calls onAccept", async () => {
+    resetBody();
+    const onAccept = vi.fn();
+    const { container } = render(
+      createElement(ConsentGate, { onAccept, onDecline: () => {} }),
+    );
+
+    // Check the checkbox first
+    const checkbox = container.getElementsByTagName("input")[0];
+    await act(async () => {
+      (checkbox as HTMLInputElement).click();
+    });
+
+    // Click accept
+    const buttons = Array.from(container.getElementsByTagName("button"));
+    const acceptBtn = buttons.find((b) =>
+      b.textContent?.includes("I Accept"),
+    );
+    await act(async () => {
+      fireEvent.click(acceptBtn!);
+    });
+    expect(onAccept).toHaveBeenCalledTimes(1);
+  });
+
+  test("clicking decline shows Access Declined screen", () => {
+    resetBody();
+    const { container } = render(
+      createElement(ConsentGate, {
+        onAccept: () => {},
+        onDecline: () => {},
+      }),
+    );
+
+    // Click decline button
+    const buttons = Array.from(container.getElementsByTagName("button"));
+    const declineBtn = buttons.find((b) =>
+      b.textContent?.includes("Do Not Accept"),
+    );
+    expect(declineBtn).toBeTruthy();
+    fireEvent.click(declineBtn!);
+
+    // Should show declined state
+    expect(getByText(container, "Access Declined")).toBeTruthy();
+    expect(getByText(container, "Review terms again")).toBeTruthy();
+  });
+
+  test("clicking Review terms again returns to consent form", () => {
+    resetBody();
+    const { container } = render(
+      createElement(ConsentGate, {
+        onAccept: () => {},
+        onDecline: () => {},
+      }),
+    );
+
+    // Click decline
+    const buttons = Array.from(container.getElementsByTagName("button"));
+    const declineBtn = buttons.find((b) =>
+      b.textContent?.includes("Do Not Accept"),
+    );
+    fireEvent.click(declineBtn!);
+
+    // Re-query buttons after state change
+    const updatedButtons = Array.from(
+      container.getElementsByTagName("button"),
+    );
+    const reviewBtn = updatedButtons.find((b) =>
+      b.textContent?.includes("Review terms again"),
+    );
+    expect(reviewBtn).toBeTruthy();
+    fireEvent.click(reviewBtn!);
+
+    // Should be back on consent form
+    expect(getByText(container, "Legal Disclaimer")).toBeTruthy();
+  });
+
+  test("buttons have type=button to prevent form submission", () => {
+    resetBody();
+    const { container } = render(
+      createElement(ConsentGate, {
+        onAccept: () => {},
+        onDecline: () => {},
+      }),
+    );
+    const buttons = Array.from(container.getElementsByTagName("button"));
+    for (const btn of buttons) {
+      expect(btn.getAttribute("type")).toBe("button");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Footer
+// ---------------------------------------------------------------------------
+import { Footer } from "../src/frontend/components/layout/Footer";
+
+describe("Footer", () => {
+  test("renders research use disclaimer", () => {
+    resetBody();
+    const { container } = render(createElement(Footer));
+    expect(getByText(container, /Research use only/)).toBeTruthy();
+  });
+
+  test("renders HIPAA non-compliance notice", () => {
+    resetBody();
+    const { container } = render(createElement(Footer));
+    expect(getByText(container, /Not HIPAA compliant/)).toBeTruthy();
+  });
+
+  test("renders risk acceptance notice", () => {
+    resetBody();
+    const { container } = render(createElement(Footer));
+    expect(getByText(container, /You bear all risk/)).toBeTruthy();
+  });
+
+  test("renders as a footer element", () => {
+    resetBody();
+    const { container } = render(createElement(Footer));
+    const footer = container.getElementsByTagName("footer")[0];
+    expect(footer).toBeTruthy();
   });
 });
