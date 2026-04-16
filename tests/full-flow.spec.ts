@@ -1,8 +1,101 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Full diagnosis flow", () => {
-  test("form validation and clear all functionality", async ({ page }) => {
+/**
+ * Accept the consent gate if it is visible.
+ * Call this at the start of every test (after page.goto).
+ */
+async function acceptConsent(page: import("@playwright/test").Page) {
+  const heading = page.getByRole("heading", {
+    name: "Legal Disclaimer",
+  });
+  if (await heading.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    // Check the acknowledgment checkbox
+    await page.getByRole("checkbox").check();
+    // Click the accept button
+    await page.getByRole("button", { name: "I Accept" }).click();
+    // Wait for the main app to render
+    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible({
+      timeout: 5_000,
+    });
+  }
+}
+
+test.describe("Consent gate", () => {
+  test("blocks access until accepted", async ({ page }) => {
     await page.goto("/");
+    // Consent gate should be visible
+    await expect(
+      page.getByRole("heading", { name: "Legal Disclaimer" }),
+    ).toBeVisible();
+
+    // App content should NOT be visible
+    await expect(
+      page.getByRole("heading", { name: "New Case" }),
+    ).not.toBeVisible();
+
+    // Accept button should be disabled without checkbox
+    const acceptBtn = page.getByRole("button", { name: "I Accept" });
+    await expect(acceptBtn).toBeDisabled();
+
+    // Check the box
+    await page.getByRole("checkbox").check();
+    await expect(acceptBtn).toBeEnabled();
+
+    // Accept
+    await acceptBtn.click();
+    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
+  });
+
+  test("shows declined state when user declines", async ({ page }) => {
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Legal Disclaimer" }),
+    ).toBeVisible();
+
+    // Click decline
+    const declineBtn = page.locator("button", { hasText: "Do Not Accept" });
+    await declineBtn.scrollIntoViewIfNeeded();
+    await declineBtn.click();
+
+    // Declined screen
+    await expect(page.getByText("Access Declined")).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(page.getByText("Review terms again")).toBeVisible();
+
+    // Can go back and accept
+    await page.getByText("Review terms again").click();
+    await expect(
+      page.getByRole("heading", { name: "Legal Disclaimer" }),
+    ).toBeVisible();
+  });
+
+  test("persists consent within the session", async ({ page }) => {
+    await page.goto("/");
+
+    // Accept consent
+    await page.getByRole("checkbox").check();
+    await page.getByRole("button", { name: "I Accept" }).click();
+    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
+
+    // Navigate away and back — should NOT show consent gate again
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(
+      page.getByRole("heading", { name: "Legal Disclaimer" }),
+    ).not.toBeVisible();
+  });
+});
+
+test.describe("Full diagnosis flow", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await acceptConsent(page);
+  });
+
+  test("form validation and clear all functionality", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
 
     const submitBtn = page.getByRole("button", {
@@ -35,8 +128,7 @@ test.describe("Full diagnosis flow", () => {
   });
 
   test("submits a case and views the results", async ({ page }) => {
-    // 1. Load the app and verify the form renders
-    await page.goto("/");
+    // 1. Verify the form renders
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
 
     // 2. Fill the form (labels aren't linked via htmlFor, so use placeholders/roles)
@@ -103,17 +195,16 @@ test.describe("Full diagnosis flow", () => {
     // Recommended actions
     await expect(page.getByText("Recommended Immediate Actions")).toBeVisible();
 
-    // Verify the Full Report tab and PDF Export
+    // Verify the Full Report tab
     await page.getByRole("button", { name: /Full Report/ }).click();
-    await expect(
-      page.getByRole("button", { name: "Export PDF" }),
-    ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Patient Summary" }),
     ).toBeVisible();
 
-    // Disclaimer
-    await expect(page.getByText("AI-generated report")).toBeVisible();
+    // Disclaimer in report
+    await expect(
+      page.getByText("proof-of-concept AI research demo"),
+    ).toBeVisible();
 
     // 6. Verify the "New Case" button returns to the form
     await page.getByRole("button", { name: "New Case" }).click();
@@ -121,7 +212,6 @@ test.describe("Full diagnosis flow", () => {
   });
 
   test("character count indicators appear on text fields", async ({ page }) => {
-    await page.goto("/");
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
 
     // Type into medical history field
@@ -129,13 +219,11 @@ test.describe("Full diagnosis flow", () => {
     await historyField.fill("Some test medical history input");
 
     // Look for character count text (e.g. "31 / 50,000" or similar)
-    // The character count indicator should be visible near the field
     const charIndicator = page.locator("text=/\\d+\\s*\\/\\s*50/");
     await expect(charIndicator.first()).toBeVisible({ timeout: 3_000 });
   });
 
   test("dark mode toggle switches theme", async ({ page }) => {
-    await page.goto("/");
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
 
     // Find the theme toggle button (sun/moon icon button in header)
@@ -161,10 +249,6 @@ test.describe("Full diagnosis flow", () => {
   test("browser back/forward navigation works after completing a flow", async ({
     page,
   }) => {
-    // Start with the form
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
-
     // Fill and submit
     await page.getByPlaceholder("e.g., 45").fill("30");
     await page
@@ -200,8 +284,6 @@ test.describe("Full diagnosis flow", () => {
   });
 
   test("specialist status updates during analysis", async ({ page }) => {
-    await page.goto("/");
-
     // Fill the form
     await page.getByPlaceholder("e.g., 45").fill("55");
     await page
@@ -242,6 +324,7 @@ test.describe("Full diagnosis flow", () => {
   test("SPA fallback serves the app for unknown routes", async ({ page }) => {
     // Navigate to a non-existent route — SPA fallback should serve the app
     await page.goto("/some/unknown/path");
+    await acceptConsent(page);
 
     // The app should still render (SPA fallback serves index.html)
     // It should default to the input screen

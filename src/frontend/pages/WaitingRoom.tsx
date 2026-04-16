@@ -83,6 +83,13 @@ export function WaitingRoom({
         </p>
       </div>
 
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-3 text-xs text-amber-800 dark:text-amber-300 text-center">
+        ⚠️ RESEARCH DEMO ONLY — NOT FOR CLINICAL USE — NOT HIPAA COMPLIANT.
+        AI-generated results may be wrong or fabricated. Do not use for any
+        medical decision. You bear all risk — the operators are not liable for
+        any damages, losses, or consequences arising from use of this tool.
+      </div>
+
       {status?.progress && status.progress.length > 0 && (
         <div className="mb-8 bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-y-auto h-64 flex flex-col shadow-inner">
           <div className="space-y-2 mt-auto">

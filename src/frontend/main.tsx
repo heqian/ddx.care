@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AppShell } from "./components/layout/AppShell";
+import { ConsentGate, useConsent } from "./components/layout/ConsentGate";
 import { InputDashboard } from "./pages/InputDashboard";
 import { WaitingRoom } from "./pages/WaitingRoom";
 import { ResultsView } from "./pages/ResultsView";
@@ -12,6 +13,7 @@ import type { StatusResponse, DiagnoseRequest } from "./api/types";
 
 function App() {
   const { route, navigate } = useRouter();
+  const { accepted, grant, revoke } = useConsent();
   const [jobResult, setJobResult] = useState<StatusResponse | null>(null);
   const lastPayload = useRef<DiagnoseRequest | null>(null);
   const [retrying, setRetrying] = useState(false);
@@ -95,6 +97,10 @@ function App() {
       setRetrying(false);
     }
   }, [handleCancel, navigate]);
+
+  if (!accepted) {
+    return <ConsentGate onAccept={grant} onDecline={revoke} />;
+  }
 
   return (
     <AppShell>

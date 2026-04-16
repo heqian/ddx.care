@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState } from "react";
 import {
   ChatBubbleLeftRightIcon,
   UserIcon,
@@ -9,7 +9,6 @@ import {
   ChartBarIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  ArrowDownTrayIcon,
   CheckCircleIcon,
   XCircleIcon,
   ArrowRightIcon,
@@ -124,69 +123,18 @@ function CollapsibleDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
 }
 
 export function ConsultNotes({ report }: ConsultNotesProps) {
-  const reportRef = useRef<HTMLDivElement>(null);
-
-  const exportPdf = useCallback(() => {
-    if (!reportRef.current) return;
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-    const _isDark = document.documentElement.classList.contains("dark");
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Diagnosis Report</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; color: #1e293b; font-size: 14px; line-height: 1.6; }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  h2 { font-size: 16px; margin-top: 24px; margin-bottom: 8px; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
-  h3 { font-size: 14px; margin-top: 16px; margin-bottom: 4px; }
-  .meta { font-size: 11px; color: #94a3b8; margin-bottom: 24px; }
-  .section { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; margin-right: 4px; }
-  .badge-emergent { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
-  .badge-urgent { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
-  .badge-routine { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
-  .badge-confidence { background: #eff6ff; color: #1d4ed8; }
-  .callout { padding: 12px 16px; border-radius: 8px; margin-top: 8px; }
-  .callout-blue { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a5f; }
-  .callout-red { background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d; }
-  .specialist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .specialist-card { padding: 8px; border: 1px solid #e2e8f0; border-radius: 6px; }
-  .specialist-card strong { display: block; margin-bottom: 2px; }
-  .diagnosis { padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; page-break-inside: avoid; }
-  .diagnosis h3 { margin-top: 0; }
-  .disclaimer { font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 24px; }
-  ul { padding-left: 20px; } li { margin-bottom: 2px; }
-  @media print { body { padding: 0; } }
-</style></head><body>`);
-    printWindow.document.write(reportRef.current.innerHTML);
-    printWindow.document.write("</body></html>");
-    printWindow.document.close();
-    printWindow.print();
-  }, []);
-
   const hasUrgentAction =
     report.recommendedImmediateActions &&
     report.diagnoses.some((d) => d.urgency === "emergent");
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-sm font-semibold">
-          <ChatBubbleLeftRightIcon className="h-4 w-4 text-primary dark:text-cyan-400" />
-          Full Report
-        </h3>
-        <button
-          onClick={exportPdf}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-        >
-          <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-          Export PDF
-        </button>
-      </div>
+      <h3 className="flex items-center gap-2 text-sm font-semibold">
+        <ChatBubbleLeftRightIcon className="h-4 w-4 text-primary dark:text-cyan-400" />
+        Full Report
+      </h3>
 
-      <div
-        ref={reportRef}
-        className="bg-white dark:bg-slate-800 rounded-lg p-6 text-sm text-slate-700 dark:text-slate-300 border dark:border-slate-700 shadow-sm max-h-[50rem] overflow-y-auto space-y-6"
-      >
+      <div className="bg-white dark:bg-slate-800 rounded-lg p-6 text-sm text-slate-700 dark:text-slate-300 border dark:border-slate-700 shadow-sm max-h-[50rem] overflow-y-auto space-y-6">
         {/* Chief Complaint & Patient Summary */}
         <div className="space-y-4">
           <div>
@@ -290,6 +238,35 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
             </div>
           </div>
         )}
+
+        {/* Disclaimer in report */}
+        <div className="pt-4 border-t dark:border-slate-700 disclaimer">
+          <p className="text-xs text-red-500 dark:text-red-400 font-semibold mb-1">
+            RESEARCH USE ONLY — NOT FOR CLINICAL USE — NOT A MEDICAL DEVICE —
+            NOT HIPAA COMPLIANT
+          </p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mb-1">
+            This report was generated by a proof-of-concept AI research demo. It
+            has no regulatory approval (FDA or otherwise), has not been
+            validated for clinical accuracy, and is NOT HIPAA compliant. AI
+            outputs may be inaccurate, incomplete, or fabricated.
+          </p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            This report must NOT be used for medical diagnosis, treatment
+            decisions, or patient care. Never rely on it for any medical
+            decision — always consult a qualified licensed healthcare
+            professional. No doctor-patient relationship is created by the use
+            of this tool.
+          </p>
+          <p className="text-xs text-red-500 dark:text-red-400 font-semibold mt-2">
+            LEGAL DISCLAIMER: This tool is provided "AS IS" without warranty of
+            any kind. You accept ALL RISK and release the operators, developers,
+            and affiliates from ANY AND ALL LIABILITY — direct, indirect,
+            incidental, or consequential — arising from use of or reliance on
+            these outputs. Not intended to diagnose, treat, cure, or prevent any
+            disease.
+          </p>
+        </div>
       </div>
     </div>
   );

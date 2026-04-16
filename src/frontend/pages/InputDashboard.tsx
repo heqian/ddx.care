@@ -444,6 +444,32 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
         </div>
       )}
 
+      {/* Disclaimer */}
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-4 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+        <p className="font-semibold text-red-600 dark:text-red-400">
+          ⚠️ RESEARCH USE ONLY — NOT FOR CLINICAL USE — NOT HIPAA COMPLIANT
+        </p>
+        <p className="font-medium">
+          This is a proof-of-concept demo for research purposes ONLY. It is not
+          a medical device, has NO regulatory approval, and is NOT HIPAA
+          compliant. DO NOT enter real patient data or protected health
+          information (PHI).
+        </p>
+        <p>
+          This tool must NOT be used for medical diagnosis, treatment, or
+          patient care. AI-generated outputs have NO guarantee of accuracy.
+          Never rely on this tool for medical decisions — always consult a
+          qualified healthcare professional.
+        </p>
+        <p className="font-semibold text-red-600 dark:text-red-400">
+          LEGAL DISCLAIMER: By submitting, you acknowledge this is a research
+          demo. You accept ALL RISK and release the operators from ANY AND ALL
+          LIABILITY for any outcomes arising from use of or reliance on these
+          outputs. This tool is not intended to diagnose, treat, cure, or
+          prevent any disease.
+        </p>
+      </div>
+
       {/* Submit */}
       <div className="flex justify-end">
         <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>

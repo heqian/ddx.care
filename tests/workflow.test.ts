@@ -233,8 +233,8 @@ describe("formatReport", () => {
       inputData: { diagnosisReport: sampleReport },
     } as Parameters<typeof formatReport.execute>[0]);
 
-    expect(result.disclaimer).toContain("AI-generated report");
-    expect(result.disclaimer).toContain("clinical decision support");
+    expect(result.disclaimer).toContain("RESEARCH USE ONLY");
+    expect(result.disclaimer).toContain("HIPAA-compliant");
     expect(result.generatedAt).toBeTruthy();
     // ISO timestamp should parse without error
     expect(new Date(result.generatedAt).getTime()).not.toBeNaN();
