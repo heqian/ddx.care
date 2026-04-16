@@ -6,7 +6,7 @@ AI-powered differential diagnosis system that simulates a panel of medical speci
 
 ### Backend (`src/backend/`)
 - **Mastra framework** (`@mastra/core`) — agent orchestration, workflows, tool definitions
-- **AI Model**: Together AI (`togetherai/openai/gpt-oss-120b` by default), configured via `TOGETHER_API_KEY`
+- **AI Model**: OpenCode Go (`opencode-go/qwen3.6-plus` by default), configured via `OPENCODE_API_KEY`
 - **Agents** — 36+ medical specialist agents + Chief Medical Officer. Created via factory pattern in `factory.ts`
 - **Tools** — Medical API integrations:
   - PubMed/NCBI literature search
@@ -31,7 +31,7 @@ AI-powered differential diagnosis system that simulates a panel of medical speci
 ```bash
 bun install
 cp .env.example .env
-# Edit .env and add your Together AI API key
+# Edit .env and add your OpenCode API key
 bun run dev
 ```
 
@@ -54,10 +54,10 @@ The app runs on `http://localhost:3000` by default.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TOGETHER_API_KEY` | — | **Required.** Together AI API key |
+| `OPENCODE_API_KEY` | — | **Required.** OpenCode API key |
 | `PORT` | `3000` | Server port |
-| `SPECIALIST_MODEL` | `togetherai/openai/gpt-oss-120b` | Model for specialist agents |
-| `ORCHESTRATOR_MODEL` | `togetherai/openai/gpt-oss-120b` | Model for CMO orchestrator |
+| `SPECIALIST_MODEL` | `opencode-go/qwen3.6-plus` | Model for specialist agents |
+| `ORCHESTRATOR_MODEL` | `opencode-go/qwen3.6-plus` | Model for CMO orchestrator |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max consultation rounds per diagnosis |
 | `RATE_LIMIT_MAX_REQUESTS` | `5` | Max requests per IP per window |
 | `RATE_LIMIT_WINDOW_MS` | `3600000` | Rate limit window (1 hour) |

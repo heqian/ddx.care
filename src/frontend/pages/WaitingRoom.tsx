@@ -79,7 +79,7 @@ export function WaitingRoom({
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
           {showRetry
             ? "An error occurred during analysis. You can retry or go back."
-            : "Our specialist panel is reviewing the patient data. This typically takes a few minutes."}
+            : "Our specialist panel is reviewing the patient data. This typically takes a few minutes, but complicated cases may take longer."}
         </p>
       </div>
 
