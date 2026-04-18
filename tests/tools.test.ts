@@ -108,6 +108,35 @@ describe("Tool Assignments", () => {
       expect(tools).not.toHaveProperty("drug-labeling");
     }
   });
+
+  test("oncologists get drug recall tool (not drug labeling)", async () => {
+    const { getToolsForSpecialist } = await import(
+      "../src/backend/tools/index"
+    );
+    const { drugRecallTool, drugLabelingTool } = await import(
+      "../src/backend/tools/open-fda"
+    );
+
+    const tools = getToolsForSpecialist("oncologist");
+    expect(tools).toHaveProperty("drug-recall");
+    expect(tools["drug-recall"]).toBe(drugRecallTool);
+    expect(tools["drug-recall"]).not.toBe(drugLabelingTool);
+  });
+
+  test("drug recall is not duplicated with drug labeling for oncologists", async () => {
+    const { getToolsForSpecialist } = await import(
+      "../src/backend/tools/index"
+    );
+
+    const tools = getToolsForSpecialist("oncologist");
+    const toolValues = Object.values(tools);
+    const toolIds = toolValues.map((t: any) => t?.id);
+    const drugToolIds = toolIds.filter(
+      (id: any) => id && (id as string).includes("drug"),
+    );
+    const uniqueDrugToolIds = new Set(drugToolIds);
+    expect(uniqueDrugToolIds.size).toBe(drugToolIds.length);
+  });
 });
 
 describe("Config", () => {
@@ -127,5 +156,11 @@ describe("Config", () => {
 
     expect(DIAGNOSIS_TIMEOUT_MS).toBeGreaterThan(0);
     expect(DIAGNOSIS_TIMEOUT_MS).toBeLessThanOrEqual(900_000);
+  });
+
+  test("CMO context max chars is positive", async () => {
+    const { CMO_CONTEXT_MAX_CHARS } = await import("../src/backend/config");
+
+    expect(CMO_CONTEXT_MAX_CHARS).toBeGreaterThan(0);
   });
 });

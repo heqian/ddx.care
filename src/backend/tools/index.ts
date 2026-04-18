@@ -47,6 +47,7 @@ import {
 import {
   adverseEventsTool,
   drugLabelingTool,
+  drugRecallTool,
   substanceToxicologyTool,
 } from "./open-fda";
 import { clinicalTrialsSearchTool } from "./clinical-trials";
@@ -77,7 +78,7 @@ const genetics = {
 /** Tools for oncology (cancer treatment, trials, and drug info) */
 const oncology = {
   "clinical-trials-search": clinicalTrialsSearchTool,
-  "drug-recall": drugLabelingTool,
+  "drug-recall": drugRecallTool,
 };
 
 /** Tools for toxicology and poisoning */

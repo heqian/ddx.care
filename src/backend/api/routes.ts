@@ -39,15 +39,6 @@ export const rateLimiter = new RateLimiter({
   maxConcurrent: MAX_CONCURRENT_WORKFLOWS,
 });
 
-function getClientIp(req: Request): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const parts = forwarded.split(",");
-    return parts[parts.length - 1].trim();
-  }
-  return "unknown";
-}
-
 const diagnoseSchema = z.object({
   medicalHistory: z.string().max(MAX_INPUT_FIELD_LENGTH),
   conversationTranscript: z.string().max(MAX_INPUT_FIELD_LENGTH),
@@ -65,9 +56,26 @@ interface RouteRequest extends Request {
 }
 
 export function createRoutes(
-  server: { upgrade(req: Request, options: { data: unknown }): boolean },
+  server: {
+    upgrade(req: Request, options: { data: unknown }): boolean;
+    requestIP?(
+      req: Request,
+    ): { address: string; family: string; port: number } | null;
+  },
   appHtml: unknown,
 ) {
+  function getClientIp(req: Request): string {
+    const forwarded = req.headers.get("x-forwarded-for");
+    if (forwarded) {
+      const parts = forwarded.split(",");
+      // Proxies like Caddy append to the right. The rightmost IP is the real client IP
+      // added by the immediate upstream proxy.
+      return parts[parts.length - 1].trim();
+    }
+    // Fallback to socket IP for direct connections
+    return server.requestIP?.(req)?.address || "unknown";
+  }
+
   return {
     "/": appHtml,
 
