@@ -1,5 +1,5 @@
 import { Window as HappyWindow } from "happy-dom";
-import { test, expect, describe, beforeEach, vi } from "bun:test";
+import { test, expect, describe, beforeEach, afterEach, vi } from "bun:test";
 
 // Set up happy-dom global environment BEFORE importing React/testing libraries.
 // This must run at the top level before any React import is evaluated.
@@ -88,8 +88,16 @@ function _queryAllByText(container: Element, text: string | RegExp): Element[] {
   return results;
 }
 
-import { render, fireEvent, act } from "@testing-library/react";
+import {
+  render,
+  fireEvent,
+  act,
+  waitFor,
+  cleanup,
+} from "@testing-library/react";
 import React, { createElement } from "react";
+
+afterEach(cleanup);
 
 // ---------------------------------------------------------------------------
 // DiagnosisCard
@@ -387,6 +395,10 @@ import { renderHook, act as hookAct } from "@testing-library/react";
 describe("useAutoLogout", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   test("starts with showWarning false", () => {
@@ -800,15 +812,17 @@ describe("ConsentGate", () => {
     const checkbox = container.getElementsByTagName("input")[0];
     expect(checkbox).toBeTruthy();
 
-    // Use the native click() method which properly toggles and fires events
     await act(async () => {
-      (checkbox as HTMLInputElement).click();
+      fireEvent.click(checkbox);
     });
 
-    const buttons = Array.from(container.getElementsByTagName("button"));
-    const acceptBtn = buttons.find((b) =>
-      b.textContent?.includes("I Accept"),
-    );
+    const acceptBtn = await waitFor(() => {
+      const btn = Array.from(container.getElementsByTagName("button")).find(
+        (b) => b.textContent?.includes("I Accept"),
+      );
+      if (!btn) throw new Error("Accept button not found");
+      return btn;
+    });
     expect(acceptBtn!.disabled).toBe(false);
   });
 
@@ -819,19 +833,21 @@ describe("ConsentGate", () => {
       createElement(ConsentGate, { onAccept, onDecline: () => {} }),
     );
 
-    // Check the checkbox first
     const checkbox = container.getElementsByTagName("input")[0];
     await act(async () => {
-      (checkbox as HTMLInputElement).click();
+      fireEvent.click(checkbox);
     });
 
-    // Click accept
-    const buttons = Array.from(container.getElementsByTagName("button"));
-    const acceptBtn = buttons.find((b) =>
-      b.textContent?.includes("I Accept"),
-    );
+    const acceptBtn = await waitFor(() => {
+      const btn = Array.from(container.getElementsByTagName("button")).find(
+        (b) => b.textContent?.includes("I Accept"),
+      );
+      if (!btn) throw new Error("Accept button not found");
+      if (btn.disabled) throw new Error("Accept button still disabled");
+      return btn;
+    });
     await act(async () => {
-      fireEvent.click(acceptBtn!);
+      fireEvent.click(acceptBtn);
     });
     expect(onAccept).toHaveBeenCalledTimes(1);
   });

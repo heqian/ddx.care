@@ -1,4 +1,4 @@
-import { test, expect, describe, mock } from "bun:test";
+import { test, expect, describe, mock, beforeAll, afterAll } from "bun:test";
 import {
   splitToList,
   parseInput,
@@ -785,15 +785,28 @@ describe("withRetry - abort signal", () => {
 });
 
 describe("runDiagnosis - CMO parsing logic", () => {
+  let savedMockLlm: string | undefined;
+
+  beforeAll(() => {
+    savedMockLlm = process.env.MOCK_LLM;
+    delete process.env.MOCK_LLM;
+  });
+
+  afterAll(() => {
+    if (savedMockLlm !== undefined) {
+      process.env.MOCK_LLM = savedMockLlm;
+    } else {
+      delete process.env.MOCK_LLM;
+    }
+  });
+
   test("breaks infinite loop and forces final report after multiple unparseable responses", async () => {
     let callCount = 0;
     const mockCmoGenerate = mock(async () => {
       callCount++;
       if (callCount <= 3) {
-        // Return unparseable responses 3 times
         return { object: undefined };
       }
-      // On the 4th call (forced final report), return a valid report
       return {
         object: {
           diagnoses: [{
@@ -835,7 +848,6 @@ describe("runDiagnosis - CMO parsing logic", () => {
     let callCount = 0;
     const mockCmoGenerate = mock(async () => {
       callCount++;
-      // Always return unparseable responses
       return { object: undefined };
     });
 

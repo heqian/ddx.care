@@ -1,4 +1,7 @@
-import { test, expect, describe, beforeAll } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+
+const _savedMockLlm = process.env.MOCK_LLM;
+const _savedPort = process.env.PORT;
 
 // Set mock mode and test port before the server module loads
 process.env.MOCK_LLM = "1";
@@ -231,13 +234,23 @@ describe("API Endpoints", () => {
     });
 
     test("GET /ws allows connection when ALLOWED_ORIGINS is wildcard", async () => {
-      // With ALLOWED_ORIGINS='*' (default), any origin should pass the origin check.
-      // The request may still fail with upgrade-related errors, but NOT 403.
       const res = await fetch(`${BASE}/ws?jobId=test-origin`, {
         headers: { Origin: "https://evil.example.com" },
       });
-      // Should be anything other than 403 — likely 400 (Upgrade failed) or upgrade success
       expect(res.status).not.toBe(403);
     });
+  });
+
+  afterAll(() => {
+    if (_savedMockLlm !== undefined) {
+      process.env.MOCK_LLM = _savedMockLlm;
+    } else {
+      delete process.env.MOCK_LLM;
+    }
+    if (_savedPort !== undefined) {
+      process.env.PORT = _savedPort;
+    } else {
+      delete process.env.PORT;
+    }
   });
 });

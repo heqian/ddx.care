@@ -68,13 +68,31 @@ describe("Config — Constants", () => {
 
 describe("Config — validateConfig", () => {
   test("passes with current env (MOCK_LLM=1)", () => {
+    const original = process.env.MOCK_LLM;
     process.env.MOCK_LLM = "1";
-    expect(() => validateConfig()).not.toThrow();
+    try {
+      expect(() => validateConfig()).not.toThrow();
+    } finally {
+      if (original !== undefined) {
+        process.env.MOCK_LLM = original;
+      } else {
+        delete process.env.MOCK_LLM;
+      }
+    }
   });
 
   test("passes with OPENCODE_API_KEY set", () => {
+    const original = process.env.OPENCODE_API_KEY;
     process.env.OPENCODE_API_KEY = "test-key";
-    expect(() => validateConfig()).not.toThrow();
+    try {
+      expect(() => validateConfig()).not.toThrow();
+    } finally {
+      if (original !== undefined) {
+        process.env.OPENCODE_API_KEY = original;
+      } else {
+        delete process.env.OPENCODE_API_KEY;
+      }
+    }
   });
 
   test("throws when OPENCODE_API_KEY is missing and MOCK_LLM is not 1", () => {
@@ -85,8 +103,16 @@ describe("Config — validateConfig", () => {
     try {
       expect(() => validateConfig()).toThrow("Missing OPENCODE_API_KEY");
     } finally {
-      process.env.OPENCODE_API_KEY = original;
-      process.env.MOCK_LLM = originalMock;
+      if (original !== undefined) {
+        process.env.OPENCODE_API_KEY = original;
+      } else {
+        delete process.env.OPENCODE_API_KEY;
+      }
+      if (originalMock !== undefined) {
+        process.env.MOCK_LLM = originalMock;
+      } else {
+        delete process.env.MOCK_LLM;
+      }
     }
   });
 });
