@@ -5,6 +5,8 @@ import {
   AGENT_GENERATE_RETRY_BASE_DELAY,
   DIAGNOSIS_TIMEOUT_MS,
   MAX_DIAGNOSIS_ROUNDS,
+  SPECIALIST_CONTEXT_MODE,
+  SPECIALIST_CONTEXT_MAX_CHARS,
 } from "../config";
 import { progressStore } from "../progress-store";
 import { logger } from "../utils/logger";
@@ -130,7 +132,7 @@ export const diagnosisReportSchema = z.object({
 type DiagnosisReport = zInfer<typeof diagnosisReportSchema>;
 
 interface CmoDecision {
-  specialistsToConsult: string[];
+  specialistsToConsult: CmoSpecialistRequest[];
   isFinal: boolean;
   finalReport?: DiagnosisReport;
 }
@@ -145,6 +147,56 @@ export function splitToList(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+interface CmoSpecialistRequest {
+  id: string;
+  contextDirective?: string;
+}
+
+/** Build context string to inject into a specialist's prompt */
+export function buildSpecialistContext(params: {
+  mode: string;
+  specId: string;
+  contextDirective?: string;
+  contextHistory: string[];
+  maxChars: number;
+}): string {
+  const { mode, contextDirective, contextHistory, maxChars } = params;
+  if (mode === "none") return "";
+
+  const parts: string[] = [];
+
+  if (mode === "prior_rounds" || mode === "full") {
+    if (contextHistory.length > 1) {
+      parts.push(
+        "=== Prior Consultation Results ===\n" +
+          contextHistory.slice(1).join("\n\n"),
+      );
+    }
+  }
+
+  if (mode === "cmo_curated" && contextDirective) {
+    parts.push(`=== CMO Context Directive ===\n${contextDirective}`);
+    if (contextHistory.length > 1) {
+      parts.push(
+        "=== Prior Consultation Results ===\n" +
+          contextHistory.slice(1).join("\n\n"),
+      );
+    }
+  }
+
+  if (mode === "full" && contextDirective) {
+    parts.unshift(`=== CMO Context Directive ===\n${contextDirective}`);
+  }
+
+  let assembled = parts.join("\n\n");
+  if (assembled.length > maxChars) {
+    assembled =
+      assembled.slice(0, maxChars) +
+      "\n\n[Context truncated due to length limit]";
+  }
+  return assembled;
+}
+
 /** Mock diagnosis for E2E testing — returns a realistic canned response */
 async function mockDiagnosis(
   _patientSummary: string,
@@ -157,12 +209,23 @@ async function mockDiagnosis(
   );
   await delay(100);
 
-  const specialists = ["cardiologist", "neurologist", "nephrologist"];
-  for (const id of specialists) {
-    emitProgress(`Calling specialist ${id}...`);
+  const specialists = [
+    { id: "cardiologist", hasContext: false },
+    { id: "neurologist", hasContext: false },
+    { id: "nephrologist", hasContext: false },
+  ];
+  for (const spec of specialists) {
+    emitProgress(
+      `Calling specialist ${spec.id}${spec.hasContext ? " (with CMO context directive)" : ""}...`,
+    );
     await delay(80);
-    emitProgress(`Received analysis from ${id}`);
+    emitProgress(`Received analysis from ${spec.id}`);
   }
+
+  emitProgress(
+    "Round 2 Analysis: CMO sharing prior findings with additional specialists...",
+  );
+  await delay(100);
 
   emitProgress(
     "CMO has determined no further consultations are needed and finalized the report.",
@@ -272,16 +335,28 @@ const runDiagnosis = createStep({
 
     const runLoop = async () => {
       while (round <= MAX_ROUNDS) {
+        const contextModeInstructions: Record<string, string> = {
+          none: "Return a simple list of specialist IDs. No context directives are needed — specialists will see only the raw patient data.",
+          prior_rounds:
+            "Specialists will automatically receive the full consultation history from all prior rounds. You may include optional context directives to highlight specific findings.",
+          cmo_curated:
+            "For each specialist, include a brief 'contextDirective' telling them what prior findings or hypotheses to focus on. Be specific and concise (1-3 sentences).",
+          full: "Specialists will receive all prior consultation results. Include context directives to highlight key cross-specialty correlations.",
+        };
+
         const prompt = `You are starting Round ${round} of diagnosis.
 Here is the case and history of consultations so far:
 
 ${contextHistory.join("\n\n")}
 
 Based on the above, please decide which specialists you need to consult in this round.
-If you have enough information to make a final diagnosis and do not need to consult any additional specialists, set "isFinal" to true and provide the "finalReport" as instructed in your responsibilities.
-Only return a list of specialists that have NOT been consulted yet if you need them.
+
+${contextModeInstructions[SPECIALIST_CONTEXT_MODE] || contextModeInstructions.none}
+
+Only return specialists that have NOT been consulted yet.
 Specialists consulted so far: ${Array.from(allConsultedSpecialists).join(", ") || "None"}
-`;
+
+If you have enough information to make a final diagnosis, set "isFinal" to true and provide the "finalReport".`;
 
         emitProgress(
           `Round ${round} Analysis: Asking CMO for decision on needed specialists...`,
@@ -293,9 +368,23 @@ Specialists consulted so far: ${Array.from(allConsultedSpecialists).join(", ") |
                 jsonPromptInjection: true,
                 schema: z.object({
                   specialistsToConsult: z
-                    .array(z.string())
+                    .array(
+                      z.object({
+                        id: z
+                          .string()
+                          .describe(
+                            "Specialist ID (e.g. 'generalist', 'cardiologist')",
+                          ),
+                        contextDirective: z
+                          .string()
+                          .optional()
+                          .describe(
+                            "Brief instruction telling this specialist what prior findings to focus on. 1-3 sentences. Omit if no relevant prior findings exist.",
+                          ),
+                      }),
+                    )
                     .describe(
-                      "List of specialist IDs (e.g. 'generalist', 'cardiologist') to consult in this round. Empty if no more needed.",
+                      "List of specialists to consult this round. Empty if no more needed.",
                     ),
                   isFinal: z
                     .boolean()
@@ -332,16 +421,15 @@ Specialists consulted so far: ${Array.from(allConsultedSpecialists).join(", ") |
           break;
         }
 
-        // Filter out already consulted specialists
-        const newSpecialists = (specialistsToConsult || []).filter(
-          (id: string) => !allConsultedSpecialists.has(id),
+        // Filter to new specialists only
+        const newSpecialistRequests = (specialistsToConsult || []).filter(
+          (s) => !allConsultedSpecialists.has(s.id),
         );
 
-        if (newSpecialists.length === 0) {
+        if (newSpecialistRequests.length === 0) {
           emitProgress(
             `No new specialists requested. Compiling final report...`,
           );
-          // No new specialists added, force final report
           const finalPrompt = `You did not request any new specialists, or there are no more to consult. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
 
 ${contextHistory.join("\n\n")}`;
@@ -362,25 +450,35 @@ ${contextHistory.join("\n\n")}`;
 
         // Call the new specialists
         emitProgress(
-          `CMO requested consultations from: ${newSpecialists.join(", ")}`,
+          `CMO requested consultations from: ${newSpecialistRequests.map((s) => s.id).join(", ")}`,
         );
 
         const results = await limitConcurrency(
-          newSpecialists,
+          newSpecialistRequests,
           3,
-          async (specId: string) => {
+          async (specRequest: CmoSpecialistRequest) => {
+            const specId = specRequest.id;
             try {
               const specAgent = mastra.getAgent(specId);
               if (specAgent) {
                 allConsultedSpecialists.add(specId);
                 emitProgress(`Calling specialist ${specId}...`);
 
+                const specialistContext = buildSpecialistContext({
+                  mode: SPECIALIST_CONTEXT_MODE,
+                  specId,
+                  contextDirective: specRequest.contextDirective,
+                  contextHistory,
+                  maxChars: SPECIALIST_CONTEXT_MAX_CHARS,
+                });
+
+                const specPrompt = specialistContext
+                  ? `Please analyze this case from the perspective of a ${specId}.\n\n${specialistContext}\n\n=== PATIENT DATA ===\n${inputData.patientSummary}`
+                  : `Please analyze this case from the perspective of a ${specId}:\n\n${inputData.patientSummary}`;
+
                 const specStart = Date.now();
                 const specResponse = await withRetry(
-                  () =>
-                    specAgent.generate(
-                      `Please analyze this case from the perspective of a ${specId}:\n\n${inputData.patientSummary}`,
-                    ),
+                  () => specAgent.generate(specPrompt),
                   AGENT_GENERATE_MAX_RETRIES,
                   AGENT_GENERATE_RETRY_BASE_DELAY,
                 );

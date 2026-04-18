@@ -32,6 +32,31 @@ export const AGENT_GENERATE_MAX_RETRIES = parseInt(
 );
 export const AGENT_GENERATE_RETRY_BASE_DELAY = 1000;
 
+const VALID_CONTEXT_MODES = [
+  "none",
+  "prior_rounds",
+  "cmo_curated",
+  "full",
+] as const;
+type ContextMode = (typeof VALID_CONTEXT_MODES)[number];
+
+export const SPECIALIST_CONTEXT_MODE: ContextMode = (() => {
+  const raw = process.env.SPECIALIST_CONTEXT_MODE ?? "none";
+  if (VALID_CONTEXT_MODES.includes(raw as ContextMode))
+    return raw as ContextMode;
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(
+      `Invalid SPECIALIST_CONTEXT_MODE "${raw}". Defaulting to "none". Valid: ${VALID_CONTEXT_MODES.join(", ")}`,
+    );
+  }
+  return "none";
+})();
+
+export const SPECIALIST_CONTEXT_MAX_CHARS = parseInt(
+  process.env.SPECIALIST_CONTEXT_MAX_CHARS ?? "2000",
+  10,
+);
+
 export function validateConfig() {
   if (!process.env.OPENCODE_API_KEY && process.env.MOCK_LLM !== "1") {
     throw new Error(
@@ -69,6 +94,14 @@ export function validateConfig() {
   ) {
     throw new Error(
       `Invalid AGENT_GENERATE_MAX_RETRIES: ${process.env.AGENT_GENERATE_MAX_RETRIES}. Must be a non-negative number.`,
+    );
+  }
+  if (
+    Number.isNaN(SPECIALIST_CONTEXT_MAX_CHARS) ||
+    SPECIALIST_CONTEXT_MAX_CHARS <= 0
+  ) {
+    throw new Error(
+      `Invalid SPECIALIST_CONTEXT_MAX_CHARS: ${process.env.SPECIALIST_CONTEXT_MAX_CHARS}. Must be a positive number.`,
     );
   }
 }

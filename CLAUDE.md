@@ -88,7 +88,7 @@ Shared utilities:
 
 - `diagnostic-workflow.ts` — Three-step Mastra workflow: `parseInput` → `runDiagnosis` → `formatReport`
   - **parseInput**: Validates and structures patient data (medicalHistory, conversationTranscript, labResults)
-  - **runDiagnosis**: Multi-round CMO supervisor loop. The CMO decides which specialists to consult per round, delegates via `limitConcurrency` (max 3 concurrent), and uses `withRetry` (3 attempts, exponential backoff). Continues up to `MAX_DIAGNOSIS_ROUNDS` (default 3) or until the CMO declares `isFinal`. Timeout: 300s.
+  - **runDiagnosis**: Multi-round CMO supervisor loop. The CMO decides which specialists to consult per round, delegates via `limitConcurrency` (max 3 concurrent), and uses `withRetry` (3 attempts, exponential backoff). Continues up to `MAX_DIAGNOSIS_ROUNDS` (default 3) or until the CMO declares `isFinal`. Timeout: 300s. Supports agent-to-agent context sharing via `SPECIALIST_CONTEXT_MODE` — the CMO can provide per-specialist "context directives" so specialists see prior consultation findings.
   - **formatReport**: Transforms raw diagnosis into frontend-friendly format with ranked diagnoses, urgency levels, evidence arrays, and a disclaimer.
 - Exports `reportSchema` (Zod schema for the formatted report) and `diagnosticWorkflow`.
 - **Mock mode**: When `MOCK_LLM=1`, `runDiagnosis` returns a canned response without calling real LLMs.
@@ -192,6 +192,8 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `MAX_CONCURRENT_WORKFLOWS` | `3` | Max concurrent diagnostic workflows |
 | `MOCK_LLM` | — | Set to `1` for mock mode (testing) |
 | `LOG_FORMAT` | — | Set to `json` for JSON-structured log output |
+| `SPECIALIST_CONTEXT_MODE` | `none` | Agent-to-agent context sharing: `none`, `prior_rounds`, `cmo_curated`, `full` |
+| `SPECIALIST_CONTEXT_MAX_CHARS` | `2000` | Max characters of context injected per specialist call |
 
 ## Testing
 
