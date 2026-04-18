@@ -7,6 +7,7 @@ import {
   limitConcurrency,
   withRetry,
   normalizeSpecialistName,
+  buildSpecialistContext,
 } from "../src/backend/workflows/diagnostic-workflow";
 
 describe("splitToList", () => {
@@ -574,5 +575,103 @@ describe("normalizeSpecialistName", () => {
     expect(normalizeSpecialistName("custom specialist")).toBe(
       "Custom Specialist",
     );
+  });
+});
+
+describe("buildSpecialistContext", () => {
+  const baseHistory = [
+    "=== PATIENT CASE ===",
+    "45yo male with headache",
+    "=== Results from Round 1 ===",
+    "=== cardiologist Consult ===\nBP 180/110",
+  ];
+
+  test('returns empty string in "none" mode', () => {
+    expect(
+      buildSpecialistContext({
+        mode: "none",
+        specId: "nephrologist",
+        contextDirective: "Check renal",
+        contextHistory: baseHistory,
+        maxChars: 2000,
+      }),
+    ).toBe("");
+  });
+
+  test("returns prior context when available in prior_rounds mode", () => {
+    const result = buildSpecialistContext({
+      mode: "prior_rounds",
+      specId: "cardiologist",
+      contextHistory: ["=== PATIENT CASE ===", "Patient data"],
+      maxChars: 2000,
+    });
+    expect(result).toContain("Prior Consultation Results");
+    expect(result).toContain("Patient data");
+  });
+
+  test("includes prior round results in prior_rounds mode", () => {
+    const result = buildSpecialistContext({
+      mode: "prior_rounds",
+      specId: "nephrologist",
+      contextHistory: baseHistory,
+      maxChars: 2000,
+    });
+    expect(result).toContain("Prior Consultation Results");
+    expect(result).toContain("cardiologist Consult");
+    expect(result).toContain("BP 180/110");
+  });
+
+  test("includes context directive in cmo_curated mode", () => {
+    const result = buildSpecialistContext({
+      mode: "cmo_curated",
+      specId: "nephrologist",
+      contextDirective: "Cardiologist found elevated BP — check for renal cause",
+      contextHistory: baseHistory,
+      maxChars: 2000,
+    });
+    expect(result).toContain("CMO Context Directive");
+    expect(result).toContain("Cardiologist found elevated BP");
+    expect(result).toContain("Prior Consultation Results");
+  });
+
+  test("returns empty when no directive in cmo_curated mode", () => {
+    const result = buildSpecialistContext({
+      mode: "cmo_curated",
+      specId: "nephrologist",
+      contextHistory: baseHistory,
+      maxChars: 2000,
+    });
+    // In cmo_curated mode, no directive means no context is shared
+    expect(result).toBe("");
+  });
+
+  test("truncates context exceeding maxChars", () => {
+    const longHistory = [
+      "=== PATIENT CASE ===",
+      "Short patient data",
+      "=== Results from Round 1 ===",
+      `=== cardiologist Consult ===\n${"A".repeat(5000)}`,
+    ];
+    const result = buildSpecialistContext({
+      mode: "prior_rounds",
+      specId: "nephrologist",
+      contextHistory: longHistory,
+      maxChars: 500,
+    });
+    expect(result.length).toBeLessThanOrEqual(560);
+    expect(result).toContain("[Context truncated due to length limit]");
+  });
+
+  test("includes both directive and prior results in full mode", () => {
+    const result = buildSpecialistContext({
+      mode: "full",
+      specId: "nephrologist",
+      contextDirective: "Focus on BP-related renal damage",
+      contextHistory: baseHistory,
+      maxChars: 2000,
+    });
+    expect(result).toContain("CMO Context Directive");
+    expect(result).toContain("Prior Consultation Results");
+    expect(result).toContain("cardiologist Consult");
   });
 });

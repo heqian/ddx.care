@@ -56,18 +56,6 @@
 
 ## P4 — Feature Work
 
-- [ ] **Add database persistence for diagnosis history** — Allow users to review past diagnoses, compare results over time, and export case data. Use `bun:sqlite` for MVP. Schema: `diagnosis_history(id, jobId, createdAt, inputPayload, report, status)`. Add `GET /v1/history` and `GET /v1/history/:jobId` routes. Frontend: add a "History" tab in the app shell.
-
-- [ ] **Implement SSE or streaming for LLM responses** — Stream specialist agent responses as they generate, rather than waiting for the complete response. This gives the user real-time visibility into the analysis. Requires Mastra streaming support investigation.
-
-- [ ] **Add a "Case Examples" dropdown** — Pre-populate the InputDashboard with sample medical cases (e.g. classic cardiac, neurological, pediatric presentations) so users can instantly see how the system works. Store 3–5 curated example cases in `src/frontend/data/example-cases.ts`.
-
-## P5 — Long-Term / Aspirational
-
-- [ ] **Add authentication and user accounts** — Required before any multi-user deployment. Use session-based auth with secure cookies.
-
-- [ ] **Add a "second opinion" feature** — Re-run the diagnosis with a different model or different specialist selection to compare results.
-
-- [ ] **Implement agent-to-agent communication** — Currently specialists don't communicate; they each analyze the case independently. Allow specialists to build on each other's findings within a round.
+- [x] **Implement agent-to-agent communication** — Currently specialists don't communicate; they each analyze the case independently. Allow specialists to build on each other's findings within a round. Added configurable specialist context sharing (`SPECIALIST_CONTEXT_MODE`: `none`/`prior_rounds`/`cmo_curated`/`full`) with CMO-curated per-specialist context directives. Default `none` preserves backward compatibility. Token budget managed via `SPECIALIST_CONTEXT_MAX_CHARS` (default 2000).
 
 - [ ] **Mobile-responsive polish** — The current layout works on mobile but hasn't been intentionally optimized. Review and fix: input card stacking, waiting room progress log scroll, results view tab navigation on small screens, PDF export on mobile Safari.
