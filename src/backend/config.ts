@@ -57,6 +57,11 @@ export const SPECIALIST_CONTEXT_MAX_CHARS = parseInt(
   10,
 );
 
+export const CMO_CONTEXT_MAX_CHARS = parseInt(
+  process.env.CMO_CONTEXT_MAX_CHARS ?? "60000",
+  10,
+);
+
 export function validateConfig() {
   if (!process.env.OPENCODE_API_KEY && process.env.MOCK_LLM !== "1") {
     throw new Error(
@@ -102,6 +107,11 @@ export function validateConfig() {
   ) {
     throw new Error(
       `Invalid SPECIALIST_CONTEXT_MAX_CHARS: ${process.env.SPECIALIST_CONTEXT_MAX_CHARS}. Must be a positive number.`,
+    );
+  }
+  if (Number.isNaN(CMO_CONTEXT_MAX_CHARS) || CMO_CONTEXT_MAX_CHARS <= 0) {
+    throw new Error(
+      `Invalid CMO_CONTEXT_MAX_CHARS: ${process.env.CMO_CONTEXT_MAX_CHARS}. Must be a positive number.`,
     );
   }
 }

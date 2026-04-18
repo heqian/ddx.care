@@ -1,20 +1,20 @@
 import { test, expect, describe } from "bun:test";
 
 describe("getClientIp", () => {
-  function getClientIp(headers: Record<string, string | null>): string {
+  function getClientIp(headers: Record<string, string | null>, socketIp?: string): string {
     const forwarded = headers["x-forwarded-for"];
     if (forwarded) {
       const parts = forwarded.split(",");
       return parts[parts.length - 1].trim();
     }
-    return "unknown";
+    return socketIp || "unknown";
   }
 
   test("extracts IP from x-forwarded-for with single IP", () => {
     expect(getClientIp({ "x-forwarded-for": "1.2.3.4" })).toBe("1.2.3.4");
   });
 
-  test("extracts last IP from x-forwarded-for chain", () => {
+  test("extracts rightmost IP from x-forwarded-for chain (appended by proxy)", () => {
     expect(
       getClientIp({ "x-forwarded-for": "1.2.3.4, 5.6.7.8, 9.10.11.12" }),
     ).toBe("9.10.11.12");
@@ -24,12 +24,12 @@ describe("getClientIp", () => {
     expect(getClientIp({ "x-forwarded-for": "  1.2.3.4  " })).toBe("1.2.3.4");
   });
 
-  test("returns unknown when no x-forwarded-for header", () => {
-    expect(getClientIp({})).toBe("unknown");
+  test("falls back to socket IP when no x-forwarded-for header", () => {
+    expect(getClientIp({}, "192.168.1.5")).toBe("192.168.1.5");
   });
 
-  test("returns unknown when x-forwarded-for is null", () => {
-    expect(getClientIp({ "x-forwarded-for": null })).toBe("unknown");
+  test("returns unknown when no x-forwarded-for and no socket IP", () => {
+    expect(getClientIp({})).toBe("unknown");
   });
 });
 

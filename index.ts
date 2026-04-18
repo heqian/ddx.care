@@ -25,7 +25,10 @@ let server: ReturnType<typeof Bun.serve>;
 server = Bun.serve<WsData>({
   port: PORT,
   routes: createRoutes(
-    { upgrade: (req, opts) => server.upgrade(req, opts!) },
+    { 
+      upgrade: (req, opts) => server.upgrade(req, opts!),
+      requestIP: (req: Request) => server.requestIP(req)
+    },
     appHtml,
   ),
   websocket: websocketHandlers,

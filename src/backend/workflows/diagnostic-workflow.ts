@@ -7,6 +7,7 @@ import {
   MAX_DIAGNOSIS_ROUNDS,
   SPECIALIST_CONTEXT_MODE,
   SPECIALIST_CONTEXT_MAX_CHARS,
+  CMO_CONTEXT_MAX_CHARS,
 } from "../config";
 import { progressStore } from "../progress-store";
 import { logger } from "../utils/logger";
@@ -52,16 +53,40 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   maxRetries = AGENT_GENERATE_MAX_RETRIES,
   baseDelay = AGENT_GENERATE_RETRY_BASE_DELAY,
+  abortSignal?: AbortSignal,
 ): Promise<T> {
   let attempt = 0;
   while (true) {
+    if (abortSignal?.aborted) {
+      throw new Error("Aborted");
+    }
     try {
       return await fn();
     } catch (e) {
+      if (
+        abortSignal?.aborted ||
+        (e instanceof Error && e.name === "AbortError")
+      ) {
+        throw e;
+      }
       attempt++;
       if (attempt >= maxRetries) throw e;
       const delay = baseDelay * Math.pow(2, attempt - 1);
-      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      await new Promise<void>((resolve, reject) => {
+        if (abortSignal?.aborted) return reject(new Error("Aborted"));
+        const timer = setTimeout(resolve, delay);
+        if (abortSignal) {
+          abortSignal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              reject(new Error("Aborted"));
+            },
+            { once: true },
+          );
+        }
+      });
     }
   }
 }
@@ -197,6 +222,39 @@ export function buildSpecialistContext(params: {
   return assembled;
 }
 
+/** Build CMO context history, enforcing max characters by truncating older rounds */
+export function buildCmoContext(
+  contextHistory: string[],
+  maxChars: number,
+): string {
+  const fullContext = contextHistory.join("\n\n");
+  if (fullContext.length <= maxChars || contextHistory.length <= 2) {
+    return fullContext;
+  }
+
+  const baseContext = [contextHistory[0], contextHistory[1]];
+  let currentLength = baseContext.join("\n\n").length;
+
+  const recentRounds: string[] = [];
+  for (let i = contextHistory.length - 1; i >= 2; i--) {
+    const entry = contextHistory[i];
+    const addedLength = entry.length + (recentRounds.length > 0 ? 2 : 0);
+    if (currentLength + addedLength > maxChars && recentRounds.length > 0) {
+      break;
+    }
+    recentRounds.unshift(entry);
+    currentLength += addedLength;
+  }
+
+  if (recentRounds.length < contextHistory.length - 2) {
+    baseContext.push(
+      "=== [Older consultation results omitted due to context size limits] ===",
+    );
+  }
+
+  return [...baseContext, ...recentRounds].join("\n\n");
+}
+
 /** Mock diagnosis for E2E testing — returns a realistic canned response */
 async function mockDiagnosis(
   _patientSummary: string,
@@ -301,7 +359,7 @@ async function mockDiagnosis(
 }
 
 // Step 2: Run the diagnostic analysis via the CMO supervisor agent
-const runDiagnosis = createStep({
+export const runDiagnosis = createStep({
   id: "run-diagnosis",
   inputSchema: z.object({
     patientSummary: z.string(),
@@ -328,10 +386,14 @@ const runDiagnosis = createStep({
 
     const MAX_ROUNDS = MAX_DIAGNOSIS_ROUNDS;
     let round = 1;
+    let parseFailureCount = 0;
+    const MAX_PARSE_FAILURES = 3;
     const allConsultedSpecialists = new Set<string>();
     const contextHistory = ["=== PATIENT CASE ===", inputData.patientSummary];
 
     let finalDiagnosisReport: DiagnosisReport | null = null;
+
+    const abortController = new AbortController();
 
     const runLoop = async () => {
       while (round <= MAX_ROUNDS) {
@@ -344,10 +406,15 @@ const runDiagnosis = createStep({
           full: "Specialists will receive all prior consultation results. Include context directives to highlight key cross-specialty correlations.",
         };
 
+        const builtContextHistory = buildCmoContext(
+          contextHistory,
+          CMO_CONTEXT_MAX_CHARS,
+        );
+
         const prompt = `You are starting Round ${round} of diagnosis.
 Here is the case and history of consultations so far:
 
-${contextHistory.join("\n\n")}
+${builtContextHistory}
 
 Based on the above, please decide which specialists you need to consult in this round.
 
@@ -398,12 +465,21 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
                     ),
                 }),
               },
+              abortSignal: abortController.signal,
             }),
           AGENT_GENERATE_MAX_RETRIES,
           AGENT_GENERATE_RETRY_BASE_DELAY,
+          abortController.signal,
         );
 
         if (!cmoDecision.object) {
+          parseFailureCount++;
+          if (parseFailureCount > MAX_PARSE_FAILURES) {
+            emitProgress(
+              `CMO returned unparseable responses ${parseFailureCount} times. Forcing final report generation.`,
+            );
+            break;
+          }
           emitProgress(
             `CMO returned an unparseable response in round ${round}, retrying...`,
           );
@@ -432,7 +508,7 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
           );
           const finalPrompt = `You did not request any new specialists, or there are no more to consult. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
 
-${contextHistory.join("\n\n")}`;
+${builtContextHistory}`;
           const finalResponse = await withRetry(
             () =>
               cmo.generate(finalPrompt, {
@@ -440,9 +516,11 @@ ${contextHistory.join("\n\n")}`;
                   jsonPromptInjection: true,
                   schema: diagnosisReportSchema,
                 },
+                abortSignal: abortController.signal,
               }),
             AGENT_GENERATE_MAX_RETRIES,
             AGENT_GENERATE_RETRY_BASE_DELAY,
+            abortController.signal,
           );
           finalDiagnosisReport = finalResponse.object;
           break;
@@ -478,9 +556,13 @@ ${contextHistory.join("\n\n")}`;
 
                 const specStart = Date.now();
                 const specResponse = await withRetry(
-                  () => specAgent.generate(specPrompt),
+                  () =>
+                    specAgent.generate(specPrompt, {
+                      abortSignal: abortController.signal,
+                    }),
                   AGENT_GENERATE_MAX_RETRIES,
                   AGENT_GENERATE_RETRY_BASE_DELAY,
+                  abortController.signal,
                 );
                 logger.specialistCall(
                   specId,
@@ -519,9 +601,13 @@ ${contextHistory.join("\n\n")}`;
 
       if (!finalDiagnosisReport) {
         // Reached max rounds without final report
+        const builtContextHistory = buildCmoContext(
+          contextHistory,
+          CMO_CONTEXT_MAX_CHARS,
+        );
         const finalPrompt = `Maximum diagnostic rounds (${MAX_ROUNDS}) reached. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
           
-${contextHistory.join("\n\n")}`;
+${builtContextHistory}`;
         const finalResponse = await withRetry(
           () =>
             cmo.generate(finalPrompt, {
@@ -529,32 +615,29 @@ ${contextHistory.join("\n\n")}`;
                 jsonPromptInjection: true,
                 schema: diagnosisReportSchema,
               },
+              abortSignal: abortController.signal,
             }),
           AGENT_GENERATE_MAX_RETRIES,
           AGENT_GENERATE_RETRY_BASE_DELAY,
+          abortController.signal,
         );
         finalDiagnosisReport = finalResponse.object;
       }
     };
 
+    const timeoutId = setTimeout(() => {
+      abortController.abort(
+        new Error(`Diagnosis timed out after ${DIAGNOSIS_TIMEOUT_MS}ms`),
+      );
+    }, DIAGNOSIS_TIMEOUT_MS);
+
     try {
-      await Promise.race([
-        runLoop(),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(
-                  `Diagnosis timed out after ${DIAGNOSIS_TIMEOUT_MS}ms`,
-                ),
-              ),
-            DIAGNOSIS_TIMEOUT_MS,
-          ),
-        ),
-      ]);
+      await runLoop();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Diagnosis generation failed: ${message}`);
+    } finally {
+      clearTimeout(timeoutId);
     }
 
     if (!finalDiagnosisReport) {

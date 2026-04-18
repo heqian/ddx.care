@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, mock } from "bun:test";
 import {
   splitToList,
   parseInput,
@@ -8,6 +8,8 @@ import {
   withRetry,
   normalizeSpecialistName,
   buildSpecialistContext,
+  buildCmoContext,
+  runDiagnosis,
 } from "../src/backend/workflows/diagnostic-workflow";
 
 describe("splitToList", () => {
@@ -675,3 +677,190 @@ describe("buildSpecialistContext", () => {
     expect(result).toContain("cardiologist Consult");
   });
 });
+
+describe("buildCmoContext", () => {
+  test("returns full context when under max chars", () => {
+    const history = ["=== PATIENT CASE ===", "Patient data", "Round 1 results"];
+    const result = buildCmoContext(history, 10000);
+    expect(result).toBe(history.join("\n\n"));
+  });
+
+  test("returns full context when exactly at max chars", () => {
+    const history = ["=== PATIENT CASE ===", "Patient data", "Round 1 results"];
+    const fullLength = history.join("\n\n").length;
+    const result = buildCmoContext(history, fullLength);
+    expect(result).toBe(history.join("\n\n"));
+  });
+
+  test("preserves base context (first 2 entries) when truncation occurs", () => {
+    const history = [
+      "=== PATIENT CASE ===",
+      "Patient data",
+      "A".repeat(5000),
+      "B".repeat(5000),
+      "C".repeat(5000),
+    ];
+    const result = buildCmoContext(history, 12000);
+    expect(result).toContain("=== PATIENT CASE ===");
+    expect(result).toContain("Patient data");
+    expect(result).toContain("Older consultation results omitted");
+  });
+
+  test("truncates older rounds while keeping recent ones", () => {
+    const history = [
+      "=== PATIENT CASE ===",
+      "Patient data",
+      "Round 1: " + "A".repeat(2000),
+      "Round 2: " + "B".repeat(2000),
+      "Round 3: " + "C".repeat(500),
+    ];
+    const result = buildCmoContext(history, 3000);
+    expect(result).toContain("Round 3");
+    expect(result).toContain("Older consultation results omitted");
+    expect(result).not.toContain("Round 1:");
+  });
+
+  test("does not add omission notice when no truncation occurs", () => {
+    const history = [
+      "=== PATIENT CASE ===",
+      "Patient data",
+      "Round 1 results",
+    ];
+    const result = buildCmoContext(history, 10000);
+    expect(result).not.toContain("omitted");
+  });
+
+  test("always preserves at least the first 2 entries even if they exceed max chars", () => {
+    const history = [
+      "=== PATIENT CASE ===",
+      "Very long patient data " + "X".repeat(10000),
+      "Round 1",
+    ];
+    const result = buildCmoContext(history, 100);
+    expect(result).toContain("=== PATIENT CASE ===");
+    expect(result).toContain("Very long patient data");
+  });
+});
+
+describe("withRetry - abort signal", () => {
+  test("immediately rejects if signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let calls = 0;
+    await expect(
+      withRetry(
+        () => {
+          calls++;
+          return Promise.resolve("ok");
+        },
+        3,
+        100,
+        controller.signal,
+      ),
+    ).rejects.toThrow("Aborted");
+    expect(calls).toBe(0);
+  });
+
+  test("rejects during retry delay when signal is aborted", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const fn = () => {
+      calls++;
+      throw new Error("fail");
+    };
+    setTimeout(() => controller.abort(), 50);
+    await expect(
+      withRetry(fn, 10, 500, controller.signal),
+    ).rejects.toThrow();
+  });
+
+  test("succeeds on first try without abort", async () => {
+    const result = await withRetry(
+      () => Promise.resolve("success"),
+      3,
+      100,
+    );
+    expect(result).toBe("success");
+  });
+});
+
+describe("runDiagnosis - CMO parsing logic", () => {
+  test("breaks infinite loop and forces final report after multiple unparseable responses", async () => {
+    let callCount = 0;
+    const mockCmoGenerate = mock(async () => {
+      callCount++;
+      if (callCount <= 3) {
+        // Return unparseable responses 3 times
+        return { object: undefined };
+      }
+      // On the 4th call (forced final report), return a valid report
+      return {
+        object: {
+          diagnoses: [{
+            condition: "Mock Condition",
+            confidencePercentage: 90,
+            urgency: "routine",
+            evidence: "Mock Evidence",
+          }],
+          recommendedNextSteps: "Mock Steps"
+        }
+      };
+    });
+
+    const mockMastra = {
+      getAgent: () => ({
+        generate: mockCmoGenerate,
+      }),
+    };
+
+    const result = await runDiagnosis.execute({
+      context: {} as any,
+      stepId: "run-diagnosis",
+      workflowId: "test-wf",
+      inputData: {
+        patientSummary: "Mock Patient",
+        medicalHistory: "",
+        conversationTranscript: "",
+        labResults: "",
+      },
+      mastra: mockMastra as any,
+      runId: "mock-run-id",
+    });
+
+    expect(callCount).toBe(5);
+    expect(result.diagnosisReport.diagnoses[0].condition).toBe("Mock Condition");
+  });
+
+  test("throws an error if CMO completely fails to parse even for the final report", async () => {
+    let callCount = 0;
+    const mockCmoGenerate = mock(async () => {
+      callCount++;
+      // Always return unparseable responses
+      return { object: undefined };
+    });
+
+    const mockMastra = {
+      getAgent: () => ({
+        generate: mockCmoGenerate,
+      }),
+    };
+
+    const runDiagnosisPromise = runDiagnosis.execute({
+      context: {} as any,
+      stepId: "run-diagnosis",
+      workflowId: "test-wf",
+      inputData: {
+        patientSummary: "Mock Patient",
+        medicalHistory: "",
+        conversationTranscript: "",
+        labResults: "",
+      },
+      mastra: mockMastra as any,
+      runId: "mock-run-id",
+    });
+
+    await expect(runDiagnosisPromise).rejects.toThrow("Diagnosis generation returned an empty response");
+    expect(callCount).toBe(5);
+  });
+});
+
