@@ -13,11 +13,20 @@ import {
   ALLOWED_ORIGINS,
 } from "../config";
 
+const CSP_VALUE =
+  "default-src 'self'; " +
+  "script-src 'self'; " +
+  "style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data:; " +
+  "connect-src 'self' ws: wss:; " +
+  "frame-ancestors 'none'";
+
 function corsHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": ALLOWED_ORIGINS,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Security-Policy": CSP_VALUE,
   };
 }
 
@@ -113,12 +122,18 @@ export function createRoutes(
           );
         }
 
+        // Reserve rate limit slot and workflow concurrency before awaiting
+        // body parse to prevent TOCTOU race conditions
+        rateLimiter.record(ip);
+        rateLimiter.startWorkflow();
+
         let body: unknown;
         const contentLength = parseInt(
           req.headers.get("content-length") ?? "0",
           10,
         );
         if (contentLength > MAX_PAYLOAD_BYTES) {
+          rateLimiter.finishWorkflow();
           logger.request("POST", "/v1/diagnose", 413, Date.now() - startTime, {
             ip,
             contentLength,
@@ -130,6 +145,7 @@ export function createRoutes(
         try {
           body = await req.json();
         } catch {
+          rateLimiter.finishWorkflow();
           logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, {
             ip,
           });
@@ -140,6 +156,7 @@ export function createRoutes(
 
         const parsed = diagnoseSchema.safeParse(body);
         if (!parsed.success) {
+          rateLimiter.finishWorkflow();
           const issues = parsed.error.issues
             .map((i) => `${i.path.join(".")}: ${i.message}`)
             .join("; ");
@@ -157,9 +174,6 @@ export function createRoutes(
 
         const { medicalHistory, conversationTranscript, labResults } =
           parsed.data;
-
-        rateLimiter.record(ip);
-        rateLimiter.startWorkflow();
 
         const jobId = crypto.randomUUID();
         progressStore.createJob(jobId);
@@ -276,14 +290,24 @@ export function createRoutes(
           return new Response("Missing jobId", { status: 400 });
         }
 
-        // Validate Origin header to prevent cross-site WebSocket hijacking
+        // Validate Origin header to prevent cross-site WebSocket hijacking.
+        // Always require a valid Origin — browsers always send it for WebSocket upgrades.
+        const origin = req.headers.get("origin");
+        if (!origin) {
+          logger.warn("ws_origin_rejected", {
+            jobId,
+            origin: "none",
+            reason: "missing_origin",
+          });
+          return new Response("Missing Origin header", { status: 403 });
+        }
         if (ALLOWED_ORIGINS !== "*") {
-          const origin = req.headers.get("origin");
           const allowed = ALLOWED_ORIGINS.split(",").map((o) => o.trim());
-          if (!origin || !allowed.includes(origin)) {
+          if (!allowed.includes(origin)) {
             logger.warn("ws_origin_rejected", {
               jobId,
-              origin: origin ?? "none",
+              origin,
+              reason: "not_in_allowlist",
             });
             return new Response("Forbidden origin", { status: 403 });
           }

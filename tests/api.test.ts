@@ -239,6 +239,80 @@ describe("API Endpoints", () => {
       });
       expect(res.status).not.toBe(403);
     });
+
+    test("GET /ws rejects connection without Origin header even in wildcard mode", async () => {
+      const res = await fetch(`${BASE}/ws?jobId=test-origin`, {
+        headers: {},
+      });
+      // Remove Origin header by creating a new request without it
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe("Content-Security-Policy headers", () => {
+    test("GET /v1/agents includes CSP header", async () => {
+      const res = await fetch(`${BASE}/v1/agents`);
+      const csp = res.headers.get("Content-Security-Policy");
+      expect(csp).toBeTruthy();
+      expect(csp).toContain("default-src 'self'");
+      expect(csp).toContain("script-src 'self'");
+      expect(csp).toContain("style-src 'self' 'unsafe-inline'");
+      expect(csp).toContain("img-src 'self' data:");
+      expect(csp).toContain("connect-src 'self' ws: wss:");
+      expect(csp).toContain("frame-ancestors 'none'");
+    });
+
+    test("GET /v1/health includes CSP header", async () => {
+      const res = await fetch(`${BASE}/v1/health`);
+      expect(res.headers.get("Content-Security-Policy")).toContain(
+        "default-src 'self'",
+      );
+    });
+
+    test("POST /v1/diagnose includes CSP header on error response", async () => {
+      const res = await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: "bad",
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.headers.get("Content-Security-Policy")).toContain(
+        "default-src 'self'",
+      );
+    });
+
+    test("OPTIONS preflight response includes CSP header", async () => {
+      const res = await fetch(`${BASE}/v1/diagnose`, { method: "OPTIONS" });
+      expect(res.headers.get("Content-Security-Policy")).toContain(
+        "default-src 'self'",
+      );
+    });
+  });
+
+  describe("Rate limit reservation", () => {
+    test("workflow slot is released on invalid JSON body", async () => {
+      // Import the rate limiter to reset state for a clean test
+      const { rateLimiter } = await import("../src/backend/api/routes");
+
+      // Reset rate limit state for this test
+      const savedReset = rateLimiter["hasLoggedReset"];
+      rateLimiter["clients"].clear();
+      rateLimiter["activeCount"] = 0;
+      rateLimiter["hasLoggedReset"] = true;
+
+      const startRes = await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: "not json",
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(startRes.status).toBe(400);
+
+      // The workflow slot should have been released (finishWorkflow called),
+      // so the concurrent workflow count should be back to 0.
+      expect(rateLimiter.activeWorkflows).toBe(0);
+
+      // Reset hasLoggedReset to avoid double-warning
+      rateLimiter["hasLoggedReset"] = savedReset;
+    });
   });
 
   afterAll(() => {
