@@ -1,6 +1,6 @@
 # ddx.care — AI-Powered Differential Diagnosis System
 
-Uses AI agents (via Mastra) to simulate a panel of medical specialists analyzing patient cases. 35 specialist agents consult on cases, orchestrated by a Chief Medical Officer (CMO) agent that synthesizes findings into a ranked differential diagnosis.
+Uses AI agents (via Mastra) to simulate a panel of medical specialists analyzing patient cases. 36 specialist agents consult on cases, orchestrated by a Chief Medical Officer (CMO) agent that synthesizes findings into a ranked differential diagnosis.
 
 ## Runtime & Tooling
 
@@ -49,11 +49,11 @@ Default to using Bun instead of Node.js. You should NEVER use Python or any Pyth
 
 - **Mastra framework** (`@mastra/core`) — agent orchestration, workflows, tool definitions
 - **AI Model**: OpenCode Go (default: `opencode-go/qwen3.6-plus`), configured via `OPENCODE_API_KEY`. Model string uses `provider/model-name` format as required by Mastra.
-- **Mastra instance** (`src/backend/index.ts`) — Registers all agents (CMO + 35 specialists) and the `diagnosticWorkflow` into a single `Mastra` instance.
+- **Mastra instance** (`src/backend/index.ts`) — Registers all agents (CMO + 36 specialists) and the `diagnosticWorkflow` into a single `Mastra` instance.
 
 #### Agents (`src/backend/agents/`)
 
-35 specialist agents + 1 Chief Medical Officer (CMO), organized by category:
+36 specialist agents + 1 Chief Medical Officer (CMO), organized by category:
 
 - **Primary Care**: generalist, pediatrician, geriatrician
 - **Internal Medicine**: cardiologist, dermatologist, endocrinologist, gastroenterologist, hematologist, infectiologist, nephrologist, neurologist, oncologist, pulmonologist, rheumatologist
@@ -88,7 +88,7 @@ Shared utilities:
 
 - `diagnostic-workflow.ts` — Three-step Mastra workflow: `parseInput` → `runDiagnosis` → `formatReport`
   - **parseInput**: Validates and structures patient data (medicalHistory, conversationTranscript, labResults)
-  - **runDiagnosis**: Multi-round CMO supervisor loop. The CMO decides which specialists to consult per round, delegates via `limitConcurrency` (max 3 concurrent), and uses `withRetry` (3 attempts, exponential backoff). Continues up to `MAX_DIAGNOSIS_ROUNDS` (default 3) or until the CMO declares `isFinal`. Timeout: 300s. Supports agent-to-agent context sharing via `SPECIALIST_CONTEXT_MODE` — the CMO can provide per-specialist "context directives" so specialists see prior consultation findings.
+  - **runDiagnosis**: Multi-round CMO supervisor loop. The CMO decides which specialists to consult per round, delegates via `limitConcurrency` (max 3 concurrent), and uses `withRetry` (3 attempts, exponential backoff). Continues up to `MAX_DIAGNOSIS_ROUNDS` (default 3) or until the CMO declares `isFinal`. Timeout: 900s (15 min). Supports agent-to-agent context sharing via `SPECIALIST_CONTEXT_MODE` — the CMO can provide per-specialist "context directives" so specialists see prior consultation findings.
   - **formatReport**: Transforms raw diagnosis into frontend-friendly format with ranked diagnoses, urgency levels, evidence arrays, and a disclaimer.
 - Exports `reportSchema` (Zod schema for the formatted report) and `diagnosticWorkflow`.
 - **Mock mode**: When `MOCK_LLM=1`, `runDiagnosis` returns a canned response without calling real LLMs.
@@ -112,9 +112,10 @@ Shared utilities:
 All constants centralized here, read from environment variables with defaults:
 - `PORT` (3000), `ALLOWED_ORIGINS` (`*`), `JOB_TTL_MS` (30min), `CLEANUP_INTERVAL_MS` (5min), `RATE_LIMIT_PRUNE_INTERVAL_MS` (10min)
 - `SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL` (both `opencode-go/qwen3.6-plus`)
-- `DIAGNOSIS_TIMEOUT_MS` (300s), `MAX_DIAGNOSIS_ROUNDS` (3)
-- `RATE_LIMIT_MAX_REQUESTS` (5), `RATE_LIMIT_WINDOW_MS` (1h), `MAX_CONCURRENT_WORKFLOWS` (3)
+- `DIAGNOSIS_TIMEOUT_MS` (900s / 15 min), `MAX_DIAGNOSIS_ROUNDS` (3)
+- `RATE_LIMIT_MAX_REQUESTS` (5), `RATE_LIMIT_WINDOW_MS` (60s / 1 min), `MAX_CONCURRENT_WORKFLOWS` (3)
 - `MAX_INPUT_FIELD_LENGTH` (50,000 chars), `MAX_PAYLOAD_BYTES` (1MB)
+- `MOCK_LLM`, `LOG_FORMAT`, `SPECIALIST_CONTEXT_MODE`, `SPECIALIST_CONTEXT_MAX_CHARS`, `CMO_CONTEXT_MAX_CHARS`
 
 ### Frontend (`src/frontend/`)
 
@@ -133,7 +134,7 @@ All constants centralized here, read from environment variables with defaults:
 
 - **agents/**: `AgentGrid`, `AgentIcon`, `AgentStatusCard`
 - **diagnosis/**: `ConfidenceBadge`, `ConsultNotes` (with print/export, CSP-hardened print window), `DiagnosisCard`, `UrgencyBadge`
-- **layout/**: `AppShell`, `Footer`, `Header` (with "Clinical Decision Support" label)
+- **layout/**: `AppShell`, `Footer`, `Header` (with "Differential Diagnosis" label)
 - **ui/**: `Badge`, `Button`, `Card`, `FileDropZone`, `Modal`, `Spinner`
 
 #### Hooks (`src/frontend/hooks/`)
@@ -188,12 +189,13 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `ORCHESTRATOR_MODEL` | `opencode-go/qwen3.6-plus` | Override CMO agent model |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max CMO consultation rounds |
 | `RATE_LIMIT_MAX_REQUESTS` | `5` | Max diagnosis requests per IP per window |
-| `RATE_LIMIT_WINDOW_MS` | `3600000` (1h) | Rate limit sliding window |
+| `RATE_LIMIT_WINDOW_MS` | `60000` (1 min) | Rate limit sliding window |
 | `MAX_CONCURRENT_WORKFLOWS` | `3` | Max concurrent diagnostic workflows |
 | `MOCK_LLM` | — | Set to `1` for mock mode (testing) |
 | `LOG_FORMAT` | — | Set to `json` for JSON-structured log output |
 | `SPECIALIST_CONTEXT_MODE` | `none` | Agent-to-agent context sharing: `none`, `prior_rounds`, `cmo_curated`, `full` |
 | `SPECIALIST_CONTEXT_MAX_CHARS` | `2000` | Max characters of context injected per specialist call |
+| `CMO_CONTEXT_MAX_CHARS` | `60000` | Max characters of context maintained in CMO history |
 
 ## Testing
 

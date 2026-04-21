@@ -14,8 +14,8 @@ function isOriginAllowed(
   allowedOrigins: string,
   requestOrigin: string | null,
 ): boolean {
-  if (allowedOrigins === "*") return true;
   if (!requestOrigin) return false;
+  if (allowedOrigins === "*") return true;
   const allowed = allowedOrigins.split(",").map((o) => o.trim());
   return allowed.includes(requestOrigin);
 }
@@ -26,8 +26,8 @@ describe("WebSocket origin validation logic", () => {
       expect(isOriginAllowed("*", "https://evil.example.com")).toBe(true);
     });
 
-    test("allows null origin", () => {
-      expect(isOriginAllowed("*", null)).toBe(true);
+    test("rejects null origin — browsers always send Origin for WebSocket upgrades", () => {
+      expect(isOriginAllowed("*", null)).toBe(false);
     });
   });
 

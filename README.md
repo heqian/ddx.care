@@ -60,9 +60,13 @@ The app runs on `http://localhost:3000` by default.
 | `ORCHESTRATOR_MODEL` | `opencode-go/qwen3.6-plus` | Model for CMO orchestrator |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max consultation rounds per diagnosis |
 | `RATE_LIMIT_MAX_REQUESTS` | `5` | Max requests per IP per window |
-| `RATE_LIMIT_WINDOW_MS` | `3600000` | Rate limit window (1 hour) |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window (1 minute) |
 | `MAX_CONCURRENT_WORKFLOWS` | `3` | Max concurrent diagnostic workflows |
 | `MOCK_LLM` | — | Set to `1` for mock mode (testing) |
+| `ALLOWED_ORIGINS` | `*` | CORS + WebSocket origin whitelist (comma-separated) |
+| `LOG_FORMAT` | — | Set to `json` for JSON-structured log output |
+| `SPECIALIST_CONTEXT_MODE` | `none` | Agent-to-agent context sharing: `none`, `prior_rounds`, `cmo_curated`, `full` |
+| `SPECIALIST_CONTEXT_MAX_CHARS` | `2000` | Max characters of context injected per specialist call |
 
 See [`.env.example`](.env.example) for a template.
 
@@ -72,6 +76,7 @@ See [`.env.example`](.env.example) for a template.
 |--------|------|-------------|
 | `POST` | `/v1/diagnose` | Submit a diagnostic case (validates input size up to 1MB max payload) |
 | `GET` | `/v1/status/:jobId` | Poll job status |
+| `GET` | `/v1/health` | Health check (uptime, active workflows, DB connectivity) |
 | `GET` | `/v1/agents` | List available specialist agents |
 | `GET` | `/ws?jobId=...` | WebSocket for real-time progress streaming |
 
@@ -79,7 +84,7 @@ See [`.env.example`](.env.example) for a template.
 
 - **Runtime:** Bun
 - **AI Framework:** Mastra (`@mastra/core`)
-- **AI Model:** Together AI
+- **AI Model:** OpenCode Go (`opencode-go/qwen3.6-plus`)
 - **Frontend:** React 19, Tailwind CSS v4
 - **Validation:** Zod
 - **Testing:** `bun:test`, Playwright, `@testing-library/react`
