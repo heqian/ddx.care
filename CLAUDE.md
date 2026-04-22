@@ -261,6 +261,11 @@ Backend test files in `tests/`:
 
 ## Best Practices
 
+### Testing
+
+- Every code change should account for tests. Update or add tests to cover new or modified behavior.
+- Run the full test suite (`bun run test:all && bun run test:integration`) after every code change.
+
 ### Mastra API Verification
 
 Mastra is a fast-moving framework — never assume API signatures from memory. When working with Mastra APIs:
