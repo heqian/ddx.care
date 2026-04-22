@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   ArrowPathIcon,
   DocumentChartBarIcon,
@@ -15,11 +15,45 @@ interface ResultsViewProps {
 
 type Tab = "diagnoses" | "consult";
 
+const TABS: { key: Tab; label: string }[] = [
+  { key: "diagnoses", label: "Diagnoses" },
+  { key: "consult", label: "Full Report" },
+];
+
 export function ResultsView({ result, onNewCase }: ResultsViewProps) {
   const [tab, setTab] = useState<Tab>("diagnoses");
+  const tabListRef = useRef<HTMLDivElement>(null);
 
   const report = result.result?.result?.report;
   const generatedAt = result.result?.result?.generatedAt;
+
+  const selectTab = useCallback((key: Tab) => {
+    setTab(key);
+    const btn = tabListRef.current?.querySelector<HTMLButtonElement>(
+      `[data-tab="${key}"]`,
+    );
+    btn?.focus();
+  }, []);
+
+  const handleTabKeyDown = useCallback(
+    (e: React.KeyboardEvent, currentIndex: number) => {
+      let nextIndex: number | null = null;
+      if (e.key === "ArrowRight") {
+        nextIndex = (currentIndex + 1) % TABS.length;
+      } else if (e.key === "ArrowLeft") {
+        nextIndex = (currentIndex - 1 + TABS.length) % TABS.length;
+      } else if (e.key === "Home") {
+        nextIndex = 0;
+      } else if (e.key === "End") {
+        nextIndex = TABS.length - 1;
+      }
+      if (nextIndex !== null) {
+        e.preventDefault();
+        selectTab(TABS[nextIndex].key);
+      }
+    },
+    [selectTab],
+  );
 
   if (!report) {
     return (
@@ -52,20 +86,41 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
+      <div
+        ref={tabListRef}
+        role="tablist"
+        className="flex gap-1 border-b border-slate-200 dark:border-slate-700"
+      >
         <button
-          onClick={() => setTab("diagnoses")}
+          id="tab-diagnoses"
+          role="tab"
+          data-tab="diagnoses"
+          aria-selected={tab === "diagnoses"}
+          aria-controls="panel-diagnoses"
+          tabIndex={tab === "diagnoses" ? 0 : -1}
+          onClick={() => selectTab("diagnoses")}
+          onKeyDown={(e) => handleTabKeyDown(e, 0)}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             tab === "diagnoses"
               ? "border-primary text-primary dark:text-cyan-400 dark:border-cyan-400"
               : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >
-          <DocumentChartBarIcon className="h-4 w-4 inline mr-1.5 -mt-0.5" />
+          <DocumentChartBarIcon
+            className="h-4 w-4 inline mr-1.5 -mt-0.5"
+            aria-hidden="true"
+          />
           Diagnoses ({report.diagnoses.length})
         </button>
         <button
-          onClick={() => setTab("consult")}
+          id="tab-consult"
+          role="tab"
+          data-tab="consult"
+          aria-selected={tab === "consult"}
+          aria-controls="panel-consult"
+          tabIndex={tab === "consult" ? 0 : -1}
+          onClick={() => selectTab("consult")}
+          onKeyDown={(e) => handleTabKeyDown(e, 1)}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             tab === "consult"
               ? "border-primary text-primary dark:text-cyan-400 dark:border-cyan-400"
@@ -77,7 +132,12 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
       </div>
 
       {/* Tab Content */}
-      {tab === "diagnoses" && (
+      <div
+        id="panel-diagnoses"
+        role="tabpanel"
+        aria-labelledby="tab-diagnoses"
+        hidden={tab !== "diagnoses"}
+      >
         <div className="space-y-4">
           {report.chiefComplaint && (
             <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
@@ -140,9 +200,16 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
             </div>
           )}
         </div>
-      )}
+      </div>
 
-      {tab === "consult" && <ConsultNotes report={report} />}
+      <div
+        id="panel-consult"
+        role="tabpanel"
+        aria-labelledby="tab-consult"
+        hidden={tab !== "consult"}
+      >
+        <ConsultNotes report={report} />
+      </div>
 
       {/* Disclaimer */}
       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-4 text-xs text-amber-800 dark:text-amber-300 space-y-1">
