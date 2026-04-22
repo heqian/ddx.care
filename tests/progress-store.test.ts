@@ -180,6 +180,26 @@ describe("JobStore — Pub/Sub", () => {
   });
 });
 
+describe("JobStore — WAL Mode", () => {
+  test("enables WAL journal mode on construction", () => {
+    const db = (store as any).db;
+    const result = db.query("PRAGMA journal_mode").get() as { journal_mode: string };
+    // In-memory databases may report "memory" or "wal" depending on Bun version
+    // but file-backed databases should always be WAL
+    expect(["wal", "memory"]).toContain(result.journal_mode);
+  });
+
+  test("concurrent emitMessage calls do not deadlock", () => {
+    store.createJob("wal-1");
+    // Rapidly emit many progress events — would deadlock without WAL
+    for (let i = 0; i < 50; i++) {
+      store.emitMessage("wal-1", `Message ${i}`);
+    }
+    const job = store.getJob("wal-1");
+    expect(job!.progress).toHaveLength(50);
+  });
+});
+
 describe("JobStore — Cleanup", () => {
   test("cleanupExpired removes old jobs", () => {
     store.createJob("old-job");

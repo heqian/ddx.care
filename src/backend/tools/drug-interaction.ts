@@ -133,12 +133,7 @@ export const drugInteractionTool = createTool({
     const url = `${RXNAV_BASE}/interaction/list.json?rxcuis=${rxcuis.join("+")}`;
     let result: RxNavInteractionResponse;
     try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        // RxNav interaction API may be temporarily unavailable
-        return { interactions: [], noInteractionsFound: true };
-      }
-      result = await res.json();
+      result = await fetchJSON(url);
     } catch {
       return { interactions: [], noInteractionsFound: true };
     }

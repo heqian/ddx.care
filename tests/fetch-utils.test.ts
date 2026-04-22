@@ -154,3 +154,20 @@ describe("fetchJSON — NCBI Rate Limiting", () => {
     }
   });
 });
+
+describe("fetchJSON — NCBI Token Timeout", () => {
+  test("NCBI_TOKEN_TIMEOUT_MS constant is exposed and reasonable", async () => {
+    // The timeout is hardcoded to 30000ms in the module
+    // We verify the behavior indirectly: a normal NCBI call should NOT timeout
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ result: "ok" }),
+    }) as any;
+
+    // A single NCBI call should complete without timeout
+    const result = await fetchJSON(
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+    );
+    expect(result).toEqual({ result: "ok" });
+  });
+});

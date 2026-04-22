@@ -365,9 +365,8 @@ describe("diagnosisReportSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  test("rejects confidence outside 0-100 range (via number type)", () => {
-    // z.number() doesn't enforce range unless .min().max() is added,
-    // but the schema uses z.number() — verify it accepts valid numbers
+  test("accepts confidence within 0-100 range", () => {
+    // Schema uses z.number().min(0).max(100) — verify valid values pass
     const valid = {
       chiefComplaint: "Test",
       patientSummary: "Test",
@@ -389,6 +388,13 @@ describe("diagnosisReportSchema", () => {
 
     const result = diagnosisReportSchema.safeParse(valid);
     expect(result.success).toBe(true);
+
+    // Also verify boundary values
+    valid.rankedDiagnoses[0].confidencePercentage = 0;
+    expect(diagnosisReportSchema.safeParse(valid).success).toBe(true);
+
+    valid.rankedDiagnoses[0].confidencePercentage = 100;
+    expect(diagnosisReportSchema.safeParse(valid).success).toBe(true);
   });
 });
 
@@ -542,12 +548,19 @@ describe("withRetry", () => {
     }
 
     expect(callTimes.length).toBe(3);
-    // Gap 1→2 should be ~50ms (baseDelay * 2^0), gap 2→3 should be ~100ms (baseDelay * 2^1)
+    // With jitter: delay = baseDelay * 2^(attempt-1) * (0.5 + Math.random())
+    // Gap 1→2 min: 50 * 0.5 = 25ms, max: 50 * 1.5 = 75ms
+    // Gap 2→3 min: 100 * 0.5 = 50ms, max: 100 * 1.5 = 150ms
     if (callTimes.length === 3) {
       const gap1 = callTimes[1] - callTimes[0];
       const gap2 = callTimes[2] - callTimes[1];
-      expect(gap1).toBeGreaterThanOrEqual(40);
-      expect(gap2).toBeGreaterThanOrEqual(80);
+      // With jitter: delay = baseDelay * 2^(attempt-1) * (0.5 + Math.random())
+      // Gap 1→2: 50 * 1 * [0.5, 1.5) → [25ms, 75ms)
+      // Gap 2→3: 50 * 2 * [0.5, 1.5) → [50ms, 150ms)
+      expect(gap1).toBeGreaterThanOrEqual(15);
+      expect(gap1).toBeLessThanOrEqual(100);
+      expect(gap2).toBeGreaterThanOrEqual(30);
+      expect(gap2).toBeLessThanOrEqual(200);
     }
   });
 });
@@ -809,13 +822,20 @@ describe("runDiagnosis - CMO parsing logic", () => {
       }
       return {
         object: {
-          diagnoses: [{
-            condition: "Mock Condition",
+          chiefComplaint: "Mock Complaint",
+          patientSummary: "Mock Patient",
+          specialistsConsulted: [],
+          rankedDiagnoses: [{
+            diagnosisName: "Mock Condition",
             confidencePercentage: 90,
-            urgency: "routine",
-            evidence: "Mock Evidence",
+            urgency: "Routine",
+            rationale: "Mock rationale",
+            supportingEvidence: "Mock Evidence",
+            contradictoryEvidence: "",
+            suggestedNextSteps: "Mock Steps",
           }],
-          recommendedNextSteps: "Mock Steps"
+          crossSpecialtyObservations: "",
+          recommendedImmediateActions: "",
         }
       };
     });
@@ -841,7 +861,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
     });
 
     expect(callCount).toBe(5);
-    expect(result.diagnosisReport.diagnoses[0].condition).toBe("Mock Condition");
+    expect(result.diagnosisReport.rankedDiagnoses[0].diagnosisName).toBe("Mock Condition");
   });
 
   test("throws an error if CMO completely fails to parse even for the final report", async () => {
@@ -873,6 +893,378 @@ describe("runDiagnosis - CMO parsing logic", () => {
 
     await expect(runDiagnosisPromise).rejects.toThrow("Diagnosis generation returned an empty response");
     expect(callCount).toBe(5);
+  });
+
+  test("passes abort signal to CMO generate and withRetry", async () => {
+    let generateCallCount = 0;
+    const mockCmoGenerate = mock(async (_prompt: string, options?: { abortSignal?: AbortSignal }) => {
+      generateCallCount++;
+      // Verify abort signal is provided
+      expect(options?.abortSignal).toBeDefined();
+      return {
+        object: {
+          specialistsToConsult: [],
+          isFinal: true,
+          finalReport: {
+            chiefComplaint: "",
+            patientSummary: "",
+            specialistsConsulted: [],
+            rankedDiagnoses: [
+              {
+                diagnosisName: "Test",
+                confidencePercentage: 50,
+                urgency: "Routine",
+                rationale: "",
+                supportingEvidence: "",
+                contradictoryEvidence: "",
+                suggestedNextSteps: "",
+              },
+            ],
+            crossSpecialtyObservations: "",
+            recommendedImmediateActions: "",
+          },
+        },
+      };
+    });
+
+    const mockMastra = {
+      getAgent: () => ({
+        generate: mockCmoGenerate,
+      }),
+    };
+
+    await runDiagnosis.execute({
+      context: {} as any,
+      stepId: "run-diagnosis",
+      workflowId: "test-wf",
+      inputData: {
+        patientSummary: "Mock Patient",
+        medicalHistory: "",
+        conversationTranscript: "",
+        labResults: "",
+      },
+      mastra: mockMastra as any,
+      runId: "abort-signal-id",
+    });
+
+    expect(generateCallCount).toBeGreaterThanOrEqual(1);
+  });
+
+  test("handles specialist call failure gracefully", async () => {
+    let cmoCallCount = 0;
+    const mockCmoGenerate = mock(async () => {
+      cmoCallCount++;
+      if (cmoCallCount === 1) {
+        return {
+          object: {
+            specialistsToConsult: [{ id: "cardiologist" }],
+            isFinal: false,
+          },
+        };
+      }
+      return {
+        object: {
+          specialistsToConsult: [],
+          isFinal: true,
+          finalReport: {
+            chiefComplaint: "Headache",
+            patientSummary: "Test",
+            specialistsConsulted: [
+              { specialist: "cardiologist", keyFindings: "Error occurred" },
+            ],
+            rankedDiagnoses: [
+              {
+                diagnosisName: "Test",
+                confidencePercentage: 50,
+                urgency: "Routine",
+                rationale: "Test",
+                supportingEvidence: "",
+                contradictoryEvidence: "",
+                suggestedNextSteps: "",
+              },
+            ],
+            crossSpecialtyObservations: "",
+            recommendedImmediateActions: "",
+          },
+        },
+      };
+    });
+
+    const mockMastra = {
+      getAgent: (id: string) => {
+        if (id === "chiefMedicalOfficer") {
+          return { generate: mockCmoGenerate };
+        }
+        if (id === "cardiologist") {
+          return {
+            generate: mock(async () => {
+              throw new Error("Specialist unavailable");
+            }),
+          };
+        }
+        return undefined;
+      },
+    };
+
+    const result = await runDiagnosis.execute({
+      context: {} as any,
+      stepId: "run-diagnosis",
+      workflowId: "test-wf",
+      inputData: {
+        patientSummary: "Mock Patient",
+        medicalHistory: "",
+        conversationTranscript: "",
+        labResults: "",
+      },
+      mastra: mockMastra as any,
+      runId: "specialist-fail-id",
+    });
+
+    expect(result.diagnosisReport.specialistsConsulted).toHaveLength(1);
+  });
+
+  test("falls back to max-rounds final report when CMO never returns isFinal", async () => {
+    let round = 0;
+    const mockCmoGenerate = mock(async () => {
+      round++;
+      return {
+        object: {
+          specialistsToConsult: [{ id: "generalist" }],
+          isFinal: false,
+        },
+      };
+    });
+
+    const mockSpecGenerate = mock(async () => ({
+      text: "Generalist findings",
+    }));
+
+    const mockMastra = {
+      getAgent: (id: string) => {
+        if (id === "chiefMedicalOfficer") {
+          return { generate: mockCmoGenerate };
+        }
+        return { generate: mockSpecGenerate };
+      },
+    };
+
+    const result = await runDiagnosis.execute({
+      context: {} as any,
+      stepId: "run-diagnosis",
+      workflowId: "test-wf",
+      inputData: {
+        patientSummary: "Mock Patient",
+        medicalHistory: "",
+        conversationTranscript: "",
+        labResults: "",
+      },
+      mastra: mockMastra as any,
+      runId: "max-rounds-id",
+    });
+
+    expect(result.diagnosisReport).toBeDefined();
+    expect(round).toBeGreaterThanOrEqual(1);
+  });
+
+  test("compiles final report when CMO returns empty specialists with isFinal false", async () => {
+    let callCount = 0;
+    const mockCmoGenerate = mock(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          object: {
+            specialistsToConsult: [],
+            isFinal: false,
+          },
+        };
+      }
+      return {
+        object: {
+          chiefComplaint: "Headache",
+          patientSummary: "Test",
+          specialistsConsulted: [],
+          rankedDiagnoses: [
+            {
+              diagnosisName: "Test",
+              confidencePercentage: 50,
+              urgency: "Routine",
+              rationale: "Test",
+              supportingEvidence: "",
+              contradictoryEvidence: "",
+              suggestedNextSteps: "",
+            },
+          ],
+          crossSpecialtyObservations: "",
+          recommendedImmediateActions: "",
+        },
+      };
+    });
+
+    const mockMastra = {
+      getAgent: () => ({
+        generate: mockCmoGenerate,
+      }),
+    };
+
+    const result = await runDiagnosis.execute({
+      context: {} as any,
+      stepId: "run-diagnosis",
+      workflowId: "test-wf",
+      inputData: {
+        patientSummary: "Mock Patient",
+        medicalHistory: "",
+        conversationTranscript: "",
+        labResults: "",
+      },
+      mastra: mockMastra as any,
+      runId: "empty-specialists-id",
+    });
+
+    expect(result.diagnosisReport).toBeDefined();
+    expect(callCount).toBe(2);
+  });
+});
+
+describe("formatReport — malformed input handling", () => {
+  test("handles missing optional fields with defaults", async () => {
+    const sparseReport = {
+      chiefComplaint: undefined,
+      patientSummary: undefined,
+      specialistsConsulted: undefined,
+      rankedDiagnoses: [
+        {
+          diagnosisName: undefined,
+          confidencePercentage: undefined,
+          urgency: undefined,
+          rationale: undefined,
+          supportingEvidence: undefined,
+          contradictoryEvidence: undefined,
+          suggestedNextSteps: undefined,
+        },
+      ],
+      crossSpecialtyObservations: undefined,
+      recommendedImmediateActions: undefined,
+    };
+
+    const result = await formatReport.execute({
+      inputData: { diagnosisReport: sparseReport as any },
+    } as Parameters<typeof formatReport.execute>[0]);
+
+    expect(result.report.chiefComplaint).toBe("");
+    expect(result.report.patientSummary).toBe("");
+    expect(result.report.diagnoses[0].name).toBe("");
+    expect(result.report.diagnoses[0].confidence).toBe(0);
+    expect(result.report.diagnoses[0].urgency).toBe("routine");
+    expect(result.report.diagnoses[0].rationale).toBe("");
+    expect(result.report.diagnoses[0].supportingEvidence).toEqual([]);
+    expect(result.report.diagnoses[0].contradictoryEvidence).toEqual([]);
+    expect(result.report.diagnoses[0].nextSteps).toEqual([]);
+    expect(result.report.crossSpecialtyObservations).toBe("");
+    expect(result.report.recommendedImmediateActions).toBe("");
+  });
+
+  test("handles invalid urgency values by defaulting to routine", async () => {
+    const report = {
+      chiefComplaint: "",
+      patientSummary: "",
+      specialistsConsulted: [],
+      rankedDiagnoses: [
+        {
+          diagnosisName: "Test",
+          confidencePercentage: 50,
+          urgency: "High",
+          rationale: "",
+          supportingEvidence: "",
+          contradictoryEvidence: "",
+          suggestedNextSteps: "",
+        },
+      ],
+      crossSpecialtyObservations: "",
+      recommendedImmediateActions: "",
+    };
+
+    const result = await formatReport.execute({
+      inputData: { diagnosisReport: report as any },
+    } as Parameters<typeof formatReport.execute>[0]);
+
+    expect(result.report.diagnoses[0].urgency).toBe("routine");
+  });
+
+  test("handles empty arrays for evidence and next steps", async () => {
+    const report = {
+      chiefComplaint: "",
+      patientSummary: "",
+      specialistsConsulted: [],
+      rankedDiagnoses: [
+        {
+          diagnosisName: "Test",
+          confidencePercentage: 0,
+          urgency: "Routine",
+          rationale: "",
+          supportingEvidence: "",
+          contradictoryEvidence: "",
+          suggestedNextSteps: "",
+        },
+      ],
+      crossSpecialtyObservations: "",
+      recommendedImmediateActions: "",
+    };
+
+    const result = await formatReport.execute({
+      inputData: { diagnosisReport: report },
+    } as Parameters<typeof formatReport.execute>[0]);
+
+    expect(result.report.diagnoses[0].supportingEvidence).toEqual([]);
+    expect(result.report.diagnoses[0].contradictoryEvidence).toEqual([]);
+    expect(result.report.diagnoses[0].nextSteps).toEqual([]);
+  });
+
+  test("rejects confidence above 100 in schema validation", () => {
+    const invalid = {
+      chiefComplaint: "Test",
+      patientSummary: "Test",
+      specialistsConsulted: [],
+      rankedDiagnoses: [
+        {
+          diagnosisName: "Test",
+          confidencePercentage: 150,
+          urgency: "Routine",
+          rationale: "Test",
+          supportingEvidence: "",
+          contradictoryEvidence: "",
+          suggestedNextSteps: "",
+        },
+      ],
+      crossSpecialtyObservations: "",
+      recommendedImmediateActions: "",
+    };
+
+    const result = diagnosisReportSchema.safeParse(invalid);
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects confidence below 0 in schema validation", () => {
+    const invalid = {
+      chiefComplaint: "Test",
+      patientSummary: "Test",
+      specialistsConsulted: [],
+      rankedDiagnoses: [
+        {
+          diagnosisName: "Test",
+          confidencePercentage: -5,
+          urgency: "Routine",
+          rationale: "Test",
+          supportingEvidence: "",
+          contradictoryEvidence: "",
+          suggestedNextSteps: "",
+        },
+      ],
+      crossSpecialtyObservations: "",
+      recommendedImmediateActions: "",
+    };
+
+    const result = diagnosisReportSchema.safeParse(invalid);
+    expect(result.success).toBe(false);
   });
 });
 

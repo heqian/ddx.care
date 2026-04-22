@@ -1,5 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import { fetchJSON } from "./utils/fetch";
 
 const MEDLINE_BASE = "https://connect.medlineplus.gov/service";
 
@@ -102,9 +103,7 @@ export const medlinePlusSearchTool = createTool({
 
     for (const url of attempts) {
       try {
-        const result = await fetch(url);
-        if (!result.ok) continue;
-        const data = await result.json();
+        const data = await fetchJSON(url);
 
         const entries = data?.feed?.entry ?? [];
         const entryArray = Array.isArray(entries)

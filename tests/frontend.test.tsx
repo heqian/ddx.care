@@ -950,3 +950,295 @@ describe("Footer", () => {
     expect(footer).toBeTruthy();
   });
 });
+
+// ---------------------------------------------------------------------------
+// useJobStream hook
+// ---------------------------------------------------------------------------
+import { useJobStream } from "../src/frontend/hooks/useJobStream";
+
+// Mock WebSocket class for testing
+class MockWebSocket {
+  static instances: MockWebSocket[] = [];
+  url: string;
+  readyState = 0;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: ((event: { code: number; reason: string }) => void) | null = null;
+  onopen: (() => void) | null = null;
+  closed = false;
+
+  constructor(url: string) {
+    this.url = url;
+    MockWebSocket.instances.push(this);
+    // Auto-connect on next tick
+    setTimeout(() => {
+      this.readyState = 1;
+      this.onopen?.();
+    }, 0);
+  }
+
+  close() {
+    this.closed = true;
+    this.readyState = 3;
+  }
+
+  send(_data: string) {}
+
+  // Test helper: simulate receiving a message
+  simulateMessage(data: unknown) {
+    this.onmessage?.({ data: JSON.stringify(data) });
+  }
+
+  // Test helper: simulate close event
+  simulateClose(code: number, reason = "") {
+    this.readyState = 3;
+    this.onclose?.({ code, reason });
+  }
+
+  // Test helper: simulate error
+  simulateError() {
+    this.onerror?.();
+  }
+
+  static reset() {
+    MockWebSocket.instances = [];
+  }
+}
+
+describe("useJobStream", () => {
+  let originalWebSocket: typeof WebSocket;
+
+  beforeEach(() => {
+    resetBody();
+    originalWebSocket = (globalThis as any).WebSocket;
+    (globalThis as any).WebSocket = MockWebSocket;
+    MockWebSocket.reset();
+  });
+
+  afterEach(() => {
+    (globalThis as any).WebSocket = originalWebSocket;
+  });
+
+  test("returns null status when jobId is null", () => {
+    const { result } = renderHook(() => useJobStream(null));
+    expect(result.current.status).toBeNull();
+    expect(result.current.error).toBeNull();
+  });
+
+  test("creates WebSocket connection with correct URL", async () => {
+    renderHook(() => useJobStream("test-job-123"));
+
+    await hookAct(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(MockWebSocket.instances[0].url).toContain("ws:");
+    expect(MockWebSocket.instances[0].url).toContain("jobId=test-job-123");
+  });
+
+  test("handles progress messages", async () => {
+    const { result } = renderHook(() => useJobStream("job-progress"));
+
+    await hookAct(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    await hookAct(async () => {
+      ws.simulateMessage({
+        type: "progress",
+        jobId: "job-progress",
+        event: { time: "2024-01-01T00:00:00Z", message: "Step 1" },
+      });
+    });
+
+    expect(result.current.status).toBeDefined();
+    expect(result.current.status?.progress).toHaveLength(1);
+    expect(result.current.status?.progress?.[0].message).toBe("Step 1");
+  });
+
+  test("deduplicates progress events", async () => {
+    const { result } = renderHook(() => useJobStream("job-dedup"));
+
+    await hookAct(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const ws = MockWebSocket.instances[0];
+    const event = {
+      type: "progress",
+      jobId: "job-dedup",
+      event: { time: "2024-01-01T00:00:00Z", message: "Step 1" },
+    };
+
+    await hookAct(async () => {
+      ws.simulateMessage(event);
+      ws.simulateMessage(event); // duplicate
+    });
+
+    expect(result.current.status?.progress).toHaveLength(1);
+  });
+
+  test("handles completed messages", async () => {
+    const { result } = renderHook(() => useJobStream("job-complete"));
+
+    await hookAct(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    await hookAct(async () => {
+      ws.simulateMessage({
+        type: "completed",
+        jobId: "job-complete",
+        result: { status: "completed", result: { report: {} } },
+      });
+    });
+
+    expect(result.current.status?.status).toBe("completed");
+  });
+
+  test("handles failed messages", async () => {
+    const { result } = renderHook(() => useJobStream("job-fail"));
+
+    await hookAct(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    await hookAct(async () => {
+      ws.simulateMessage({
+        type: "failed",
+        jobId: "job-fail",
+        error: "Something went wrong",
+      });
+    });
+
+    expect(result.current.status?.status).toBe("failed");
+    expect(result.current.status?.error).toBe("Something went wrong");
+  });
+
+  test("does not reconnect on normal close (code 1000)", async () => {
+    renderHook(() => useJobStream("job-normal-close"));
+
+    await hookAct(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    await hookAct(async () => {
+      ws.simulateClose(1000, "Normal closure");
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
+    // Should not create a new WebSocket
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
+  test("does not reconnect on close code 1005", async () => {
+    renderHook(() => useJobStream("job-1005-close"));
+
+    await hookAct(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    await hookAct(async () => {
+      ws.simulateClose(1005, "No status");
+      await new Promise((r) => setTimeout(r, 50));
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
+  test("reconnects on abnormal close with exponential backoff", async () => {
+    vi.useFakeTimers();
+
+    renderHook(() => useJobStream("job-reconnect"));
+
+    await hookAct(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    // Simulate abnormal close
+    await hookAct(async () => {
+      MockWebSocket.instances[0].simulateClose(1006, "Abnormal");
+    });
+
+    // First retry: 1000ms (2^0 * 1000)
+    await hookAct(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(2);
+
+    // Simulate another abnormal close
+    await hookAct(async () => {
+      MockWebSocket.instances[1].simulateClose(1006, "Abnormal");
+    });
+
+    // Second retry: 2000ms (2^1 * 1000)
+    await hookAct(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(3);
+
+    vi.useRealTimers();
+  });
+
+  test("closes WebSocket on unmount", async () => {
+    const { unmount } = renderHook(() => useJobStream("job-unmount"));
+
+    await hookAct(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const ws = MockWebSocket.instances[0];
+    expect(ws.closed).toBe(false);
+
+    unmount();
+    expect(ws.closed).toBe(true);
+  });
+
+  test("accumulates multiple progress events in order", async () => {
+    const { result } = renderHook(() => useJobStream("job-multi"));
+
+    await hookAct(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const ws = MockWebSocket.instances[0];
+
+    await hookAct(async () => {
+      ws.simulateMessage({
+        type: "progress",
+        jobId: "job-multi",
+        event: { time: "2024-01-01T00:00:01Z", message: "Step 1" },
+      });
+      ws.simulateMessage({
+        type: "progress",
+        jobId: "job-multi",
+        event: { time: "2024-01-01T00:00:02Z", message: "Step 2" },
+      });
+      ws.simulateMessage({
+        type: "progress",
+        jobId: "job-multi",
+        event: { time: "2024-01-01T00:00:03Z", message: "Step 3" },
+      });
+    });
+
+    expect(result.current.status?.progress).toHaveLength(3);
+    expect(result.current.status?.progress?.[0].message).toBe("Step 1");
+    expect(result.current.status?.progress?.[1].message).toBe("Step 2");
+    expect(result.current.status?.progress?.[2].message).toBe("Step 3");
+  });
+});

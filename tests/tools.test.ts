@@ -163,4 +163,84 @@ describe("Config", () => {
 
     expect(CMO_CONTEXT_MAX_CHARS).toBeGreaterThan(0);
   });
+
+  test("MAX_SPECIALIST_CONCURRENCY is positive", async () => {
+    const { MAX_SPECIALIST_CONCURRENCY } = await import(
+      "../src/backend/config"
+    );
+
+    expect(MAX_SPECIALIST_CONCURRENCY).toBeGreaterThan(0);
+  });
+});
+
+describe("Surgical specialist tool assignments", () => {
+  test("all surgical specialists get prescribing tools", async () => {
+    const { getToolsForSpecialist } = await import(
+      "../src/backend/tools/index"
+    );
+
+    const surgeons = [
+      "generalSurgeon",
+      "cardiothoracicSurgeon",
+      "neurosurgeon",
+      "orthopedist",
+      "otolaryngologist",
+      "urologist",
+      "vascularSurgeon",
+    ] as const;
+
+    for (const id of surgeons) {
+      const tools = getToolsForSpecialist(id);
+      expect(tools).toHaveProperty("drug-labeling");
+      expect(tools).toHaveProperty("adverse-events");
+    }
+  });
+});
+
+describe("relatedArticlesTool assignment", () => {
+  test("relatedArticlesTool is assigned to universal category", async () => {
+    const { getToolsForSpecialist } = await import(
+      "../src/backend/tools/index"
+    );
+    const { relatedArticlesTool } = await import(
+      "../src/backend/tools/pubmed-search"
+    );
+
+    const tools = getToolsForSpecialist("generalist");
+    expect(tools).toHaveProperty("related-articles");
+    expect(tools["related-articles"]).toBe(relatedArticlesTool);
+  });
+});
+
+describe("Agent factory validation", () => {
+  test("createSpecialistAgent throws for invalid kebab-case ID", async () => {
+    const { createSpecialistAgent } = await import(
+      "../src/backend/agents/factory"
+    );
+
+    expect(() =>
+      createSpecialistAgent({
+        id: "nonexistent-specialist",
+        name: "Nonexistent",
+        description: "Test",
+        instructions: "Test",
+      }),
+    ).toThrow("does not exist in toolAssignments");
+  });
+
+  test("createSpecialistAgent succeeds for valid kebab-case ID", async () => {
+    const { createSpecialistAgent } = await import(
+      "../src/backend/agents/factory"
+    );
+
+    const agent = createSpecialistAgent({
+      id: "general-surgeon",
+      name: "General Surgeon",
+      description: "Test",
+      instructions: "Test",
+    });
+
+    expect(agent).toBeDefined();
+    expect(agent.id).toBe("general-surgeon");
+  });
 });

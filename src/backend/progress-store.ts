@@ -34,6 +34,7 @@ export class JobStore extends EventTarget {
   constructor(dbPath = process.env.DB_PATH || "jobs.sqlite") {
     super();
     this.db = new Database(dbPath, { create: true });
+    this.db.exec("PRAGMA journal_mode=WAL;");
     this.init();
   }
 

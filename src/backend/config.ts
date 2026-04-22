@@ -24,6 +24,10 @@ export const MAX_CONCURRENT_WORKFLOWS = parseInt(
   process.env.MAX_CONCURRENT_WORKFLOWS ?? "3",
   10,
 );
+export const MAX_SPECIALIST_CONCURRENCY = parseInt(
+  process.env.MAX_SPECIALIST_CONCURRENCY ?? "3",
+  10,
+);
 export const MAX_INPUT_FIELD_LENGTH = 50_000;
 export const MAX_PAYLOAD_BYTES = 1_000_000;
 export const AGENT_GENERATE_MAX_RETRIES = parseInt(
@@ -91,6 +95,14 @@ export function validateConfig() {
   if (Number.isNaN(MAX_CONCURRENT_WORKFLOWS) || MAX_CONCURRENT_WORKFLOWS <= 0) {
     throw new Error(
       `Invalid MAX_CONCURRENT_WORKFLOWS: ${process.env.MAX_CONCURRENT_WORKFLOWS}. Must be a positive number.`,
+    );
+  }
+  if (
+    Number.isNaN(MAX_SPECIALIST_CONCURRENCY) ||
+    MAX_SPECIALIST_CONCURRENCY <= 0
+  ) {
+    throw new Error(
+      `Invalid MAX_SPECIALIST_CONCURRENCY: ${process.env.MAX_SPECIALIST_CONCURRENCY}. Must be a positive number.`,
     );
   }
   if (
