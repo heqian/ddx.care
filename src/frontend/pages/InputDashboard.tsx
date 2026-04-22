@@ -258,6 +258,7 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
           <div>
             <label className="block text-sm font-medium mb-1">Age</label>
             <input
+              id="age-input"
               type="text"
               value={age}
               onChange={(e) => {
@@ -265,10 +266,16 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
                 setTouched(true);
               }}
               placeholder="e.g., 45"
+              aria-invalid={ageError || undefined}
+              aria-describedby={ageError ? "age-error" : undefined}
               className={`${inputClass} ${ageError ? "border-danger focus:ring-danger" : ""}`}
             />
             {ageError && (
-              <p className="text-xs text-danger mt-1">
+              <p
+                id="age-error"
+                className="text-xs text-danger mt-1"
+                role="alert"
+              >
                 Age must be a number (1–3 digits)
               </p>
             )}
@@ -431,14 +438,20 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
 
       {/* Error */}
       {error && (
-        <div className="text-sm text-danger bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3">
+        <div
+          role="alert"
+          className="text-sm text-danger bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3"
+        >
           {error}
         </div>
       )}
 
       {/* Validation hint */}
       {anyOverLimit && (
-        <div className="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3">
+        <div
+          role="alert"
+          className="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3"
+        >
           One or more fields exceed the character limit. Please shorten before
           submitting.
         </div>

@@ -69,7 +69,7 @@
 
 ## P3 — Improvements / Quality
 
-- [ ] **Frontend accessibility pass (Grade D)** — Multiple accessibility gaps across the frontend:
+- [x] **Frontend accessibility pass (Grade D)** — Multiple accessibility gaps across the frontend:
   - **Spinner** (`Spinner.tsx`): no `role="status"`, no `aria-label`, no `aria-live="polite"` — screen readers don't announce loading state
   - **Tabs** (`ResultsView.tsx`): tab buttons lack `role="tab"`, `aria-selected`, `aria-controls`; tab panels lack `role="tabpanel"`, `aria-labelledby` — standard ARIA tab pattern requirements
   - **Modal** (`Modal.tsx`): no focus trapping inside modal, focus not moved to modal on open, focus not restored on close; close button lacks `aria-label`; backdrop click target not focusable

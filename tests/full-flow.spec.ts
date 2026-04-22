@@ -172,31 +172,40 @@ test.describe("Full diagnosis flow", () => {
 
     // Verify key UI elements in the results
     await expect(
-      page.getByText("Severe headache with blurred vision"),
+      page
+        .getByRole("tabpanel", { name: "Diagnoses (3)" })
+        .getByText("Severe headache with blurred vision"),
     ).toBeVisible();
 
     // Diagnosis cards
+    const diagnosesPanel = page.getByRole("tabpanel", {
+      name: "Diagnoses (3)",
+    });
     await expect(
-      page.getByRole("heading", { name: "Hypertensive Urgency" }),
+      diagnosesPanel.getByRole("heading", { name: "Hypertensive Urgency" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Migraine with Aura" }),
+      diagnosesPanel.getByRole("heading", { name: "Migraine with Aura" }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Tension-Type Headache" }),
+      diagnosesPanel.getByRole("heading", { name: "Tension-Type Headache" }),
     ).toBeVisible();
 
     // Urgency badge
-    await expect(page.getByText("Emergent")).toBeVisible();
+    await expect(diagnosesPanel.getByText("Emergent")).toBeVisible();
 
     // Cross-specialty observations
-    await expect(page.getByText("Cross-Specialty Observations")).toBeVisible();
+    await expect(
+      diagnosesPanel.getByText("Cross-Specialty Observations"),
+    ).toBeVisible();
 
     // Recommended actions
-    await expect(page.getByText("Recommended Immediate Actions")).toBeVisible();
+    await expect(
+      diagnosesPanel.getByText("Recommended Immediate Actions"),
+    ).toBeVisible();
 
     // Verify the Full Report tab
-    await page.getByRole("button", { name: /Full Report/ }).click();
+    await page.getByRole("tab", { name: /Full Report/ }).click();
     await expect(
       page.getByRole("heading", { name: "Patient Summary" }),
     ).toBeVisible();
@@ -331,5 +340,92 @@ test.describe("Full diagnosis flow", () => {
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible({
       timeout: 5_000,
     });
+  });
+});
+
+test.describe("Accessibility — keyboard navigation", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await acceptConsent(page);
+  });
+
+  test("tab keyboard navigation with arrow keys", async ({ page }) => {
+    // Submit a case to reach the results view
+    await page.getByPlaceholder("e.g., 45").fill("45");
+    await page
+      .getByPlaceholder(/Past diagnoses, medications/)
+      .fill("Some history");
+    await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
+
+    await expect(
+      page.getByRole("heading", { name: "Differential Diagnosis" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // The Diagnoses tab should be selected initially
+    const diagnosesTab = page.getByRole("tab", { name: /Diagnoses/ });
+    const consultTab = page.getByRole("tab", { name: /Full Report/ });
+    await expect(diagnosesTab).toHaveAttribute("aria-selected", "true");
+    await expect(consultTab).toHaveAttribute("aria-selected", "false");
+
+    // ArrowRight should switch to Full Report
+    await diagnosesTab.press("ArrowRight");
+    await expect(consultTab).toHaveAttribute("aria-selected", "true");
+    await expect(diagnosesTab).toHaveAttribute("aria-selected", "false");
+    await expect(
+      page.getByRole("tabpanel", { name: /Full Report/ }),
+    ).toBeVisible();
+
+    // ArrowLeft should switch back to Diagnoses
+    await consultTab.press("ArrowLeft");
+    await expect(diagnosesTab).toHaveAttribute("aria-selected", "true");
+    await expect(consultTab).toHaveAttribute("aria-selected", "false");
+
+    // ArrowLeft wraps around to last tab
+    await diagnosesTab.press("ArrowLeft");
+    await expect(consultTab).toHaveAttribute("aria-selected", "true");
+
+    // ArrowRight wraps around to first tab
+    await consultTab.press("ArrowRight");
+    await expect(diagnosesTab).toHaveAttribute("aria-selected", "true");
+
+    // Home goes to first tab
+    await consultTab.focus();
+    await page.keyboard.press("Home");
+    await expect(diagnosesTab).toHaveAttribute("aria-selected", "true");
+
+    // End goes to last tab
+    await diagnosesTab.focus();
+    await page.keyboard.press("End");
+    await expect(consultTab).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("FileDropZone is keyboard-activatable", async ({ page }) => {
+    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
+
+    // Tab to the first FileDropZone (below Medical History)
+    const dropZone = page.getByRole("button", {
+      name: "Upload medical history file",
+    });
+
+    // Focus it via Tab (may need multiple tabs)
+    await dropZone.focus();
+    await expect(dropZone).toBeFocused();
+
+    // Verify it has the correct ARIA attributes
+    await expect(dropZone).toHaveAttribute("tabindex", "0");
+
+    // Press Enter — should trigger the file input (opens a file dialog)
+    const [fileChooser] = await Promise.all([
+      page.waitForEvent("filechooser", { timeout: 5_000 }),
+      dropZone.press("Enter"),
+    ]);
+    await fileChooser.setFiles({
+      name: "test-history.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("Patient has a history of diabetes."),
+    });
+
+    // Verify the file name appears in the drop zone
+    await expect(dropZone.getByText("test-history.txt")).toBeVisible();
   });
 });
