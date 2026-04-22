@@ -137,6 +137,8 @@ describe("API Endpoints", () => {
   });
 
   test("POST /v1/diagnose returns 400 for oversized field", async () => {
+    // Allow time for rate limiter window to recover after prior tests
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     // MAX_INPUT_FIELD_LENGTH is 50,000 characters
     const longField = "x".repeat(51_000);
     const res = await fetch(`${BASE}/v1/diagnose`, {
