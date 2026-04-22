@@ -6,11 +6,19 @@ export interface FetchJSONOptions extends RequestInit {
 
 let lastNcbiTime = 0;
 const NCBI_RATE_LIMIT_MS = 334; // approx 3 requests per second
+const NCBI_TOKEN_TIMEOUT_MS = 30000;
 let ncbiPromise = Promise.resolve();
 
 function getNcbiToken(): Promise<void> {
+  const enteredAt = Date.now();
   ncbiPromise = ncbiPromise.then(async () => {
     const now = Date.now();
+    const queueWait = now - enteredAt;
+    if (queueWait > NCBI_TOKEN_TIMEOUT_MS) {
+      throw new Error(
+        `NCBI rate limiter queue wait exceeded ${NCBI_TOKEN_TIMEOUT_MS}ms (waited ${queueWait}ms)`,
+      );
+    }
     const elapsed = now - lastNcbiTime;
     if (elapsed < NCBI_RATE_LIMIT_MS) {
       await new Promise((resolve) =>

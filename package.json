@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "pretest": "bun run typecheck",
     "lint": "biome check src/",
-    "test": "bun test tests/api.test.ts tests/tools.test.ts tests/api-integration.test.ts tests/workflow.test.ts tests/progress-store.test.ts tests/rate-limiter.test.ts tests/logger.test.ts tests/fetch-utils.test.ts",
+    "test": "bun test tests/api.test.ts tests/tools.test.ts tests/api-integration.test.ts tests/workflow.test.ts tests/progress-store.test.ts tests/rate-limiter.test.ts tests/logger.test.ts tests/fetch-utils.test.ts tests/websocket.test.ts tests/config.test.ts tests/tool-execute.test.ts tests/routes-helpers.test.ts tests/router.test.ts tests/ws-origin.test.ts tests/shutdown.test.ts tests/api-client.test.ts",
     "test:frontend": "bun test tests/frontend.test.tsx",
     "test:e2e": "bunx playwright test",
     "test:all": "bun run test && bun run test:frontend && bun run test:e2e",

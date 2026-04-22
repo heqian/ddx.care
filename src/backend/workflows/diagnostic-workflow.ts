@@ -5,6 +5,7 @@ import {
   AGENT_GENERATE_RETRY_BASE_DELAY,
   DIAGNOSIS_TIMEOUT_MS,
   MAX_DIAGNOSIS_ROUNDS,
+  MAX_SPECIALIST_CONCURRENCY,
   SPECIALIST_CONTEXT_MODE,
   SPECIALIST_CONTEXT_MAX_CHARS,
   CMO_CONTEXT_MAX_CHARS,
@@ -71,7 +72,8 @@ export async function withRetry<T>(
       }
       attempt++;
       if (attempt >= maxRetries) throw e;
-      const delay = baseDelay * Math.pow(2, attempt - 1);
+      const delay =
+        baseDelay * Math.pow(2, attempt - 1) * (0.5 + Math.random());
 
       await new Promise<void>((resolve, reject) => {
         if (abortSignal?.aborted) return reject(new Error("Aborted"));
@@ -144,7 +146,7 @@ export const diagnosisReportSchema = z.object({
   rankedDiagnoses: z.array(
     z.object({
       diagnosisName: z.string(),
-      confidencePercentage: z.number(),
+      confidencePercentage: z.number().min(0).max(100),
       urgency: z.enum(["Emergent", "Urgent", "Routine"]),
       rationale: z.string(),
       supportingEvidence: z.string(),
@@ -564,7 +566,7 @@ ${builtContextHistory}`;
 
         const results = await limitConcurrency(
           newSpecialistRequests,
-          3,
+          MAX_SPECIALIST_CONCURRENCY,
           async (specRequest: CmoSpecialistRequest) => {
             const specId = specRequest.id;
             try {
@@ -750,10 +752,10 @@ export const formatReport = createStep({
             rank: i + 1,
             name: d.diagnosisName ?? "",
             confidence: d.confidencePercentage ?? 0,
-            urgency: (d.urgency?.toLowerCase() ?? "routine") as
-              | "emergent"
-              | "urgent"
-              | "routine",
+            urgency: z
+              .enum(["emergent", "urgent", "routine"])
+              .catch("routine")
+              .parse(d.urgency?.toLowerCase() ?? "routine"),
             rationale: d.rationale ?? "",
             supportingEvidence: splitToList(d.supportingEvidence),
             contradictoryEvidence: splitToList(d.contradictoryEvidence),

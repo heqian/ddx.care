@@ -1,9 +1,14 @@
 import type { ServerWebSocket } from "bun";
 import { progressStore } from "../progress-store";
 
+const PING_INTERVAL_MS = 30000;
+const PONG_TIMEOUT_MS = 10000;
+
 export interface WsData {
   jobId: string;
   unsubscribe?: () => void;
+  pingTimer?: ReturnType<typeof setInterval>;
+  pongTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface ProgressEventData {
@@ -48,11 +53,35 @@ export const websocketHandlers = {
     });
 
     ws.data.unsubscribe = unsubscribe;
+
+    // Start heartbeat: ping every 30s, close if no pong within 10s
+    ws.data.pingTimer = setInterval(() => {
+      if (ws.readyState !== 1) return; // WebSocket.OPEN
+      ws.ping();
+      ws.data.pongTimer = setTimeout(() => {
+        ws.close(1001, "Pong timeout");
+      }, PONG_TIMEOUT_MS);
+    }, PING_INTERVAL_MS);
+  },
+
+  pong(ws: ServerWebSocket<WsData>) {
+    if (ws.data.pongTimer) {
+      clearTimeout(ws.data.pongTimer);
+      ws.data.pongTimer = undefined;
+    }
   },
 
   message() {},
 
   close(ws: ServerWebSocket<WsData>) {
     ws.data.unsubscribe?.();
+    if (ws.data.pingTimer) {
+      clearInterval(ws.data.pingTimer);
+      ws.data.pingTimer = undefined;
+    }
+    if (ws.data.pongTimer) {
+      clearTimeout(ws.data.pongTimer);
+      ws.data.pongTimer = undefined;
+    }
   },
 };

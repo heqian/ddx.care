@@ -35,6 +35,7 @@ import type { ToolsInput } from "@mastra/core/agent";
 
 import {
   pubmedSearchTool,
+  relatedArticlesTool,
   omimSearchTool,
   geneReviewsSearchTool,
   clinVarSearchTool,
@@ -58,6 +59,7 @@ import { medlinePlusSearchTool } from "./medlineplus";
 /** Tools available to all specialists */
 const universal = {
   "pubmed-search": pubmedSearchTool,
+  "related-articles": relatedArticlesTool,
   "drug-lookup": drugLookupTool,
   "drug-interaction": drugInteractionTool,
 };
@@ -104,7 +106,7 @@ const spelling = {
 
 // --- Declarative specialist → tool categories ---
 
-const toolAssignments: Record<SpecialistId, ToolsInput[]> = {
+export const toolAssignments: Record<SpecialistId, ToolsInput[]> = {
   // Primary Care
   generalist: [universal, prescribing, education],
   pediatrician: [universal, prescribing, genetics, education],
@@ -122,13 +124,13 @@ const toolAssignments: Record<SpecialistId, ToolsInput[]> = {
   pulmonologist: [universal, prescribing, trials],
   rheumatologist: [universal, prescribing, trials],
   // Surgical Specialties
-  generalSurgeon: [universal],
-  cardiothoracicSurgeon: [universal],
-  neurosurgeon: [universal],
-  orthopedist: [universal],
-  otolaryngologist: [universal],
-  urologist: [universal],
-  vascularSurgeon: [universal],
+  generalSurgeon: [universal, prescribing],
+  cardiothoracicSurgeon: [universal, prescribing],
+  neurosurgeon: [universal, prescribing],
+  orthopedist: [universal, prescribing],
+  otolaryngologist: [universal, prescribing],
+  urologist: [universal, prescribing],
+  vascularSurgeon: [universal, prescribing],
   // Diagnostic & Support
   pathologist: [universal],
   radiologist: [universal],
