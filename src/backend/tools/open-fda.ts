@@ -60,7 +60,7 @@ async function fetchJSON(url: string) {
  * Search for drug adverse event reports from FDA FAERS database.
  */
 export const adverseEventsTool = createTool({
-  id: "adverse-events-search",
+  id: "adverse-events",
   description:
     "Search FDA adverse event reports (FAERS) for a drug. Returns reported adverse reactions, outcomes, and frequencies. Useful for evaluating drug safety and side effects.",
   inputSchema: z.object({
@@ -156,7 +156,7 @@ export const adverseEventsTool = createTool({
  * Search FDA drug labeling (package insert) information.
  */
 export const drugLabelingTool = createTool({
-  id: "drug-labeling-search",
+  id: "drug-labeling",
   description:
     "Search FDA drug labeling (package insert) for official indications, contraindications, warnings, adverse reactions, dosing, and mechanism of action.",
   inputSchema: z.object({
@@ -220,7 +220,7 @@ export const drugLabelingTool = createTool({
  * Search FDA drug recall and enforcement reports.
  */
 export const drugRecallTool = createTool({
-  id: "drug-recall-search",
+  id: "drug-recall",
   description:
     "Search FDA drug recalls and enforcement reports. Returns recall reason, classification, and product details.",
   inputSchema: z.object({
@@ -272,7 +272,7 @@ export const drugRecallTool = createTool({
  * Search FDA substance toxicology data.
  */
 export const substanceToxicologyTool = createTool({
-  id: "substance-toxicology-search",
+  id: "substance-toxicology",
   description:
     "Search FDA Substance Data System for toxicology and pharmacology data on chemicals and substances. Useful for toxicology and poisoning cases.",
   inputSchema: z.object({

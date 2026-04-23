@@ -1,13 +1,13 @@
 # ddx.care
 
-AI-powered differential diagnosis system that simulates a panel of medical specialists analyzing patient cases. Uses AI agents (via Mastra) to orchestrate 36+ specialist agents, coordinated by a Chief Medical Officer agent that synthesizes findings into a ranked differential diagnosis.
+AI-powered differential diagnosis system that simulates a panel of medical specialists analyzing patient cases. Uses AI agents (via Mastra) to orchestrate 35 specialist agents and a Chief Medical Officer (CMO), which synthesizes findings into a ranked differential diagnosis.
 
 ## Architecture
 
 ### Backend (`src/backend/`)
 - **Mastra framework** (`@mastra/core`) — agent orchestration, workflows, tool definitions
 - **AI Model**: OpenCode Go (`opencode-go/qwen3.6-plus` by default), configured via `OPENCODE_API_KEY`
-- **Agents** — 36+ medical specialist agents + Chief Medical Officer. Created via factory pattern in `factory.ts`
+- **Agents** — 35 medical specialist agents + Chief Medical Officer (CMO). Created via factory pattern in `factory.ts`
 - **Tools** — Medical API integrations:
   - PubMed/NCBI literature search
   - OpenFDA drug safety & adverse events
@@ -44,6 +44,7 @@ The app runs on `http://localhost:3000` by default.
 | `bun run dev` | Start dev server with HMR |
 | `bun run build` | Bundle frontend to `./dist` |
 | `bun run typecheck` | TypeScript type checking (`tsc --noEmit`) |
+| `bun run lint` | Run Biome linter on `src/` |
 | `bun run test` | Run backend unit tests |
 | `bun run test:frontend` | Run frontend component tests |
 | `bun run test:e2e` | Run Playwright E2E tests |
@@ -67,6 +68,9 @@ The app runs on `http://localhost:3000` by default.
 | `LOG_FORMAT` | — | Set to `json` for JSON-structured log output |
 | `SPECIALIST_CONTEXT_MODE` | `none` | Agent-to-agent context sharing: `none`, `prior_rounds`, `cmo_curated`, `full` |
 | `SPECIALIST_CONTEXT_MAX_CHARS` | `2000` | Max characters of context injected per specialist call |
+| `CMO_CONTEXT_MAX_CHARS` | `60000` | Max characters of context maintained in CMO history |
+| `AGENT_GENERATE_MAX_RETRIES` | `3` | Max retries for agent generation calls |
+| `MAX_SPECIALIST_CONCURRENCY` | `3` | Max concurrent specialist calls per round |
 
 See [`.env.example`](.env.example) for a template.
 
@@ -87,5 +91,7 @@ See [`.env.example`](.env.example) for a template.
 - **AI Model:** OpenCode Go (`opencode-go/qwen3.6-plus`)
 - **Frontend:** React 19, Tailwind CSS v4
 - **Validation:** Zod
-- **Testing:** `bun:test`, Playwright, `@testing-library/react`
+- **Markdown / Sanitization:** `marked`, `isomorphic-dompurify`
+- **Icons:** `@heroicons/react`
+- **Testing:** `bun:test`, Playwright, `@testing-library/react`, `happy-dom`
 - **Database:** `bun:sqlite`

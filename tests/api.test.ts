@@ -315,6 +315,47 @@ describe("API Endpoints", () => {
       // Reset hasLoggedReset to avoid double-warning
       rateLimiter["hasLoggedReset"] = savedReset;
     });
+
+    test("returns 429 with Retry-After header when rate limit exceeded", async () => {
+      const { rateLimiter } = await import("../src/backend/api/routes");
+
+      // Reset rate limit state for a clean test
+      const savedReset = rateLimiter["hasLoggedReset"];
+      rateLimiter["clients"].clear();
+      rateLimiter["activeCount"] = 0;
+      rateLimiter["hasLoggedReset"] = true;
+
+      // Pre-fill the rate limit window to exhaust the per-IP quota
+      // Default is 5 requests per 60s window
+      const testIp = "::1";
+      rateLimiter["clients"].set(testIp, {
+        timestamps: Array(5).fill(Date.now()),
+      });
+
+      // The next request from the same IP should be rate limited
+      const limitedRes = await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: JSON.stringify({
+          medicalHistory: "test",
+          conversationTranscript: "test",
+          labResults: "test",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(limitedRes.status).toBe(429);
+
+      const body = (await limitedRes.json()) as { error: string };
+      expect(body.error).toContain("Rate limit");
+
+      const retryAfter = limitedRes.headers.get("Retry-After");
+      expect(retryAfter).toBeTruthy();
+      expect(Number(retryAfter)).toBeGreaterThan(0);
+
+      // Cleanup: reset rate limiter state for subsequent tests
+      rateLimiter["clients"].clear();
+      rateLimiter["activeCount"] = 0;
+      rateLimiter["hasLoggedReset"] = savedReset;
+    });
   });
 
   afterAll(() => {
