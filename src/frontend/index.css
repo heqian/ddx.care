@@ -3,7 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Source Sans 3", system-ui, -apple-system, sans-serif;
   --font-display: "DM Serif Display", Georgia, "Times New Roman", serif;
   --color-primary: #0891b2;
   --color-primary-dark: #0e7490;

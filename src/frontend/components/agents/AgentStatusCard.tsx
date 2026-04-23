@@ -22,8 +22,8 @@ const statusStyles: Record<
   },
   active: {
     bg: "bg-blue-50 dark:bg-blue-900/30",
-    icon: "text-primary dark:text-blue-400",
-    dot: "bg-primary dark:bg-blue-400 animate-pulse",
+    icon: "text-primary",
+    dot: "bg-primary animate-pulse",
     text: "text-slate-500 dark:text-slate-400",
   },
   completed: {

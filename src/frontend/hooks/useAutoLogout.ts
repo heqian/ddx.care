@@ -29,22 +29,22 @@ export function useAutoLogout(onTimeout: () => void) {
   useEffect(() => {
     reset();
 
-    const events = [
-      "mousemove",
-      "keydown",
-      "click",
-      "scroll",
-      "touchstart",
-    ] as const;
-    for (const event of events) {
-      window.addEventListener(event, reset);
+    const events: { name: string; options?: AddEventListenerOptions }[] = [
+      { name: "mousemove", options: { passive: true } },
+      { name: "keydown" },
+      { name: "click" },
+      { name: "scroll", options: { passive: true } },
+      { name: "touchstart" },
+    ];
+    for (const { name, options } of events) {
+      window.addEventListener(name, reset, options);
     }
 
     return () => {
       clearTimeout(timerRef.current);
       clearTimeout(warningRef.current);
-      for (const event of events) {
-        window.removeEventListener(event, reset);
+      for (const { name, options } of events) {
+        window.removeEventListener(name, reset, options);
       }
     };
   }, [reset]);

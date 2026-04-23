@@ -102,7 +102,7 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
           onKeyDown={(e) => handleTabKeyDown(e, 0)}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             tab === "diagnoses"
-              ? "border-primary text-primary dark:text-cyan-400 dark:border-cyan-400"
+              ? "border-primary text-primary dark:text-primary dark:border-primary"
               : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >
@@ -123,7 +123,7 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
           onKeyDown={(e) => handleTabKeyDown(e, 1)}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             tab === "consult"
-              ? "border-primary text-primary dark:text-cyan-400 dark:border-cyan-400"
+              ? "border-primary text-primary dark:text-primary dark:border-primary"
               : "border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >

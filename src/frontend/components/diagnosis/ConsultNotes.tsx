@@ -109,7 +109,7 @@ function CollapsibleDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
                     key={i}
                     className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300"
                   >
-                    <ArrowRightIcon className="h-4 w-4 text-primary dark:text-cyan-400 mt-0.5 shrink-0" />
+                    <ArrowRightIcon className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                     <span>{step}</span>
                   </li>
                 ))}
@@ -130,7 +130,7 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
   return (
     <div className="space-y-4">
       <h3 className="flex items-center gap-2 text-sm font-semibold">
-        <ChatBubbleLeftRightIcon className="h-4 w-4 text-primary dark:text-cyan-400" />
+        <ChatBubbleLeftRightIcon className="h-4 w-4 text-primary" />
         Full Report
       </h3>
 
