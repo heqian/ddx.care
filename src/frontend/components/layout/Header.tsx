@@ -13,7 +13,7 @@ export function Header() {
       <div className="header-accent h-0.5" />
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-xl font-display tracking-tight text-primary dark:text-cyan-400">
+          <span className="text-xl font-display tracking-tight text-primary">
             ddx.care
           </span>
           <span className="hidden sm:inline text-sm text-slate-500 dark:text-slate-400 border-l border-slate-200 dark:border-slate-700 pl-3">

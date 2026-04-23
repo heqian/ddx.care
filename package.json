@@ -24,15 +24,15 @@
     "@types/react-dom": "^19.2.3",
     "bun-plugin-tailwind": "^0.1.2",
     "happy-dom": "^20.9.0",
-    "mastra": "^1.6.0",
-    "tailwindcss": "^4.2.2"
+    "mastra": "^1.6.1",
+    "tailwindcss": "^4.2.4"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
-    "@mastra/core": "^1.25.0",
+    "@mastra/core": "^1.26.0",
     "isomorphic-dompurify": "^3.9.0",
     "marked": "^17.0.6",
     "react": "^19.2.5",

@@ -8,6 +8,7 @@ import { WaitingRoom } from "./pages/WaitingRoom";
 import { ResultsView } from "./pages/ResultsView";
 import { useAutoLogout } from "./hooks/useAutoLogout";
 import { useRouter, type Route } from "./hooks/useRouter";
+import { Spinner } from "./components/ui/Spinner";
 import { submitDiagnosis, getJobStatus } from "./api/client";
 import type { StatusResponse, DiagnoseRequest } from "./api/types";
 
@@ -130,6 +131,14 @@ function App() {
       )}
       {route.screen === "results" && jobResult && (
         <ResultsView result={jobResult} onNewCase={handleReset} />
+      )}
+      {route.screen === "results" && !jobResult && !deepLinkError && (
+        <div className="flex flex-col items-center justify-center py-24 space-y-4">
+          <Spinner size="lg" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Loading results...
+          </p>
+        </div>
       )}
       {route.screen === "results" && !jobResult && deepLinkError && (
         <div className="max-w-md mx-auto text-center py-16 space-y-4">

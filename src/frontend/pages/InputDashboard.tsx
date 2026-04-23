@@ -99,16 +99,18 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
   const [touched, setTouched] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
-  // Persist draft on change
+  // Persist draft on change (debounced 500ms)
   useEffect(() => {
-    saveDraft({
+    const draft: Draft = {
       age,
       sex,
       chiefComplaint,
       medicalHistory,
       transcript,
       labResults,
-    });
+    };
+    const id = setTimeout(() => saveDraft(draft), 500);
+    return () => clearTimeout(id);
   }, [age, sex, chiefComplaint, medicalHistory, transcript, labResults]);
 
   const ageError = touched && age !== "" && !/^\d{1,3}$/.test(age);

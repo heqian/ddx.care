@@ -90,7 +90,7 @@ export function ConsentGate({
           </div>
 
           {/* Warning Box */}
-          <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-xl p-5 space-y-3">
+          <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-lg p-5 space-y-3">
             <div className="flex items-start gap-3">
               <ExclamationTriangleIcon className="h-6 w-6 text-red-500 shrink-0 mt-0.5" />
               <div className="space-y-2 text-sm text-red-800 dark:text-red-300">
@@ -115,7 +115,7 @@ export function ConsentGate({
           </div>
 
           {/* Terms */}
-          <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 space-y-4 text-sm text-slate-700 dark:text-slate-300">
+          <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-5 space-y-4 text-sm text-slate-700 dark:text-slate-300">
             <section className="space-y-2">
               <h2 className="font-semibold text-slate-900 dark:text-slate-100">
                 1. Nature of This Tool
@@ -227,7 +227,7 @@ export function ConsentGate({
           </div>
 
           {/* Checkbox */}
-          <label className="flex items-start gap-3 cursor-pointer group p-4 bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-xl transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/30">
+          <label className="flex items-start gap-3 cursor-pointer group p-4 bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-lg transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/30">
             <input
               type="checkbox"
               checked={checked}
@@ -249,7 +249,7 @@ export function ConsentGate({
               type="button"
               onClick={onAccept}
               disabled={!checked}
-              className={`flex-1 py-3 px-6 rounded-xl text-sm font-semibold transition-all ${
+              className={`flex-1 py-3 px-6 rounded-lg text-sm font-semibold transition-all ${
                 checked
                   ? "bg-primary text-white hover:bg-primary-dark shadow-lg"
                   : "bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed"
@@ -260,7 +260,7 @@ export function ConsentGate({
             <button
               type="button"
               onClick={() => setDeclined(true)}
-              className="flex-1 py-3 px-6 rounded-xl text-sm font-semibold border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="flex-1 py-3 px-6 rounded-lg text-sm font-semibold border-2 border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               I Do Not Accept
             </button>

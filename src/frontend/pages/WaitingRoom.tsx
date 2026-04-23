@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowPathIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Spinner } from "../components/ui/Spinner";
 import { AgentGrid } from "../components/agents/AgentGrid";
@@ -49,6 +49,7 @@ export function WaitingRoom({
   const { status, error } = useJobStream(jobId);
   const isTerminal =
     status?.status === "failed" || status?.status === "completed";
+  const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getAgents()
@@ -62,12 +63,21 @@ export function WaitingRoom({
     }
   }, [status, onComplete]);
 
+  // Auto-scroll progress log to bottom when new events arrive
+  useEffect(() => {
+    if (progressRef.current) {
+      progressRef.current.scrollTop = progressRef.current.scrollHeight;
+    }
+  }, [status?.progress]);
+
   const specialistStatuses = useMemo(
     () => deriveSpecialistStatuses(status?.progress),
     [status?.progress],
   );
 
   const showRetry = status?.status === "failed";
+
+  const hasProgress = status?.progress && status.progress.length > 0;
 
   return (
     <div className="space-y-8">
@@ -90,25 +100,29 @@ export function WaitingRoom({
         any damages, losses, or consequences arising from use of this tool.
       </div>
 
-      {status?.progress && status.progress.length > 0 && (
-        <div
-          role="log"
-          aria-live="polite"
-          aria-label="Progress log"
-          className="mb-8 bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-y-auto h-64 flex flex-col shadow-inner"
-        >
-          <div className="space-y-2 mt-auto">
-            {status.progress.map((p, i) => (
-              <div key={i} className="text-cyan-300 opacity-90 break-words">
-                <span className="text-slate-500 text-xs mr-2">
-                  [{new Date(p.time).toLocaleTimeString()}]
-                </span>
-                {p.message}
-              </div>
-            ))}
-          </div>
+      <div
+        ref={progressRef}
+        role="log"
+        aria-live="polite"
+        aria-label="Progress log"
+        className="mb-8 bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-y-auto h-64 flex flex-col shadow-inner"
+      >
+        <div className="space-y-2 mt-auto">
+          {!hasProgress && !isTerminal && (
+            <div className="text-slate-500 italic">
+              Starting analysis... consultations will appear here as they begin.
+            </div>
+          )}
+          {status?.progress?.map((p, i) => (
+            <div key={i} className="text-cyan-300 opacity-90 break-words">
+              <span className="text-slate-500 text-xs mr-2">
+                [{new Date(p.time).toLocaleTimeString()}]
+              </span>
+              {p.message}
+            </div>
+          ))}
         </div>
-      )}
+      </div>
 
       {agentsError && (
         <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3">
