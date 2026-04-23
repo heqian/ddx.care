@@ -18,7 +18,7 @@ const CALLING_RE = /^Calling specialist (\w+)\.\.\.$/;
 const RECEIVED_RE =
   /^(?:Received analysis from|Failed to receive analysis from) (\w+)$/;
 
-function deriveSpecialistStatuses(
+export function deriveSpecialistStatuses(
   progress: { time: string; message: string }[] | undefined,
 ): Map<string, SpecialistStatus> {
   const map = new Map<string, SpecialistStatus>();

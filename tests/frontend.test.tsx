@@ -1638,3 +1638,69 @@ describe("Accessibility — ResultsView tabs", () => {
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
   });
 });
+
+// ---------------------------------------------------------------------------
+// deriveSpecialistStatuses
+// ---------------------------------------------------------------------------
+import { deriveSpecialistStatuses } from "../src/frontend/pages/WaitingRoom";
+
+describe("deriveSpecialistStatuses", () => {
+  test("returns empty map for undefined progress", () => {
+    const map = deriveSpecialistStatuses(undefined);
+    expect(map.size).toBe(0);
+  });
+
+  test("returns empty map for empty progress array", () => {
+    const map = deriveSpecialistStatuses([]);
+    expect(map.size).toBe(0);
+  });
+
+  test("sets status to active when calling specialist", () => {
+    const map = deriveSpecialistStatuses([
+      { time: "2026-01-01T00:00:00Z", message: "Calling specialist cardiologist..." },
+    ]);
+    expect(map.get("cardiologist")).toBe("active");
+  });
+
+  test("sets status to completed when analysis received", () => {
+    const map = deriveSpecialistStatuses([
+      { time: "2026-01-01T00:00:00Z", message: "Calling specialist cardiologist..." },
+      { time: "2026-01-01T00:00:01Z", message: "Received analysis from cardiologist" },
+    ]);
+    expect(map.get("cardiologist")).toBe("completed");
+  });
+
+  test("sets status to completed when analysis failed", () => {
+    const map = deriveSpecialistStatuses([
+      { time: "2026-01-01T00:00:00Z", message: "Calling specialist neurologist..." },
+      { time: "2026-01-01T00:00:01Z", message: "Failed to receive analysis from neurologist" },
+    ]);
+    expect(map.get("neurologist")).toBe("completed");
+  });
+
+  test("tracks multiple specialists independently", () => {
+    const map = deriveSpecialistStatuses([
+      { time: "2026-01-01T00:00:00Z", message: "Calling specialist cardiologist..." },
+      { time: "2026-01-01T00:00:01Z", message: "Calling specialist neurologist..." },
+      { time: "2026-01-01T00:00:02Z", message: "Received analysis from cardiologist" },
+    ]);
+    expect(map.get("cardiologist")).toBe("completed");
+    expect(map.get("neurologist")).toBe("active");
+  });
+
+  test("ignores unrelated progress messages", () => {
+    const map = deriveSpecialistStatuses([
+      { time: "2026-01-01T00:00:00Z", message: "Round 1 Analysis: Asking CMO for decision..." },
+      { time: "2026-01-01T00:00:01Z", message: "CMO has determined no further consultations are needed." },
+    ]);
+    expect(map.size).toBe(0);
+  });
+
+  test("handles multi-word specialist IDs", () => {
+    const map = deriveSpecialistStatuses([
+      { time: "2026-01-01T00:00:00Z", message: "Calling specialist emergencyPhysician..." },
+      { time: "2026-01-01T00:00:01Z", message: "Received analysis from emergencyPhysician" },
+    ]);
+    expect(map.get("emergencyPhysician")).toBe("completed");
+  });
+});

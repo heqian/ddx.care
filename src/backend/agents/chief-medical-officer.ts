@@ -9,7 +9,7 @@ import {
 } from "../tools";
 
 export const chiefMedicalOfficer = new Agent({
-  id: "chief-medical-officer",
+  id: "chiefMedicalOfficer",
   name: "Chief Medical Officer",
   model: ORCHESTRATOR_MODEL,
   tools: {

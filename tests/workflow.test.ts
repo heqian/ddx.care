@@ -1,7 +1,7 @@
 import { test, expect, describe, mock, beforeAll, afterAll } from "bun:test";
 import {
   splitToList,
-  parseInput,
+  buildPatientSummary,
   formatReport,
   diagnosisReportSchema,
   limitConcurrency,
@@ -29,11 +29,9 @@ describe("splitToList", () => {
     ]);
   });
 
-  test("splits on semicolons", () => {
-    expect(splitToList("item one; item two; item three")).toEqual([
-      "item one",
-      "item two",
-      "item three",
+  test("does not split on semicolons", () => {
+    expect(splitToList("Troponin elevated; ECG shows ST changes")).toEqual([
+      "Troponin elevated; ECG shows ST changes",
     ]);
   });
 
@@ -59,10 +57,9 @@ describe("splitToList", () => {
     ]);
   });
 
-  test("handles mixed separators", () => {
+  test("handles mixed separators with newlines", () => {
     expect(splitToList("alpha; beta\ngamma")).toEqual([
-      "alpha",
-      "beta",
+      "alpha; beta",
       "gamma",
     ]);
   });
@@ -76,63 +73,42 @@ describe("splitToList", () => {
   });
 });
 
-describe("parseInput", () => {
-  test("assembles patient summary from all fields", async () => {
-    const result = await parseInput.execute({
-      inputData: {
-        medicalHistory: "Patient has hypertension",
-        conversationTranscript: "Patient reports headache",
-        labResults: "BP: 140/90",
-      },
-    } as Parameters<typeof parseInput.execute>[0]);
+describe("buildPatientSummary", () => {
+  test("assembles patient summary from all fields", () => {
+    const result = buildPatientSummary({
+      medicalHistory: "Patient has hypertension",
+      conversationTranscript: "Patient reports headache",
+      labResults: "BP: 140/90",
+    });
 
-    expect(result.patientSummary).toContain("PATIENT DATA FOR REVIEW");
-    expect(result.patientSummary).toContain("Patient has hypertension");
-    expect(result.patientSummary).toContain("Patient reports headache");
-    expect(result.patientSummary).toContain("BP: 140/90");
-    expect(result.patientSummary).toContain("MEDICAL HISTORY");
-    expect(result.patientSummary).toContain("CONVERSATION TRANSCRIPT");
-    expect(result.patientSummary).toContain("LAB RESULTS");
+    expect(result).toContain("PATIENT DATA FOR REVIEW");
+    expect(result).toContain("Patient has hypertension");
+    expect(result).toContain("Patient reports headache");
+    expect(result).toContain("BP: 140/90");
+    expect(result).toContain("MEDICAL HISTORY");
+    expect(result).toContain("CONVERSATION TRANSCRIPT");
+    expect(result).toContain("LAB RESULTS");
   });
 
-  test("passes through individual fields unchanged", async () => {
-    const result = await parseInput.execute({
-      inputData: {
-        medicalHistory: "history",
-        conversationTranscript: "transcript",
-        labResults: "labs",
-      },
-    } as Parameters<typeof parseInput.execute>[0]);
+  test("handles empty strings", () => {
+    const result = buildPatientSummary({
+      medicalHistory: "",
+      conversationTranscript: "",
+      labResults: "",
+    });
 
-    expect(result.medicalHistory).toBe("history");
-    expect(result.conversationTranscript).toBe("transcript");
-    expect(result.labResults).toBe("labs");
+    expect(result).toContain("PATIENT DATA FOR REVIEW");
   });
 
-  test("handles empty strings", async () => {
-    const result = await parseInput.execute({
-      inputData: {
-        medicalHistory: "",
-        conversationTranscript: "",
-        labResults: "",
-      },
-    } as Parameters<typeof parseInput.execute>[0]);
-
-    expect(result.patientSummary).toBeDefined();
-    expect(result.medicalHistory).toBe("");
-  });
-
-  test("handles long multi-line inputs", async () => {
+  test("handles long multi-line inputs", () => {
     const longHistory = "Line 1\n".repeat(100).trim();
-    const result = await parseInput.execute({
-      inputData: {
-        medicalHistory: longHistory,
-        conversationTranscript: "transcript",
-        labResults: "labs",
-      },
-    } as Parameters<typeof parseInput.execute>[0]);
+    const result = buildPatientSummary({
+      medicalHistory: longHistory,
+      conversationTranscript: "transcript",
+      labResults: "labs",
+    });
 
-    expect(result.patientSummary).toContain(longHistory);
+    expect(result).toContain(longHistory);
   });
 });
 
@@ -209,16 +185,15 @@ describe("formatReport", () => {
     ]);
   });
 
-  test("handles semicolon-separated evidence", async () => {
+  test("preserves semicolons in evidence text", async () => {
     const result = await formatReport.execute({
       inputData: { diagnosisReport: sampleReport },
     } as Parameters<typeof formatReport.execute>[0]);
 
-    // Second diagnosis has semicolons in supportingEvidence
+    // Second diagnosis has semicolons in supportingEvidence — should NOT split
     const second = result.report.diagnoses[1];
     expect(second.supportingEvidence).toEqual([
-      "Severe headache",
-      "Visual disturbances",
+      "Severe headache; Visual disturbances",
     ]);
   });
 
@@ -851,7 +826,6 @@ describe("runDiagnosis - CMO parsing logic", () => {
       stepId: "run-diagnosis",
       workflowId: "test-wf",
       inputData: {
-        patientSummary: "Mock Patient",
         medicalHistory: "",
         conversationTranscript: "",
         labResults: "",
@@ -882,7 +856,6 @@ describe("runDiagnosis - CMO parsing logic", () => {
       stepId: "run-diagnosis",
       workflowId: "test-wf",
       inputData: {
-        patientSummary: "Mock Patient",
         medicalHistory: "",
         conversationTranscript: "",
         labResults: "",
@@ -938,7 +911,6 @@ describe("runDiagnosis - CMO parsing logic", () => {
       stepId: "run-diagnosis",
       workflowId: "test-wf",
       inputData: {
-        patientSummary: "Mock Patient",
         medicalHistory: "",
         conversationTranscript: "",
         labResults: "",
@@ -1011,7 +983,6 @@ describe("runDiagnosis - CMO parsing logic", () => {
       stepId: "run-diagnosis",
       workflowId: "test-wf",
       inputData: {
-        patientSummary: "Mock Patient",
         medicalHistory: "",
         conversationTranscript: "",
         labResults: "",
@@ -1053,7 +1024,6 @@ describe("runDiagnosis - CMO parsing logic", () => {
       stepId: "run-diagnosis",
       workflowId: "test-wf",
       inputData: {
-        patientSummary: "Mock Patient",
         medicalHistory: "",
         conversationTranscript: "",
         labResults: "",
@@ -1111,7 +1081,6 @@ describe("runDiagnosis - CMO parsing logic", () => {
       stepId: "run-diagnosis",
       workflowId: "test-wf",
       inputData: {
-        patientSummary: "Mock Patient",
         medicalHistory: "",
         conversationTranscript: "",
         labResults: "",

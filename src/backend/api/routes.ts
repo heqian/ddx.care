@@ -56,7 +56,7 @@ const diagnoseSchema = z.object({
 
 interface WorkflowRunResult {
   report?: {
-    specialistsConsulted?: unknown[];
+    specialistsConsulted?: Array<{ specialist: string; keyFindings: string }>;
   };
 }
 
