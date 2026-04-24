@@ -1,3 +1,10 @@
+import { AuditLogger } from "./audit-logger";
+import {
+  AUDIT_LOG_PATH,
+  AUDIT_LOG_MAX_SIZE_MB,
+  AUDIT_LOG_MAX_FILES,
+} from "../config";
+
 type LogLevel = "info" | "warn" | "error";
 
 interface LogEntry {
@@ -5,6 +12,19 @@ interface LogEntry {
   level: LogLevel;
   event: string;
   [key: string]: unknown;
+}
+
+let auditLogger: AuditLogger | null = null;
+if (AUDIT_LOG_PATH) {
+  auditLogger = new AuditLogger(
+    AUDIT_LOG_PATH,
+    AUDIT_LOG_MAX_SIZE_MB,
+    AUDIT_LOG_MAX_FILES,
+  );
+}
+
+export function setAuditLogger(logger: AuditLogger | null): void {
+  auditLogger = logger;
 }
 
 function formatLog(entry: LogEntry): string {
@@ -41,6 +61,9 @@ function log(
       break;
     default:
       console.log(message);
+  }
+  if (auditLogger) {
+    auditLogger.write(entry);
   }
 }
 

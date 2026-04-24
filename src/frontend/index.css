@@ -131,3 +131,62 @@ body {
   background: inherit;
   animation: pulse-ring 1.5s ease-out infinite;
 }
+
+/* Hide scrollbar for tab overflow */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Print styles */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Hide UI chrome */
+  header,
+  footer,
+  .header-accent,
+  button,
+  [data-print-hide],
+  .disclaimer {
+    display: none !important;
+  }
+
+  /* Expand container */
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Remove dark mode backgrounds */
+  .dark\:bg-slate-900,
+  .dark\:bg-slate-800,
+  .dark\:bg-slate-800\/50 {
+    background: white !important;
+  }
+
+  /* Show both tab panels when printing */
+  [role="tabpanel"] {
+    display: block !important;
+  }
+
+  /* Remove max-height scroll containers */
+  [class*="max-h-"] {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Collapse cards for compact print */
+  .card-hover {
+    box-shadow: none !important;
+    transform: none !important;
+    break-inside: avoid;
+  }
+}

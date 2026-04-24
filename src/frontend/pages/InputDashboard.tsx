@@ -414,7 +414,7 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
             <BeakerIcon className="h-4 w-4" />
             Lab Results
           </h2>
-          <div className="w-20" /> {/* spacer to align with voice buttons */}
+          <div /> {/* align with voice buttons */}
         </div>
         <div className="flex justify-end mb-1">
           <CharCount value={labResults} max={MAX_CHARS} />
@@ -486,8 +486,12 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
       </div>
 
       {/* Submit */}
-      <div className="flex justify-end">
-        <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
+      <div className="flex justify-stretch sm:justify-end">
+        <Button
+          onClick={handleSubmit}
+          disabled={!canSubmit || submitting}
+          className="w-full sm:w-auto"
+        >
           {submitting ? "Submitting..." : "Submit for Diagnosis"}
         </Button>
       </div>

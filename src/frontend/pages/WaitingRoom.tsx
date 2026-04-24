@@ -105,7 +105,7 @@ export function WaitingRoom({
         role="log"
         aria-live="polite"
         aria-label="Progress log"
-        className="mb-8 bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-y-auto h-64 flex flex-col shadow-inner"
+        className="mb-8 bg-slate-900 rounded-lg p-4 font-mono text-sm overflow-y-auto h-48 sm:h-64 flex flex-col shadow-inner"
       >
         <div className="space-y-2 mt-auto">
           {!hasProgress && !isTerminal && (

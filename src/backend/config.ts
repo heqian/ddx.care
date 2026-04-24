@@ -66,6 +66,16 @@ export const CMO_CONTEXT_MAX_CHARS = parseInt(
   10,
 );
 
+export const AUDIT_LOG_PATH = process.env.AUDIT_LOG_PATH ?? "";
+export const AUDIT_LOG_MAX_SIZE_MB = parseInt(
+  process.env.AUDIT_LOG_MAX_SIZE_MB ?? "10",
+  10,
+);
+export const AUDIT_LOG_MAX_FILES = parseInt(
+  process.env.AUDIT_LOG_MAX_FILES ?? "5",
+  10,
+);
+
 export function validateConfig() {
   if (!process.env.OPENCODE_API_KEY && process.env.MOCK_LLM !== "1") {
     throw new Error(
@@ -124,6 +134,16 @@ export function validateConfig() {
   if (Number.isNaN(CMO_CONTEXT_MAX_CHARS) || CMO_CONTEXT_MAX_CHARS <= 0) {
     throw new Error(
       `Invalid CMO_CONTEXT_MAX_CHARS: ${process.env.CMO_CONTEXT_MAX_CHARS}. Must be a positive number.`,
+    );
+  }
+  if (Number.isNaN(AUDIT_LOG_MAX_SIZE_MB) || AUDIT_LOG_MAX_SIZE_MB <= 0) {
+    throw new Error(
+      `Invalid AUDIT_LOG_MAX_SIZE_MB: ${process.env.AUDIT_LOG_MAX_SIZE_MB}. Must be a positive number.`,
+    );
+  }
+  if (Number.isNaN(AUDIT_LOG_MAX_FILES) || AUDIT_LOG_MAX_FILES < 0) {
+    throw new Error(
+      `Invalid AUDIT_LOG_MAX_FILES: ${process.env.AUDIT_LOG_MAX_FILES}. Must be a non-negative number.`,
     );
   }
 }

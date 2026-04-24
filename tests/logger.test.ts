@@ -1,5 +1,9 @@
-import { test, expect, describe, beforeEach, vi, afterEach } from "bun:test";
-import { logger } from "../src/backend/utils/logger";
+import { test, expect, describe, beforeEach, afterEach, vi } from "bun:test";
+import { mkdtempSync, readFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { logger, setAuditLogger } from "../src/backend/utils/logger";
+import { AuditLogger } from "../src/backend/utils/audit-logger";
 
 let logSpy: ReturnType<typeof vi.spyOn>;
 let warnSpy: ReturnType<typeof vi.spyOn>;
@@ -15,6 +19,7 @@ afterEach(() => {
   logSpy.mockRestore();
   warnSpy.mockRestore();
   errorSpy.mockRestore();
+  setAuditLogger(null);
 });
 
 describe("Logger — Level Dispatch", () => {
@@ -132,5 +137,58 @@ describe("Logger — Specialized Methods", () => {
     expect(output).toContain('"durationMs":2000');
     // success is stringified
     expect(output).toContain('"success":"true"');
+  });
+});
+
+describe("Logger — Audit Log Integration", () => {
+  let tmpDir: string;
+  let auditPath: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "logger-audit-test-"));
+    auditPath = join(tmpDir, "audit.log");
+  });
+
+  afterEach(() => {
+    setAuditLogger(null);
+  });
+
+  test("writes audit entry to file when audit logger is set", () => {
+    const audit = new AuditLogger(auditPath, 10, 2);
+    setAuditLogger(audit);
+    logger.info("audit_event", { jobId: "123" });
+
+    expect(existsSync(auditPath)).toBe(true);
+    const content = readFileSync(auditPath, "utf-8");
+    const parsed = JSON.parse(content.trim());
+    expect(parsed.event).toBe("audit_event");
+    expect(parsed.jobId).toBe("123");
+    expect(parsed.level).toBe("info");
+    expect(parsed.timestamp).toBeDefined();
+  });
+
+  test("writes error audit entries to file", () => {
+    const audit = new AuditLogger(auditPath, 10, 2);
+    setAuditLogger(audit);
+    logger.error("audit_error", { reason: "fail" });
+
+    const content = readFileSync(auditPath, "utf-8");
+    const parsed = JSON.parse(content.trim());
+    expect(parsed.level).toBe("error");
+    expect(parsed.event).toBe("audit_error");
+    expect(parsed.reason).toBe("fail");
+  });
+
+  test("writes multiple audit entries as JSON lines", () => {
+    const audit = new AuditLogger(auditPath, 10, 2);
+    setAuditLogger(audit);
+    logger.info("first");
+    logger.warn("second");
+
+    const content = readFileSync(auditPath, "utf-8");
+    const lines = content.trim().split("\n");
+    expect(lines.length).toBe(2);
+    expect(JSON.parse(lines[0]).event).toBe("first");
+    expect(JSON.parse(lines[1]).event).toBe("second");
   });
 });
