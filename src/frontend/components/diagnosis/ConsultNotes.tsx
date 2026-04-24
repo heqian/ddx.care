@@ -134,7 +134,7 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
         Full Report
       </h3>
 
-      <div className="bg-white dark:bg-slate-800 rounded-lg p-6 text-sm text-slate-700 dark:text-slate-300 border dark:border-slate-700 shadow-sm max-h-[50rem] overflow-y-auto space-y-6">
+      <div className="bg-white dark:bg-slate-800 rounded-lg p-4 sm:p-6 text-sm text-slate-700 dark:text-slate-300 border dark:border-slate-700 shadow-sm max-h-[50rem] overflow-y-auto space-y-6">
         {/* Chief Complaint & Patient Summary */}
         <div className="space-y-4">
           <div>
@@ -226,7 +226,7 @@ export function ConsultNotes({ report }: ConsultNotesProps) {
               />
               Recommended Immediate Actions
               {hasUrgentAction && (
-                <span className="badge badge-emergent ml-1 text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400">
+                <span className="badge badge-emergent ml-1 text-[11px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400">
                   URGENT
                 </span>
               )}

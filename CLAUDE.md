@@ -195,6 +195,9 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `SPECIALIST_CONTEXT_MODE` | `none` | Agent-to-agent context sharing: `none`, `prior_rounds`, `cmo_curated`, `full` |
 | `SPECIALIST_CONTEXT_MAX_CHARS` | `2000` | Max characters of context injected per specialist call |
 | `CMO_CONTEXT_MAX_CHARS` | `60000` | Max characters of context maintained in CMO history |
+| `AUDIT_LOG_PATH` | — | Path to persistent audit log file (e.g., `./logs/audit.log`). When set, all log events are appended as JSON Lines. |
+| `AUDIT_LOG_MAX_SIZE_MB` | `10` | Max audit log file size in MB before rotation. |
+| `AUDIT_LOG_MAX_FILES` | `5` | Number of rotated audit log files to retain. |
 
 ## Testing
 

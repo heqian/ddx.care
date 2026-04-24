@@ -61,7 +61,7 @@ export function FileDropZone({
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
       onKeyDown={handleKeyDown}
-      className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+      className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center cursor-pointer transition-colors ${
         dragging
           ? "border-primary bg-blue-50 dark:bg-blue-900/20"
           : "border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500"
