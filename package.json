@@ -15,7 +15,7 @@
     "test:integration": "RUN_INTEGRATION=1 bun test tests/api-integration.test.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.12",
+    "@biomejs/biome": "^2.4.13",
     "@playwright/test": "^1.59.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -24,7 +24,7 @@
     "@types/react-dom": "^19.2.3",
     "bun-plugin-tailwind": "^0.1.2",
     "happy-dom": "^20.9.0",
-    "mastra": "^1.6.1",
+    "mastra": "^1.6.3",
     "tailwindcss": "^4.2.4"
   },
   "peerDependencies": {
@@ -32,8 +32,8 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
-    "@mastra/core": "^1.26.0",
-    "isomorphic-dompurify": "^3.9.0",
+    "@mastra/core": "^1.28.0",
+    "isomorphic-dompurify": "^3.10.0",
     "marked": "^17.0.6",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
