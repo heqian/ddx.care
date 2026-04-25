@@ -7,6 +7,7 @@ import { logger } from "../utils/logger";
 import {
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
+  RATE_LIMIT_MAX_ENTRIES,
   MAX_CONCURRENT_WORKFLOWS,
   MAX_INPUT_FIELD_LENGTH,
   MAX_PAYLOAD_BYTES,
@@ -46,6 +47,7 @@ export const rateLimiter = new RateLimiter({
   maxRequests: RATE_LIMIT_MAX_REQUESTS,
   windowMs: RATE_LIMIT_WINDOW_MS,
   maxConcurrent: MAX_CONCURRENT_WORKFLOWS,
+  maxEntries: RATE_LIMIT_MAX_ENTRIES,
 });
 
 const diagnoseSchema = z.object({
@@ -74,14 +76,20 @@ export function createRoutes(
   appHtml: unknown,
 ) {
   function getClientIp(req: Request): string {
+    // X-Real-IP is explicitly set by Caddy via `header_up` and is always the
+    // original client's IP, regardless of intermediate proxy chains.
+    const realIp = req.headers.get("x-real-ip");
+    if (realIp) return realIp.trim();
+
     const forwarded = req.headers.get("x-forwarded-for");
     if (forwarded) {
       const parts = forwarded.split(",");
-      // Proxies like Caddy append to the right. The rightmost IP is the real client IP
-      // added by the immediate upstream proxy.
+      // With only Caddy in front, there is exactly one entry — so taking the
+      // rightmost is correct here. In a multi-proxy chain per RFC 7239, the
+      // leftmost entry is the original client IP; this would need revision if
+      // additional proxies are added.
       return parts[parts.length - 1].trim();
     }
-    // Fallback to socket IP for direct connections
     return server.requestIP?.(req)?.address || "unknown";
   }
 
@@ -247,7 +255,7 @@ export function createRoutes(
         const start = Date.now();
         const uptime = process.uptime();
         const activeWorkflows = rateLimiter.activeWorkflows;
-        const dbOk = progressStore.getJob("__health__") === undefined;
+        const dbOk = progressStore.healthCheck();
 
         const status = dbOk ? 200 : 500;
         logger.request("GET", "/v1/health", status, Date.now() - start);

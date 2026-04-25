@@ -83,7 +83,7 @@ export function useJobStream(jobId: string | null) {
       ws.onclose = (event) => {
         if (cancelled) return;
         // If closed abnormally, try to reconnect or fallback
-        if (event.code !== 1000 && event.code !== 1005) {
+        if (event.code !== 1000) {
           if (retryCount < 3) {
             const delay = Math.pow(2, retryCount) * 1000;
             retryCount++;

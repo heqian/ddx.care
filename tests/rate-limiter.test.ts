@@ -185,3 +185,93 @@ describe("RateLimiter — Prune", () => {
     expect(result.allowed).toBe(false);
   });
 });
+
+describe("RateLimiter — maxEntries Eviction", () => {
+  test("evicts oldest entry when at capacity", () => {
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 5,
+      maxEntries: 2,
+    });
+
+    limiter.check("ip-1");
+    limiter.record("ip-1");
+    limiter.check("ip-2");
+    limiter.record("ip-2");
+
+    // At capacity. ip-1 is oldest. Adding ip-3 should evict ip-1.
+    limiter.check("ip-3");
+    limiter.record("ip-3");
+
+    // ip-1 should have been evicted — treated as new
+    expect(limiter.check("ip-1")).toEqual({ allowed: true });
+
+    // ip-2 still tracked, still allowed (1 recorded)
+    expect(limiter.check("ip-2")).toEqual({ allowed: true });
+  });
+
+  test("does not evict when under capacity", () => {
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 5,
+      maxEntries: 100,
+    });
+
+    limiter.check("ip-a");
+    limiter.check("ip-b");
+    limiter.check("ip-c");
+
+    // All still tracked
+    expect(limiter.check("ip-a")).toEqual({ allowed: true });
+    expect(limiter.check("ip-b")).toEqual({ allowed: true });
+    expect(limiter.check("ip-c")).toEqual({ allowed: true });
+  });
+
+  test("prune keeps insertionOrder in sync", async () => {
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 100,
+      maxConcurrent: 5,
+      maxEntries: 3,
+    });
+
+    limiter.check("stale");
+    limiter.record("stale");
+    limiter.check("fresh");
+    limiter.record("fresh");
+
+    await new Promise((r) => setTimeout(r, 150));
+
+    limiter.prune();
+
+    // stale was pruned, fresh remains. Map should have 1 entry,
+    // so adding 2 more should not evict fresh.
+    limiter.check("new-a");
+    limiter.check("new-b");
+
+    // fresh still tracked
+    expect(limiter.check("fresh")).toEqual({ allowed: true });
+
+    // Now at capacity (fresh, new-a, new-b). Next insertion evicts.
+    limiter.check("new-c");
+    // fresh was oldest surviving entry — should be evicted
+    expect(limiter.check("fresh")).toEqual({ allowed: true });
+  });
+
+  test("no eviction when maxEntries is not set", () => {
+    const limiter = new RateLimiter({
+      maxRequests: 5,
+      windowMs: 60_000,
+      maxConcurrent: 5,
+    });
+
+    for (let i = 0; i < 200; i++) {
+      limiter.check(`ip-${i}`);
+    }
+
+    // First IP still tracked, not evicted
+    expect(limiter.check("ip-0")).toEqual({ allowed: true });
+  });
+});

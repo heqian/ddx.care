@@ -8,18 +8,35 @@ export class RateLimiter {
   private maxRequests: number;
   private windowMs: number;
   private clients = new Map<string, RateLimitEntry>();
+  private insertionOrder: string[] = [];
   private activeCount = 0;
   private maxConcurrent: number;
+  private maxEntries: number;
   private hasLoggedReset = false;
 
   constructor(opts: {
     maxRequests: number;
     windowMs: number;
     maxConcurrent: number;
+    maxEntries?: number;
   }) {
     this.maxRequests = opts.maxRequests;
     this.windowMs = opts.windowMs;
     this.maxConcurrent = opts.maxConcurrent;
+    this.maxEntries = opts.maxEntries ?? Infinity;
+  }
+
+  private evictOldest(): void {
+    while (
+      this.insertionOrder.length > 0 &&
+      this.clients.size >= this.maxEntries
+    ) {
+      const oldest = this.insertionOrder.shift()!;
+      if (this.clients.has(oldest)) {
+        this.clients.delete(oldest);
+        return;
+      }
+    }
   }
 
   check(
@@ -37,8 +54,12 @@ export class RateLimiter {
 
     let entry = this.clients.get(ip);
     if (!entry) {
+      if (this.clients.size >= this.maxEntries) {
+        this.evictOldest();
+      }
       entry = { timestamps: [] };
       this.clients.set(ip, entry);
+      this.insertionOrder.push(ip);
     }
 
     entry.timestamps = entry.timestamps.filter((t) => t > cutoff);
@@ -77,11 +98,18 @@ export class RateLimiter {
 
   prune(): void {
     const cutoff = Date.now() - this.windowMs;
-    for (const [ip, entry] of this.clients) {
+    const remaining: string[] = [];
+    for (let i = 0; i < this.insertionOrder.length; i++) {
+      const ip = this.insertionOrder[i]!;
+      const entry = this.clients.get(ip);
+      if (!entry) continue;
       entry.timestamps = entry.timestamps.filter((t) => t > cutoff);
       if (entry.timestamps.length === 0) {
         this.clients.delete(ip);
+      } else {
+        remaining.push(ip);
       }
     }
+    this.insertionOrder = remaining;
   }
 }

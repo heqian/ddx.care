@@ -378,7 +378,7 @@ export const runDiagnosis = createStep({
     const patientSummary = buildPatientSummary(inputData);
 
     // Mock mode: return a canned response without calling real LLMs
-    if (process.env.MOCK_LLM) {
+    if (process.env.MOCK_LLM === "1") {
       return mockDiagnosis(patientSummary, emitProgress);
     }
 

@@ -127,6 +127,15 @@ export class JobStore extends EventTarget {
     };
   }
 
+  healthCheck(): boolean {
+    try {
+      this.db.query("SELECT 1").run();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   cleanupExpired(ttlMs: number): void {
     const cutoff = Date.now() - ttlMs;
     this.cleanupStmt.run(cutoff);
