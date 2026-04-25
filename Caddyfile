@@ -11,11 +11,15 @@
 #   - The ddx.care app running on localhost:3000 (set PORT=3000 in .env)
 
 ddx.care {
-  # Basic authentication — replace with your own credentials.
-  # Generate a bcrypt hash with:  caddy hash-password --plaintext 'your-password'
+  # Basic authentication — password hash loaded from environment variable.
+  # Generate a hash:  caddy hash-password --plaintext 'your-password'
+  # Set it:          export BASIC_AUTH_HASH='$2b$10$...'
   basic_auth {
-    admin $2a$14$PLACEHOLDER_HASH_REPLACE_ME
+    admin {$BASIC_AUTH_HASH}
   }
+
+  # Forward the client's real IP to the backend app
+  header_up X-Real-IP {remote_host}
 
   reverse_proxy localhost:3000
 

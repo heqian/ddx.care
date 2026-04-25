@@ -32,10 +32,12 @@ server = Bun.serve<WsData>({
     appHtml,
   ),
   websocket: websocketHandlers,
-  development: {
-    hmr: true,
-    console: true,
-  },
+  ...(process.env.NODE_ENV !== "production" ? {
+    development: {
+      hmr: true,
+      console: true,
+    },
+  } : {}),
 });
 
 export { server };

@@ -3,6 +3,10 @@ export const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ?? "*";
 export const JOB_TTL_MS = 30 * 60 * 1000;
 export const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 export const RATE_LIMIT_PRUNE_INTERVAL_MS = 10 * 60 * 1000;
+export const RATE_LIMIT_MAX_ENTRIES = parseInt(
+  process.env.RATE_LIMIT_MAX_ENTRIES ?? "10000",
+  10,
+);
 export const SPECIALIST_MODEL =
   process.env.SPECIALIST_MODEL ?? "opencode-go/qwen3.6-plus";
 export const ORCHESTRATOR_MODEL =
@@ -100,6 +104,11 @@ export function validateConfig() {
   if (Number.isNaN(RATE_LIMIT_WINDOW_MS) || RATE_LIMIT_WINDOW_MS <= 0) {
     throw new Error(
       `Invalid RATE_LIMIT_WINDOW_MS: ${process.env.RATE_LIMIT_WINDOW_MS}. Must be a positive number.`,
+    );
+  }
+  if (Number.isNaN(RATE_LIMIT_MAX_ENTRIES) || RATE_LIMIT_MAX_ENTRIES <= 0) {
+    throw new Error(
+      `Invalid RATE_LIMIT_MAX_ENTRIES: ${process.env.RATE_LIMIT_MAX_ENTRIES}. Must be a positive number.`,
     );
   }
   if (Number.isNaN(MAX_CONCURRENT_WORKFLOWS) || MAX_CONCURRENT_WORKFLOWS <= 0) {
