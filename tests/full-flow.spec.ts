@@ -330,6 +330,50 @@ test.describe("Full diagnosis flow", () => {
     ).toBeVisible();
   });
 
+  test("tool-call progress entries appear in waiting room", async ({ page }) => {
+    // Fill the form
+    await page.getByPlaceholder("e.g., 45").fill("60");
+    await page
+      .getByPlaceholder(/Chest pain, shortness of breath/)
+      .fill("Dizziness");
+    await page
+      .getByPlaceholder(/Past diagnoses, medications/)
+      .fill("Hypertension");
+    await page
+      .getByPlaceholder(/Doctor-patient encounter/)
+      .fill("Dizzy spells");
+    await page
+      .getByPlaceholder(/Blood panels, urinalysis/)
+      .fill("BP 160/100");
+
+    await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
+
+    // Waiting room should appear
+    await expect(
+      page.getByRole("heading", { name: "Analyzing Case..." }),
+    ).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Tool-call progress entries should appear in the progress log
+    // The mock emits "cardiologist: Searching PubMed → hypertensive urgency guidelines"
+    const progressLog = page.locator('[role="log"]');
+    await expect(progressLog.getByText("Searching PubMed").first()).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // Indented tool-call entries should have the muted color class
+    const indentedEntry = progressLog.locator(".ml-4").first();
+    await expect(indentedEntry).toBeVisible({ timeout: 5_000 });
+
+    // Wait for results to complete
+    await expect(
+      page.getByRole("heading", { name: "Differential Diagnosis" }),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
   test("SPA fallback serves the app for unknown routes", async ({ page }) => {
     // Navigate to a non-existent route — SPA fallback should serve the app
     await page.goto("/some/unknown/path");

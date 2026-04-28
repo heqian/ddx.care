@@ -4,111 +4,127 @@
     "Agent Development": {
       "source": "anthropics/claude-code",
       "sourceType": "github",
+      "skillPath": "plugins/plugin-dev/skills/agent-development/SKILL.md",
       "computedHash": "4931c2867890bfef5881225adb691c3d719fe9ad556e3d5fae15f83e0668fa60"
     },
     "architecture": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "engineering/skills/architecture/SKILL.md",
       "computedHash": "0220c55f7be41d5ac6e622510b3367e7ad023cbcd9b804a43ede7db82185eafb"
-    },
-    "bun": {
-      "source": "bun.sh",
-      "sourceType": "well-known",
-      "computedHash": "3fabdb25dea46d8e03bd07d03b3edeb22abcfed8de3b6867177bb3c4d31a71f8"
     },
     "code-review": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "engineering/skills/code-review/SKILL.md",
       "computedHash": "919719020590499db120437b53defa7dcb05e138aa5ce9e55034b88dbad7fff8"
     },
     "debug": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "engineering/skills/debug/SKILL.md",
       "computedHash": "2406a53ec026e905f3edabfee71004ac480649c6d153ac0d09472eaf79028996"
     },
     "design-critique": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "design/skills/design-critique/SKILL.md",
       "computedHash": "55100e100ac2789175128df2899e8ace3c8732300cd2719df26c57b13e391ff8"
     },
     "design-system": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "design/skills/design-system/SKILL.md",
       "computedHash": "83a5c0b188fd242ee36817e0fd18c603654b2bd5227bf1ba5fc80af1d706ff8f"
     },
     "documentation": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "engineering/skills/documentation/SKILL.md",
       "computedHash": "c24a1672a7edad51225859d6549d9a61892f704a4527a65ce3cddd913ca04550"
     },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
       "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
     },
     "mastra": {
       "source": "mastra-ai/skills",
       "sourceType": "github",
+      "skillPath": "skills/mastra/SKILL.md",
       "computedHash": "b42f583342dfee7deb541f4d094f03e8748898257f1f884fa71de1fdba9f38a2"
     },
     "mastra-docs": {
       "source": "mastra-ai/mastra",
       "sourceType": "github",
-      "computedHash": "86a6ec0cf56b06a8f7efc98ca3ac69ae3318ffa0576106cbb7de198ac8c4ad39"
+      "skillPath": ".claude/skills/mastra-docs/SKILL.md",
+      "computedHash": "aee3ceef47cce1e083feb8f229e25fe417356242fe369e535ead2fb4eb825a55"
     },
     "memory-management": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "productivity/skills/memory-management/SKILL.md",
       "computedHash": "8178769b6efe5ef38b1e0eeea682b83ff79a1e3b93acb96aa203ebcfb96d9b98"
     },
     "performance-review": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "human-resources/skills/performance-review/SKILL.md",
       "computedHash": "ba920829092719e7ade6fba0412b7eeca89899facd979498762536b4bc162027"
     },
     "runbook": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "operations/skills/runbook/SKILL.md",
       "computedHash": "f23987e7c978f2b08ebcba07401ae46e616cfbb186b56c0f412b82987874268a"
     },
     "source-management": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "enterprise-search/skills/source-management/SKILL.md",
       "computedHash": "01eb88c63c19137a664987eda7c04cdcd86f18dd9e48c1e4f1db2b4e8c5c97e0"
     },
     "sprint-planning": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "product-management/skills/sprint-planning/SKILL.md",
       "computedHash": "4d3f8d62578b28706bb8c0575d5ed232095e85c14f9bb1ce8d352ab3b930d176"
     },
     "system-design": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "engineering/skills/system-design/SKILL.md",
       "computedHash": "5915b5f79ae74f20473c4922075b091f290374d26b26c927af9c767102424ac4"
     },
     "task-management": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "productivity/skills/task-management/SKILL.md",
       "computedHash": "a1f9389c1f06bb9c630001875e0801eb209b08818ba217f0114bc62d149eb056"
     },
     "testing-strategy": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "engineering/skills/testing-strategy/SKILL.md",
       "computedHash": "2fe64e97a596e862cd946bb8cddbbf4e9f1e1f21ca817f586111a25af474d0f8"
     },
     "theme-factory": {
       "source": "anthropics/skills",
       "sourceType": "github",
-      "computedHash": "93e78aa44f8fa00bb2c0608f400de1e1dcd6494611dd8ea27c867654240c7bcd"
+      "skillPath": "skills/theme-factory/SKILL.md",
+      "computedHash": "598ddfa9784ae2a8c55be5dbb047b98564d875dea6f4669168a87ae1ea1a4ed3"
     },
     "webapp-testing": {
       "source": "anthropics/skills",
       "sourceType": "github",
-      "computedHash": "cf8e5916d474886bd67b09691247f43f331523008b7d366064bc607ab42d6302"
+      "skillPath": "skills/webapp-testing/SKILL.md",
+      "computedHash": "ad5b1fc52807e9afa4635e59218a026b164dc58b6c3f41b0f7c644dcd6ccf572"
     },
     "write-spec": {
       "source": "anthropics/knowledge-work-plugins",
       "sourceType": "github",
+      "skillPath": "product-management/skills/write-spec/SKILL.md",
       "computedHash": "be9823943cc5f15fba80d32308dd74406371986c1327842c5ce4fe276705fb6a"
     }
   }

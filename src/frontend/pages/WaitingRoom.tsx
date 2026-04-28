@@ -5,7 +5,7 @@ import { AgentGrid } from "../components/agents/AgentGrid";
 import type { SpecialistStatus } from "../components/agents/AgentStatusCard";
 import { useJobStream } from "../hooks/useJobStream";
 import { getAgents } from "../api/client";
-import type { AgentInfo, StatusResponse } from "../api/types";
+import type { AgentInfo, StatusResponse, ProgressEvent } from "../api/types";
 
 interface WaitingRoomProps {
   jobId: string;
@@ -19,20 +19,53 @@ const RECEIVED_RE =
   /^(?:Received analysis from|Failed to receive analysis from) (\w+)$/;
 
 export function deriveSpecialistStatuses(
-  progress: { time: string; message: string }[] | undefined,
+  progress: ProgressEvent[] | undefined,
 ): Map<string, SpecialistStatus> {
   const map = new Map<string, SpecialistStatus>();
   if (!progress) return map;
 
-  for (const { message } of progress) {
-    let m = message.match(CALLING_RE);
+  for (const p of progress) {
+    if (p.eventType === "specialist_start" && p.agentId) {
+      map.set(p.agentId, "active");
+      continue;
+    }
+    if (p.eventType === "specialist_complete" && p.agentId) {
+      map.set(p.agentId, "completed");
+      continue;
+    }
+    if (p.eventType === "tool_call" || p.eventType === "tool_result") {
+      continue;
+    }
+    // Fallback regex parsing for backward compatibility with old events
+    let m = p.message.match(CALLING_RE);
     if (m) {
       map.set(m[1], "active");
       continue;
     }
-    m = message.match(RECEIVED_RE);
+    m = p.message.match(RECEIVED_RE);
     if (m) {
       map.set(m[1], "completed");
+    }
+  }
+  return map;
+}
+
+export function deriveActiveTools(
+  progress: ProgressEvent[] | undefined,
+): Map<string, { toolName: string; args: string }> {
+  const map = new Map<string, { toolName: string; args: string }>();
+  if (!progress) return map;
+
+  for (const p of progress) {
+    if (p.eventType === "specialist_complete" && p.agentId) {
+      map.delete(p.agentId);
+      continue;
+    }
+    if (p.eventType === "tool_call" && p.agentId && p.toolName) {
+      map.set(p.agentId, {
+        toolName: p.toolName,
+        args: p.toolArgs || "",
+      });
     }
   }
   return map;
@@ -75,6 +108,11 @@ export function WaitingRoom({
     [status?.progress],
   );
 
+  const activeTools = useMemo(
+    () => deriveActiveTools(status?.progress),
+    [status?.progress],
+  );
+
   const showRetry = status?.status === "failed";
 
   const hasProgress = status?.progress && status.progress.length > 0;
@@ -113,14 +151,23 @@ export function WaitingRoom({
               Starting analysis... consultations will appear here as they begin.
             </div>
           )}
-          {status?.progress?.map((p, i) => (
-            <div key={i} className="text-cyan-300 opacity-90 break-words">
-              <span className="text-slate-500 text-xs mr-2">
-                [{new Date(p.time).toLocaleTimeString()}]
-              </span>
-              {p.message}
-            </div>
-          ))}
+          {status?.progress?.map((p, i) => {
+            const isTool =
+              p.eventType === "tool_call" || p.eventType === "tool_result";
+            const indent = isTool ? "ml-4" : "";
+            const color = isTool ? "text-cyan-400/70" : "text-cyan-300";
+            return (
+              <div
+                key={i}
+                className={`${color} opacity-90 break-words ${indent}`}
+              >
+                <span className="text-slate-500 text-xs mr-2">
+                  [{new Date(p.time).toLocaleTimeString()}]
+                </span>
+                {p.message}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -144,7 +191,11 @@ export function WaitingRoom({
           <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
             Specialist Panel
           </h2>
-          <AgentGrid agents={agents} specialistStatuses={specialistStatuses} />
+          <AgentGrid
+            agents={agents}
+            specialistStatuses={specialistStatuses}
+            activeTools={activeTools}
+          />
         </div>
       )}
 

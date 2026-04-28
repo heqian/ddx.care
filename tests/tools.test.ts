@@ -244,3 +244,54 @@ describe("Agent factory validation", () => {
     expect(agent.id).toBe("general-surgeon");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tool Labels
+// ---------------------------------------------------------------------------
+import { TOOL_LABELS, formatToolLabel } from "../src/backend/tools/tool-labels";
+
+describe("formatToolLabel", () => {
+  test("returns human-readable label for known tool IDs", () => {
+    expect(formatToolLabel("pubmed-search")).toBe("Searching PubMed");
+    expect(formatToolLabel("drug-interaction")).toBe("Checking interactions");
+    expect(formatToolLabel("drug-labeling")).toBe("Reviewing FDA label");
+    expect(formatToolLabel("adverse-events")).toBe("Checking adverse events");
+    expect(formatToolLabel("omim-search")).toBe("Searching OMIM");
+    expect(formatToolLabel("medlineplus-search")).toBe("Searching MedlinePlus");
+    expect(formatToolLabel("drug-spelling-suggestion")).toBe("Checking drug spelling");
+  });
+
+  test("returns fallback for unknown tool IDs", () => {
+    expect(formatToolLabel("nonexistent-tool")).toBe("Running nonexistent-tool");
+  });
+
+  test("TOOL_LABELS has entries for all 14 known tools", () => {
+    const expectedKeys = [
+      "pubmed-search",
+      "related-articles",
+      "drug-lookup",
+      "drug-interaction",
+      "drug-labeling",
+      "adverse-events",
+      "omim-search",
+      "gene-reviews-search",
+      "clinvar-search",
+      "clinical-trials-search",
+      "drug-recall",
+      "substance-toxicology",
+      "medlineplus-search",
+      "drug-spelling-suggestion",
+    ];
+    for (const key of expectedKeys) {
+      expect(TOOL_LABELS[key]).toBeTruthy();
+    }
+    expect(Object.keys(TOOL_LABELS)).toHaveLength(expectedKeys.length);
+  });
+
+  test("all TOOL_LABELS values are non-empty strings", () => {
+    for (const [key, value] of Object.entries(TOOL_LABELS)) {
+      expect(typeof value).toBe("string");
+      expect(value.length).toBeGreaterThan(0);
+    }
+  });
+});

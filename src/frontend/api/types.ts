@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { reportSchema } from "../../backend/workflows/diagnostic-workflow";
+import type { ProgressEventType } from "../../backend/progress-store";
 
 export interface DiagnoseRequest {
   medicalHistory: string;
@@ -26,10 +27,19 @@ export interface DiagnosisResult {
   disclaimer: string;
 }
 
+export interface ProgressEvent {
+  time: string;
+  message: string;
+  eventType?: ProgressEventType;
+  agentId?: string;
+  toolName?: string;
+  toolArgs?: string | null;
+}
+
 export interface StatusResponse {
   jobId: string;
   status: "pending" | "completed" | "failed";
-  progress?: { time: string; message: string }[];
+  progress?: ProgressEvent[];
   result?: {
     status: string;
     result?: DiagnosisResult;
@@ -52,7 +62,7 @@ export type WsMessage =
   | {
       type: "progress";
       jobId: string;
-      event: { time: string; message: string };
+      event: ProgressEvent;
     }
   | {
       type: "completed";
