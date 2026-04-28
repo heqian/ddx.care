@@ -3,3 +3,9 @@ dist
 test-results
 .git
 .env
+.agents
+.claude
+.opencode
+tests
+*.sqlite
+playwright.config.ts

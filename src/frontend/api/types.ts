@@ -11,6 +11,7 @@ export interface DiagnoseRequest {
 export interface DiagnoseResponse {
   jobId: string;
   status: "pending";
+  token: string;
 }
 
 export interface SpecialistConsulted {

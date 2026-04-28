@@ -472,6 +472,48 @@ describe("useAutoLogout", () => {
 
     expect(onTimeout).not.toHaveBeenCalled();
   });
+
+  test("paused=true prevents timer from firing", () => {
+    const onTimeout = vi.fn();
+    renderHook(() => useAutoLogout(onTimeout, true));
+
+    hookAct(() => {
+      vi.advanceTimersByTime(15 * 60 * 1000);
+    });
+
+    expect(onTimeout).not.toHaveBeenCalled();
+  });
+
+  test("paused=true prevents warning from showing", () => {
+    const onTimeout = vi.fn();
+    const { result } = renderHook(() => useAutoLogout(onTimeout, true));
+
+    hookAct(() => {
+      vi.advanceTimersByTime(8 * 60 * 1000);
+    });
+
+    expect(result.current.showWarning).toBe(false);
+  });
+
+  test("timer starts when paused transitions from true to false", () => {
+    const onTimeout = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ paused }: { paused: boolean }) => useAutoLogout(onTimeout, paused),
+      { initialProps: { paused: true } },
+    );
+
+    hookAct(() => {
+      vi.advanceTimersByTime(5 * 60 * 1000);
+    });
+    expect(onTimeout).not.toHaveBeenCalled();
+
+    rerender({ paused: false });
+
+    hookAct(() => {
+      vi.advanceTimersByTime(10 * 60 * 1000);
+    });
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

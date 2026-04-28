@@ -157,6 +157,13 @@ export class JobStore extends EventTarget {
     const cutoff = Date.now() - ttlMs;
     this.cleanupStmt.run(cutoff);
   }
+
+  markStalePending(): void {
+    const stmt = this.db.prepare(
+      `UPDATE jobs SET status = 'failed', error = 'Server restarted — job interrupted' WHERE status = 'pending'`,
+    );
+    stmt.run();
+  }
 }
 
 export const progressStore = new JobStore();

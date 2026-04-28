@@ -13,7 +13,7 @@ import { submitDiagnosis } from "../api/client";
 import type { DiagnoseRequest } from "../api/types";
 
 interface InputDashboardProps {
-  onSubmit: (jobId: string, payload: DiagnoseRequest) => void;
+  onSubmit: (jobId: string, payload: DiagnoseRequest, token?: string) => void;
 }
 
 const MAX_CHARS = 50_000;
@@ -159,9 +159,9 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
         conversationTranscript: transcript,
         labResults,
       };
-      const { jobId } = await submitDiagnosis(payload);
+      const { jobId, token } = await submitDiagnosis(payload);
       clearDraft();
-      onSubmit(jobId, payload);
+      onSubmit(jobId, payload, token);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Submission failed");
     } finally {

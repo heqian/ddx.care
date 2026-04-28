@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowPathIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Spinner } from "../components/ui/Spinner";
 import { AgentGrid } from "../components/agents/AgentGrid";
 import type { SpecialistStatus } from "../components/agents/AgentStatusCard";
 import { useJobStream } from "../hooks/useJobStream";
-import { getAgents } from "../api/client";
+import { cancelDiagnosis, getAgents } from "../api/client";
 import type { AgentInfo, StatusResponse, ProgressEvent } from "../api/types";
 
 interface WaitingRoomProps {
   jobId: string;
+  token?: string;
   onComplete: (result: StatusResponse) => void;
   onCancel: () => void;
   onRetry: () => void;
@@ -73,13 +74,14 @@ export function deriveActiveTools(
 
 export function WaitingRoom({
   jobId,
+  token,
   onComplete,
   onCancel,
   onRetry,
 }: WaitingRoomProps) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentsError, setAgentsError] = useState(false);
-  const { status, error } = useJobStream(jobId);
+  const { status, error } = useJobStream(jobId, token);
   const isTerminal =
     status?.status === "failed" || status?.status === "completed";
   const progressRef = useRef<HTMLDivElement>(null);
@@ -116,6 +118,13 @@ export function WaitingRoom({
   const showRetry = status?.status === "failed";
 
   const hasProgress = status?.progress && status.progress.length > 0;
+
+  const handleCancelClick = useCallback(() => {
+    if (jobId) {
+      cancelDiagnosis(jobId).catch(() => {});
+    }
+    onCancel();
+  }, [jobId, onCancel]);
 
   return (
     <div className="space-y-8">
@@ -221,7 +230,7 @@ export function WaitingRoom({
       <div className="flex justify-center gap-3">
         {!isTerminal && (
           <button
-            onClick={onCancel}
+            onClick={handleCancelClick}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
           >
             <XMarkIcon className="h-4 w-4" />

@@ -169,7 +169,7 @@ describe("API Endpoints", () => {
       const res = await fetch(`${BASE}/v1/agents`);
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
       expect(res.headers.get("Access-Control-Allow-Methods")).toBe(
-        "GET, POST, OPTIONS",
+        "GET, POST, DELETE, OPTIONS",
       );
       expect(res.headers.get("Access-Control-Allow-Headers")).toBe(
         "Content-Type",
@@ -199,7 +199,7 @@ describe("API Endpoints", () => {
       expect(res.status).toBe(204);
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
       expect(res.headers.get("Access-Control-Allow-Methods")).toBe(
-        "GET, POST, OPTIONS",
+        "GET, POST, DELETE, OPTIONS",
       );
       expect(res.headers.get("Access-Control-Allow-Headers")).toBe(
         "Content-Type",
@@ -352,6 +352,213 @@ describe("API Endpoints", () => {
       expect(Number(retryAfter)).toBeGreaterThan(0);
 
       // Cleanup: reset rate limiter state for subsequent tests
+      rateLimiter["clients"].clear();
+      rateLimiter["activeCount"] = 0;
+      rateLimiter["hasLoggedReset"] = savedReset;
+    });
+  });
+
+  describe("Security headers", () => {
+    test("GET /v1/agents includes X-Content-Type-Options header", async () => {
+      const res = await fetch(`${BASE}/v1/agents`);
+      expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    });
+
+    test("GET /v1/agents includes X-Frame-Options header", async () => {
+      const res = await fetch(`${BASE}/v1/agents`);
+      expect(res.headers.get("X-Frame-Options")).toBe("DENY");
+    });
+
+    test("OPTIONS preflight includes security headers", async () => {
+      const res = await fetch(`${BASE}/v1/diagnose`, { method: "OPTIONS" });
+      expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      expect(res.headers.get("X-Frame-Options")).toBe("DENY");
+    });
+  });
+
+  describe("TRUSTED_ORIGINS CORS validation", () => {
+    function buildCorsHeaders(
+      trustedOrigins: string,
+      allowedOrigins: string,
+      origin: string | null,
+    ): Record<string, string> {
+      const headers: Record<string, string> = {
+        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      };
+
+      if (trustedOrigins) {
+        const allowed = trustedOrigins.split(",").map((o) => o.trim());
+        if (origin && allowed.includes(origin)) {
+          headers["Access-Control-Allow-Origin"] = origin;
+        }
+      } else {
+        headers["Access-Control-Allow-Origin"] = allowedOrigins;
+      }
+
+      return headers;
+    }
+
+    test("reflects matching origin when TRUSTED_ORIGINS is set", () => {
+      const headers = buildCorsHeaders(
+        "https://ddx.care",
+        "*",
+        "https://ddx.care",
+      );
+      expect(headers["Access-Control-Allow-Origin"]).toBe("https://ddx.care");
+    });
+
+    test("does not set ACAO for non-matching origin", () => {
+      const headers = buildCorsHeaders(
+        "https://ddx.care",
+        "*",
+        "https://evil.example.com",
+      );
+      expect(headers["Access-Control-Allow-Origin"]).toBeUndefined();
+    });
+
+    test("falls back to ALLOWED_ORIGINS when TRUSTED_ORIGINS is empty", () => {
+      const headers = buildCorsHeaders("", "*", "https://anything.com");
+      expect(headers["Access-Control-Allow-Origin"]).toBe("*");
+    });
+  });
+
+  describe("Diagnose response includes token", () => {
+    test("POST /v1/diagnose response includes token field", async () => {
+      const res = await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: JSON.stringify({
+          medicalHistory: "test token",
+          conversationTranscript: "test",
+          labResults: "test",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(202);
+      const body = (await res.json()) as {
+        jobId: string;
+        status: string;
+        token: string;
+      };
+      expect(body.jobId).toBeDefined();
+      expect(body.status).toBe("pending");
+      expect(typeof body.token).toBe("string");
+    });
+  });
+
+  describe("DELETE /v1/diagnose/:jobId", () => {
+    test("returns 404 for unknown job", async () => {
+      const res = await fetch(`${BASE}/v1/diagnose/nonexistent-id`, {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(404);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("Job not found");
+    });
+
+    test("cancels a pending job and returns 200", async () => {
+      const createRes = await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: JSON.stringify({
+          medicalHistory: "cancel test",
+          conversationTranscript: "test",
+          labResults: "test",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      const { jobId } = (await createRes.json()) as { jobId: string };
+
+      const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}`, {
+        method: "DELETE",
+      });
+      expect(delRes.status).toBe(200);
+      const body = (await delRes.json()) as { status: string };
+      expect(body.status).toBe("cancelled");
+
+      const statusRes = await fetch(`${BASE}/v1/status/${jobId}`);
+      const statusBody = (await statusRes.json()) as {
+        status: string;
+        error: string;
+      };
+      expect(statusBody.status).toBe("failed");
+      expect(statusBody.error).toContain("Cancelled by user");
+    });
+
+    test("returns already_completed for a completed job", async () => {
+      const createRes = await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: JSON.stringify({
+          medicalHistory: "complete test",
+          conversationTranscript: "test",
+          labResults: "test",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      const { jobId } = (await createRes.json()) as { jobId: string };
+
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const s = await fetch(`${BASE}/v1/status/${jobId}`);
+        const sb = (await s.json()) as { status: string };
+        if (sb.status === "completed") break;
+      }
+
+      const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}`, {
+        method: "DELETE",
+      });
+      expect(delRes.status).toBe(200);
+      const body = (await delRes.json()) as { status: string };
+      expect(body.status).toBe("already_completed");
+    }, 60_000);
+  });
+
+  describe("Rate limit recording after validation", () => {
+    test("malformed JSON does not increment rate limit counter", async () => {
+      const { rateLimiter } = await import("../src/backend/api/routes");
+      const savedReset = rateLimiter["hasLoggedReset"];
+      rateLimiter["clients"].clear();
+      rateLimiter["activeCount"] = 0;
+      rateLimiter["hasLoggedReset"] = true;
+
+      await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: "not json",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const testIp = "::1";
+      const entry = rateLimiter["clients"].get(testIp);
+      // The malformed request should not have called rateLimiter.record()
+      // so there should be no timestamps for this IP
+      expect(entry?.timestamps?.length ?? 0).toBe(0);
+
+      rateLimiter["clients"].clear();
+      rateLimiter["activeCount"] = 0;
+      rateLimiter["hasLoggedReset"] = savedReset;
+    });
+
+    test("valid request does increment rate limit counter", async () => {
+      const { rateLimiter } = await import("../src/backend/api/routes");
+      const savedReset = rateLimiter["hasLoggedReset"];
+      rateLimiter["clients"].clear();
+      rateLimiter["activeCount"] = 0;
+      rateLimiter["hasLoggedReset"] = true;
+
+      await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: JSON.stringify({
+          medicalHistory: "rate test",
+          conversationTranscript: "test",
+          labResults: "test",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const testIp = "::1";
+      const entry = rateLimiter["clients"].get(testIp);
+      expect(entry).toBeDefined();
+      expect(entry!.timestamps.length).toBeGreaterThan(0);
+
       rateLimiter["clients"].clear();
       rateLimiter["activeCount"] = 0;
       rateLimiter["hasLoggedReset"] = savedReset;

@@ -4,6 +4,8 @@ import { agentList } from "../agents/index";
 import { progressStore } from "../progress-store";
 import { RateLimiter } from "../utils/rate-limiter";
 import { logger } from "../utils/logger";
+import { generateToken, verifyToken } from "../utils/ws-token";
+import * as abortStore from "../utils/abort-controller-store";
 import {
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
@@ -12,6 +14,8 @@ import {
   MAX_INPUT_FIELD_LENGTH,
   MAX_PAYLOAD_BYTES,
   ALLOWED_ORIGINS,
+  TRUSTED_ORIGINS,
+  WS_TOKEN_SECRET,
 } from "../config";
 
 const CSP_VALUE =
@@ -22,25 +26,38 @@ const CSP_VALUE =
   "connect-src 'self' ws: wss:; " +
   "frame-ancestors 'none'";
 
-function corsHeaders(): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGINS,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+function corsHeaders(req?: Request): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Content-Security-Policy": CSP_VALUE,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
   };
+
+  if (TRUSTED_ORIGINS) {
+    const allowed = TRUSTED_ORIGINS.split(",").map((o) => o.trim());
+    const origin = req?.headers.get("origin") ?? "";
+    if (allowed.includes(origin)) {
+      headers["Access-Control-Allow-Origin"] = origin;
+    }
+  } else {
+    headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGINS;
+  }
+
+  return headers;
 }
 
-function withCors(response: Response): Response {
-  const headers = corsHeaders();
+function withCors(response: Response, req?: Request): Response {
+  const headers = corsHeaders(req);
   for (const [key, value] of Object.entries(headers)) {
     response.headers.set(key, value);
   }
   return response;
 }
 
-function corsPreflightResponse(): Response {
-  return new Response(null, { status: 204, headers: corsHeaders() });
+function corsPreflightResponse(req?: Request): Response {
+  return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
 export const rateLimiter = new RateLimiter({
@@ -97,7 +114,7 @@ export function createRoutes(
     "/": appHtml,
 
     "/v1/diagnose": {
-      OPTIONS: () => corsPreflightResponse(),
+      OPTIONS: (req: Request) => corsPreflightResponse(req),
       POST: async (req: Request) => {
         const startTime = Date.now();
         const ip = getClientIp(req);
@@ -114,6 +131,7 @@ export function createRoutes(
               { error: "Rate limit exceeded. Please try again later." },
               { status: 429, headers: { "Retry-After": String(retryAfter) } },
             ),
+            req,
           );
         }
 
@@ -127,12 +145,10 @@ export function createRoutes(
               { error: "Server is at capacity. Please try again later." },
               { status: 429, headers: { "Retry-After": "30" } },
             ),
+            req,
           );
         }
 
-        // Reserve rate limit slot and workflow concurrency before awaiting
-        // body parse to prevent TOCTOU race conditions
-        rateLimiter.record(ip);
         rateLimiter.startWorkflow();
 
         let body: unknown;
@@ -148,6 +164,7 @@ export function createRoutes(
           });
           return withCors(
             Response.json({ error: "Payload too large" }, { status: 413 }),
+            req,
           );
         }
         try {
@@ -159,6 +176,7 @@ export function createRoutes(
           });
           return withCors(
             Response.json({ error: "Invalid JSON body" }, { status: 400 }),
+            req,
           );
         }
 
@@ -177,11 +195,23 @@ export function createRoutes(
               { error: `Validation failed: ${issues}` },
               { status: 400 },
             ),
+            req,
           );
         }
 
+        rateLimiter.record(ip);
+
         const { medicalHistory, conversationTranscript, labResults } =
           parsed.data;
+
+        const trunc = (s: string) =>
+          s.length > MAX_INPUT_FIELD_LENGTH
+            ? s.slice(0, MAX_INPUT_FIELD_LENGTH) +
+              "[Content truncated due to length limit]"
+            : s;
+        const tMedicalHistory = trunc(medicalHistory);
+        const tConversationTranscript = trunc(conversationTranscript);
+        const tLabResults = trunc(labResults);
 
         const jobId = crypto.randomUUID();
         progressStore.createJob(jobId);
@@ -194,9 +224,16 @@ export function createRoutes(
         const workflow = mastra.getWorkflow("diagnosticWorkflow");
         const run = await workflow.createRun({ runId: jobId });
 
+        const ac = new AbortController();
+        abortStore.set(jobId, ac);
+
         run
           .start({
-            inputData: { medicalHistory, conversationTranscript, labResults },
+            inputData: {
+              medicalHistory: tMedicalHistory,
+              conversationTranscript: tConversationTranscript,
+              labResults: tLabResults,
+            },
           })
           .then((result) => {
             const specialistCount =
@@ -216,17 +253,73 @@ export function createRoutes(
             progressStore.fail(jobId, message);
           })
           .finally(() => {
+            abortStore.remove(jobId);
             rateLimiter.finishWorkflow();
           });
 
         return withCors(
-          Response.json({ jobId, status: "pending" }, { status: 202 }),
+          Response.json(
+            { jobId, status: "pending", token: generateToken(jobId) },
+            { status: 202 },
+          ),
+          req,
         );
       },
     },
 
+    "/v1/diagnose/:jobId": {
+      OPTIONS: (req: Request) => corsPreflightResponse(req),
+      DELETE: (req: RouteRequest) => {
+        const start = Date.now();
+        const { jobId } = req.params;
+        const entry = progressStore.getJob(jobId);
+
+        if (!entry) {
+          logger.request(
+            "DELETE",
+            "/v1/diagnose/:jobId",
+            404,
+            Date.now() - start,
+            { jobId },
+          );
+          return withCors(
+            Response.json({ error: "Job not found" }, { status: 404 }),
+            req,
+          );
+        }
+
+        if (entry.status === "completed") {
+          logger.request(
+            "DELETE",
+            "/v1/diagnose/:jobId",
+            200,
+            Date.now() - start,
+            { jobId, status: "already_completed" },
+          );
+          return withCors(Response.json({ status: "already_completed" }), req);
+        }
+
+        const ac = abortStore.get(jobId);
+        if (ac) {
+          ac.abort();
+          abortStore.remove(jobId);
+        }
+        progressStore.fail(jobId, "Cancelled by user");
+        rateLimiter.finishWorkflow();
+
+        logger.request(
+          "DELETE",
+          "/v1/diagnose/:jobId",
+          200,
+          Date.now() - start,
+          { jobId, status: "cancelled" },
+        );
+        return withCors(Response.json({ status: "cancelled" }), req);
+      },
+    },
+
     "/v1/status/:jobId": {
-      OPTIONS: () => corsPreflightResponse(),
+      OPTIONS: (req: Request) => corsPreflightResponse(req),
       GET: (req: RouteRequest) => {
         const start = Date.now();
         const { jobId } = req.params;
@@ -238,6 +331,7 @@ export function createRoutes(
           });
           return withCors(
             Response.json({ error: "Job not found" }, { status: 404 }),
+            req,
           );
         }
 
@@ -245,13 +339,13 @@ export function createRoutes(
           jobId,
           status: entry.status,
         });
-        return withCors(Response.json({ jobId, ...entry }));
+        return withCors(Response.json({ jobId, ...entry }), req);
       },
     },
 
     "/v1/health": {
-      OPTIONS: () => corsPreflightResponse(),
-      GET: () => {
+      OPTIONS: (req: Request) => corsPreflightResponse(req),
+      GET: (req: Request) => {
         const start = Date.now();
         const uptime = process.uptime();
         const activeWorkflows = rateLimiter.activeWorkflows;
@@ -269,22 +363,23 @@ export function createRoutes(
             },
             { status },
           ),
+          req,
         );
       },
     },
 
     "/v1/agents": {
-      OPTIONS: () => corsPreflightResponse(),
-      GET: () => {
+      OPTIONS: (req: Request) => corsPreflightResponse(req),
+      GET: (req: Request) => {
         const start = Date.now();
         logger.request("GET", "/v1/agents", 200, Date.now() - start);
-        return withCors(Response.json({ agents: agentList }));
+        return withCors(Response.json({ agents: agentList }), req);
       },
     },
 
     // CORS preflight catch-all for any future /v1/* routes
     "/v1/*": {
-      OPTIONS: () => corsPreflightResponse(),
+      OPTIONS: (req: Request) => corsPreflightResponse(req),
     },
 
     // SPA fallback — serve index.html for all non-API routes
@@ -309,15 +404,30 @@ export function createRoutes(
           });
           return new Response("Missing Origin header", { status: 403 });
         }
-        if (ALLOWED_ORIGINS !== "*") {
-          const allowed = ALLOWED_ORIGINS.split(",").map((o) => o.trim());
-          if (!allowed.includes(origin)) {
-            logger.warn("ws_origin_rejected", {
+
+        const originsList = TRUSTED_ORIGINS
+          ? TRUSTED_ORIGINS.split(",").map((o) => o.trim())
+          : ALLOWED_ORIGINS === "*"
+            ? null
+            : ALLOWED_ORIGINS.split(",").map((o) => o.trim());
+
+        if (originsList && !originsList.includes(origin)) {
+          logger.warn("ws_origin_rejected", {
+            jobId,
+            origin,
+            reason: "not_in_allowlist",
+          });
+          return new Response("Forbidden origin", { status: 403 });
+        }
+
+        if (WS_TOKEN_SECRET) {
+          const token = url.searchParams.get("token");
+          if (!token || !verifyToken(jobId, token)) {
+            logger.warn("ws_token_rejected", {
               jobId,
-              origin,
-              reason: "not_in_allowlist",
+              reason: "invalid_token",
             });
-            return new Response("Forbidden origin", { status: 403 });
+            return new Response("Invalid or missing token", { status: 403 });
           }
         }
 

@@ -12,6 +12,8 @@ import {
 
 validateConfig();
 
+progressStore.markStalePending();
+
 const cleanupTimer = setInterval(() => {
   progressStore.cleanupExpired(JOB_TTL_MS);
 }, CLEANUP_INTERVAL_MS);

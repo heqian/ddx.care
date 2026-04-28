@@ -53,3 +53,13 @@ export async function getAgents(): Promise<AgentsResponse> {
   }
   return res.json();
 }
+
+export async function cancelDiagnosis(
+  jobId: string,
+): Promise<{ status: string }> {
+  const res = await fetch(`/v1/diagnose/${jobId}`, { method: "DELETE" });
+  if (!res.ok) {
+    await handleResponseText(res);
+  }
+  return res.json();
+}

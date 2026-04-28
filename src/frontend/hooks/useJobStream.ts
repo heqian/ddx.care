@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getJobStatus } from "../api/client";
 import type { StatusResponse, WsMessage } from "../api/types";
 
-export function useJobStream(jobId: string | null) {
+export function useJobStream(jobId: string | null, token?: string) {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
@@ -15,9 +15,9 @@ export function useJobStream(jobId: string | null) {
     let retryCount = 0;
 
     const connectWebSocket = () => {
-      // Build absolute websocket URL handling http/https -> ws/wss
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}/ws?jobId=${jobId}`;
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
+      const wsUrl = `${protocol}//${window.location.host}/ws?jobId=${jobId}${tokenParam}`;
 
       ws = new WebSocket(wsUrl);
 
@@ -82,15 +82,29 @@ export function useJobStream(jobId: string | null) {
 
       ws.onclose = (event) => {
         if (cancelled) return;
-        // If closed abnormally, try to reconnect or fallback
         if (event.code !== 1000) {
-          if (retryCount < 3) {
+          if (retryCount < 5) {
             const delay = Math.pow(2, retryCount) * 1000;
             retryCount++;
             console.log(
-              `WebSocket closed. Reconnecting in ${delay}ms (attempt ${retryCount}/3)...`,
+              `WebSocket closed. Reconnecting in ${delay}ms (attempt ${retryCount}/5)...`,
             );
-            setTimeout(connectWebSocket, delay);
+            setTimeout(async () => {
+              if (cancelled) return;
+              try {
+                const statusResult = await getJobStatus(jobId!);
+                if (
+                  statusResult.status === "completed" ||
+                  statusResult.status === "failed"
+                ) {
+                  setStatus(statusResult);
+                  return;
+                }
+              } catch {
+                // Status check failed, proceed with reconnect anyway
+              }
+              if (!cancelled) connectWebSocket();
+            }, delay);
           } else {
             console.warn(
               "WebSocket max retries reached. Falling back to HTTP polling.",
@@ -133,7 +147,7 @@ export function useJobStream(jobId: string | null) {
         window.clearInterval(fallbackInterval);
       }
     };
-  }, [jobId]);
+  }, [jobId, token]);
 
   return { status, error };
 }
