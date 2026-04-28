@@ -10,9 +10,14 @@ import {
   SPECIALIST_CONTEXT_MAX_CHARS,
   CMO_CONTEXT_MAX_CHARS,
 } from "../config";
-import { progressStore } from "../progress-store";
+import {
+  progressStore,
+  type ProgressEvent,
+  type ProgressEventType,
+} from "../progress-store";
 import { logger } from "../utils/logger";
 import { agentList } from "../agents";
+import { formatToolLabel } from "../tools/tool-labels";
 
 const specialistNameMap = new Map<string, string>();
 for (const agent of agentList) {
@@ -23,6 +28,30 @@ export function normalizeSpecialistName(name: string): string {
   const lookedUp = specialistNameMap.get(name.toLowerCase());
   if (lookedUp) return lookedUp;
   return name.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function formatToolArgs(
+  toolName: string,
+  args: Record<string, unknown>,
+): string {
+  const raw = args as Record<string, unknown>;
+  const drug1 = typeof raw.drugName === "string" ? raw.drugName : "";
+  const drug2 = typeof raw.drugName2 === "string" ? raw.drugName2 : "";
+  const query =
+    typeof raw.query === "string"
+      ? raw.query
+      : typeof raw.term === "string"
+        ? raw.term
+        : typeof raw.condition === "string"
+          ? raw.condition
+          : "";
+
+  if (toolName === "drug-interaction" && drug1 && drug2) {
+    return `${drug1} + ${drug2}`;
+  }
+  const fallback = drug1 || query || "";
+  const maxLen = 80;
+  return fallback.length > maxLen ? `${fallback.slice(0, maxLen)}…` : fallback;
 }
 
 export async function limitConcurrency<T, R>(
@@ -244,13 +273,26 @@ export function buildCmoContext(
 }
 
 /** Mock diagnosis for E2E testing — returns a realistic canned response */
-async function mockDiagnosis(
+export async function mockDiagnosis(
   _patientSummary: string,
-  emitProgress: (msg: string) => void,
+  emitProgress: (msg: string | ProgressEvent) => void,
 ): Promise<{ diagnosisReport: DiagnosisReport }> {
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const emit = (
+    eventType: ProgressEventType,
+    message: string,
+    extra?: Partial<ProgressEvent>,
+  ) => {
+    emitProgress({
+      time: new Date().toISOString(),
+      message,
+      eventType,
+      ...extra,
+    });
+  };
 
-  emitProgress(
+  emit(
+    "round_start",
     "Round 1 Analysis: Asking CMO for decision on needed specialists...",
   );
   await delay(100);
@@ -261,19 +303,35 @@ async function mockDiagnosis(
     { id: "nephrologist", hasContext: false },
   ];
   for (const spec of specialists) {
-    emitProgress(
+    emit(
+      "specialist_start",
       `Calling specialist ${spec.id}${spec.hasContext ? " (with CMO context directive)" : ""}...`,
+      { agentId: spec.id },
     );
-    await delay(80);
-    emitProgress(`Received analysis from ${spec.id}`);
+    await delay(40);
+    emit(
+      "tool_call",
+      `${spec.id}: Searching PubMed → hypertensive urgency guidelines`,
+      {
+        agentId: spec.id,
+        toolName: "pubmed-search",
+        toolArgs: "hypertensive urgency guidelines",
+      },
+    );
+    await delay(40);
+    emit("specialist_complete", `Received analysis from ${spec.id}`, {
+      agentId: spec.id,
+    });
   }
 
-  emitProgress(
+  emit(
+    "round_start",
     "Round 2 Analysis: CMO sharing prior findings with additional specialists...",
   );
   await delay(100);
 
-  emitProgress(
+  emit(
+    "cmo_final",
     "CMO has determined no further consultations are needed and finalized the report.",
   );
   await delay(50);
@@ -369,10 +427,22 @@ export const runDiagnosis = createStep({
     diagnosisReport: diagnosisReportSchema,
   }),
   execute: async ({ inputData, mastra, runId }) => {
-    const emitProgress = (message: string) => {
+    const emitProgress = (messageOrEvent: string | ProgressEvent) => {
       if (runId) {
-        progressStore.emitMessage(runId, message);
+        progressStore.emitMessage(runId, messageOrEvent);
       }
+    };
+    const emit = (
+      eventType: ProgressEventType,
+      message: string,
+      extra?: Partial<ProgressEvent>,
+    ) => {
+      emitProgress({
+        time: new Date().toISOString(),
+        message,
+        eventType,
+        ...extra,
+      });
     };
 
     const patientSummary = buildPatientSummary(inputData);
@@ -425,7 +495,8 @@ Specialists consulted so far: ${Array.from(allConsultedSpecialists).join(", ") |
 
 If you have enough information to make a final diagnosis, set "isFinal" to true and provide the "finalReport".`;
 
-        emitProgress(
+        emit(
+          "round_start",
           `Round ${round} Analysis: Asking CMO for decision on needed specialists...`,
         );
         const cmoDecision = await withRetry(
@@ -475,12 +546,14 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
         if (!cmoDecision.object) {
           parseFailureCount++;
           if (parseFailureCount > MAX_PARSE_FAILURES) {
-            emitProgress(
+            emit(
+              "general",
               `CMO returned unparseable responses ${parseFailureCount} times. Forcing final report generation.`,
             );
             break;
           }
-          emitProgress(
+          emit(
+            "general",
             `CMO returned an unparseable response in round ${round}, retrying...`,
           );
           continue;
@@ -490,12 +563,14 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
         if (!parsed.success) {
           parseFailureCount++;
           if (parseFailureCount > MAX_PARSE_FAILURES) {
-            emitProgress(
+            emit(
+              "general",
               `CMO returned invalid structured output ${parseFailureCount} times. Forcing final report generation.`,
             );
             break;
           }
-          emitProgress(
+          emit(
+            "general",
             `CMO returned invalid structured output in round ${round}, retrying...`,
           );
           continue;
@@ -504,8 +579,9 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
         const { specialistsToConsult, isFinal, finalReport } = parsed.data;
 
         if (isFinal && finalReport) {
-          emitProgress(
-            `CMO has determined no further consultations are needed and finalized the report.`,
+          emit(
+            "cmo_final",
+            "CMO has determined no further consultations are needed and finalized the report.",
           );
           finalDiagnosisReport = finalReport;
           break;
@@ -517,8 +593,9 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
         );
 
         if (newSpecialistRequests.length === 0) {
-          emitProgress(
-            `No new specialists requested. Compiling final report...`,
+          emit(
+            "cmo_final",
+            "No new specialists requested. Compiling final report...",
           );
           const finalPrompt = `You did not request any new specialists, or there are no more to consult. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
 
@@ -542,7 +619,8 @@ ${builtContextHistory}`;
           if (validated.success) {
             finalDiagnosisReport = validated.data;
           } else {
-            emitProgress(
+            emit(
+              "general",
               `Final report validation failed: ${validated.error.issues.map((i) => i.message).join(", ")}. Using raw output.`,
             );
             finalDiagnosisReport = finalResponse.object as DiagnosisReport;
@@ -551,7 +629,8 @@ ${builtContextHistory}`;
         }
 
         // Call the new specialists
-        emitProgress(
+        emit(
+          "cmo_decision",
           `CMO requested consultations from: ${newSpecialistRequests.map((s) => s.id).join(", ")}`,
         );
 
@@ -564,7 +643,9 @@ ${builtContextHistory}`;
               const specAgent = mastra.getAgent(specId);
               if (specAgent) {
                 allConsultedSpecialists.add(specId);
-                emitProgress(`Calling specialist ${specId}...`);
+                emit("specialist_start", `Calling specialist ${specId}...`, {
+                  agentId: specId,
+                });
 
                 const specialistContext = buildSpecialistContext({
                   mode: SPECIALIST_CONTEXT_MODE,
@@ -583,6 +664,37 @@ ${builtContextHistory}`;
                   () =>
                     specAgent.generate(specPrompt, {
                       abortSignal: abortController.signal,
+                      onStepFinish: (step) => {
+                        for (const tc of step.toolCalls) {
+                          const args = formatToolArgs(
+                            tc.payload.toolName,
+                            tc.payload.args as Record<string, unknown>,
+                          );
+                          // formatToolArgs returns "" for unknown args → coerced to null
+                          emit(
+                            "tool_call",
+                            `${specId}: ${formatToolLabel(tc.payload.toolName)}${args ? ` → ${args}` : ""}`,
+                            {
+                              agentId: specId,
+                              toolName: tc.payload.toolName,
+                              toolArgs: args || null,
+                            },
+                          );
+                        }
+                        for (const tr of step.toolResults) {
+                          if (tr.payload.isError) {
+                            emit(
+                              "tool_result",
+                              `${specId}: ${formatToolLabel(tr.payload.toolName)} failed`,
+                              {
+                                agentId: specId,
+                                toolName: tr.payload.toolName,
+                                toolArgs: "error",
+                              },
+                            );
+                          }
+                        }
+                      },
                     }),
                   AGENT_GENERATE_MAX_RETRIES,
                   AGENT_GENERATE_RETRY_BASE_DELAY,
@@ -595,7 +707,11 @@ ${builtContextHistory}`;
                   true,
                 );
 
-                emitProgress(`Received analysis from ${specId}`);
+                emit(
+                  "specialist_complete",
+                  `Received analysis from ${specId}`,
+                  { agentId: specId },
+                );
                 return `=== ${specId} Consult ===\n${specResponse.text}`;
               } else {
                 return `=== ${specId} Consult ===\nFailed to reach specialist (Not Found).`;
@@ -608,7 +724,11 @@ ${builtContextHistory}`;
                 jobId: runId,
                 error: message,
               });
-              emitProgress(`Failed to receive analysis from ${specId}`);
+              emit(
+                "specialist_complete",
+                `Failed to receive analysis from ${specId}`,
+                { agentId: specId },
+              );
               return `=== ${specId} Consult ===\nFailed to consult specialist: ${message}`;
             }
           },
@@ -649,7 +769,8 @@ ${builtContextHistory}`;
         if (validated.success) {
           finalDiagnosisReport = validated.data;
         } else {
-          emitProgress(
+          emit(
+            "general",
             `Final report validation failed: ${validated.error.issues.map((i) => i.message).join(", ")}. Using raw output.`,
           );
           finalDiagnosisReport = finalResponse.object as DiagnosisReport;

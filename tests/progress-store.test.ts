@@ -1,5 +1,5 @@
 import { test, expect, describe, beforeEach } from "bun:test";
-import { JobStore, type JobEntry } from "../src/backend/progress-store";
+import { JobStore, type JobEntry, type ProgressEvent } from "../src/backend/progress-store";
 
 let store: JobStore;
 
@@ -99,6 +99,64 @@ describe("JobStore — Progress Events", () => {
     expect(job!.progress).toHaveLength(1);
     expect(job!.progress[0].message).toBe("Working...");
   });
+
+  test("emitMessage with ProgressEvent object stores enriched fields", () => {
+    store.createJob("job-p4");
+    const event: ProgressEvent = {
+      time: "2026-01-15T10:30:00.000Z",
+      message: "Cardiologist: Searching PubMed → chest pain",
+      eventType: "tool_call",
+      agentId: "cardiologist",
+      toolName: "pubmed-search",
+      toolArgs: "chest pain",
+    };
+    store.emitMessage("job-p4", event);
+
+    const job = store.getJob("job-p4");
+    expect(job!.progress).toHaveLength(1);
+    const stored = job!.progress[0];
+    expect(stored.time).toBe("2026-01-15T10:30:00.000Z");
+    expect(stored.message).toBe("Cardiologist: Searching PubMed → chest pain");
+    expect(stored.eventType).toBe("tool_call");
+    expect(stored.agentId).toBe("cardiologist");
+    expect(stored.toolName).toBe("pubmed-search");
+    expect(stored.toolArgs).toBe("chest pain");
+  });
+
+  test("ProgressEvent with null toolArgs is stored correctly", () => {
+    store.createJob("job-p5");
+    store.emitMessage("job-p5", {
+      time: "2026-01-15T10:30:00.000Z",
+      message: "Searching PubMed",
+      eventType: "tool_call",
+      agentId: "neurologist",
+      toolName: "pubmed-search",
+      toolArgs: null,
+    });
+
+    const job = store.getJob("job-p5");
+    expect(job!.progress[0].toolArgs).toBeNull();
+  });
+
+  test("mixed string and ProgressEvent emitMessage calls", () => {
+    store.createJob("job-p6");
+    store.emitMessage("job-p6", "Starting analysis...");
+    store.emitMessage("job-p6", {
+      time: "2026-01-15T10:30:01.000Z",
+      message: "Cardiologist: Searching PubMed",
+      eventType: "tool_call",
+      agentId: "cardiologist",
+      toolName: "pubmed-search",
+      toolArgs: "chest pain",
+    });
+    store.emitMessage("job-p6", "Analysis complete");
+
+    const job = store.getJob("job-p6");
+    expect(job!.progress).toHaveLength(3);
+    expect(job!.progress[0].eventType).toBeUndefined();
+    expect(job!.progress[1].eventType).toBe("tool_call");
+    expect(job!.progress[2].eventType).toBeUndefined();
+  });
 });
 
 describe("JobStore — Pub/Sub", () => {
@@ -177,6 +235,32 @@ describe("JobStore — Pub/Sub", () => {
 
     expect(receivedA).toHaveLength(1);
     expect(receivedB).toHaveLength(0);
+  });
+
+  test("subscribe receives enriched ProgressEvent fields", () => {
+    store.createJob("job-s5");
+    const received: unknown[] = [];
+
+    store.subscribe("job-s5", (data) => {
+      received.push(data);
+    });
+
+    store.emitMessage("job-s5", {
+      time: "2026-01-15T10:30:00.000Z",
+      message: "Cardiologist: Checking interactions → drug A + drug B",
+      eventType: "tool_call",
+      agentId: "cardiologist",
+      toolName: "drug-interaction",
+      toolArgs: "drug A + drug B",
+    });
+
+    expect(received).toHaveLength(1);
+    const detail = received[0] as any;
+    expect(detail.type).toBe("progress");
+    expect(detail.event.eventType).toBe("tool_call");
+    expect(detail.event.agentId).toBe("cardiologist");
+    expect(detail.event.toolName).toBe("drug-interaction");
+    expect(detail.event.toolArgs).toBe("drug A + drug B");
   });
 });
 

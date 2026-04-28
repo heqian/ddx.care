@@ -542,6 +542,63 @@ describe("AgentStatusCard", () => {
     );
     expect(getByText(container, "Waiting...")).toBeTruthy();
   });
+
+  test("shows active tool label when activeTool is provided", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Cardiologist",
+        agentId: "cardiologist",
+        description: "Heart specialist",
+        status: "active",
+        activeTool: { toolName: "pubmed-search", args: "chest pain" },
+      }),
+    );
+    expect(getByText(container, "Searching PubMed")).toBeTruthy();
+    expect(getByText(container, "Searching PubMed: chest pain")).toBeTruthy();
+  });
+
+  test("shows 'Consulting...' when active but no activeTool", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Cardiologist",
+        agentId: "cardiologist",
+        description: "Heart specialist",
+        status: "active",
+      }),
+    );
+    expect(getByText(container, "Consulting...")).toBeTruthy();
+  });
+
+  test("does not show tool label when completed", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Cardiologist",
+        agentId: "cardiologist",
+        description: "Heart specialist",
+        status: "completed",
+        activeTool: { toolName: "pubmed-search", args: "chest pain" },
+      }),
+    );
+    expect(getByText(container, "Analysis complete")).toBeTruthy();
+    expect(queryByText(container, "Searching PubMed")).toBeNull();
+  });
+
+  test("shows fallback label for unknown tool via shared formatToolLabel", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Cardiologist",
+        agentId: "cardiologist",
+        description: "Heart specialist",
+        status: "active",
+        activeTool: { toolName: "custom-future-tool", args: "some query" },
+      }),
+    );
+    expect(getByText(container, "Running custom-future-tool")).toBeTruthy();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1702,5 +1759,274 @@ describe("deriveSpecialistStatuses", () => {
       { time: "2026-01-01T00:00:01Z", message: "Received analysis from emergencyPhysician" },
     ]);
     expect(map.get("emergencyPhysician")).toBe("completed");
+  });
+
+  test("sets status from eventType specialist_start", () => {
+    const map = deriveSpecialistStatuses([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Calling specialist cardiologist...",
+        eventType: "specialist_start",
+        agentId: "cardiologist",
+      },
+    ]);
+    expect(map.get("cardiologist")).toBe("active");
+  });
+
+  test("sets status from eventType specialist_complete", () => {
+    const map = deriveSpecialistStatuses([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Calling specialist cardiologist...",
+        eventType: "specialist_start",
+        agentId: "cardiologist",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Received analysis from cardiologist",
+        eventType: "specialist_complete",
+        agentId: "cardiologist",
+      },
+    ]);
+    expect(map.get("cardiologist")).toBe("completed");
+  });
+
+  test("eventType takes precedence over regex fallback", () => {
+    const map = deriveSpecialistStatuses([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Calling specialist cardiologist...",
+        eventType: "specialist_start",
+        agentId: "cardiologist",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Calling specialist cardiologist...",
+        eventType: "specialist_complete",
+        agentId: "cardiologist",
+      },
+    ]);
+    expect(map.get("cardiologist")).toBe("completed");
+  });
+
+  test("fallback regex still works for events without eventType", () => {
+    const map = deriveSpecialistStatuses([
+      { time: "2026-01-01T00:00:00Z", message: "Calling specialist nephrologist..." },
+      { time: "2026-01-01T00:00:01Z", message: "Received analysis from nephrologist" },
+    ]);
+    expect(map.get("nephrologist")).toBe("completed");
+  });
+
+  test("tool_call events do not affect specialist status", () => {
+    const map = deriveSpecialistStatuses([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Searching PubMed → chest pain",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+      },
+    ]);
+    expect(map.size).toBe(0);
+  });
+
+  test("tool_result events do not affect specialist status", () => {
+    const map = deriveSpecialistStatuses([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Checking interactions failed",
+        eventType: "tool_result",
+        agentId: "cardiologist",
+        toolName: "drug-interaction",
+      },
+    ]);
+    expect(map.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deriveActiveTools
+// ---------------------------------------------------------------------------
+import { deriveActiveTools } from "../src/frontend/pages/WaitingRoom";
+
+describe("deriveActiveTools", () => {
+  test("returns empty map for undefined progress", () => {
+    const map = deriveActiveTools(undefined);
+    expect(map.size).toBe(0);
+  });
+
+  test("returns empty map for empty array", () => {
+    const map = deriveActiveTools([]);
+    expect(map.size).toBe(0);
+  });
+
+  test("sets active tool from tool_call event", () => {
+    const map = deriveActiveTools([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Searching PubMed → chest pain",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+        toolArgs: "chest pain",
+      },
+    ]);
+    const tool = map.get("cardiologist");
+    expect(tool).toBeTruthy();
+    expect(tool?.toolName).toBe("pubmed-search");
+    expect(tool?.args).toBe("chest pain");
+  });
+
+  test("last tool_call wins for same agent", () => {
+    const map = deriveActiveTools([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Searching PubMed → query A",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+        toolArgs: "query A",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Cardiologist: Checking interactions → drug + other",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "drug-interaction",
+        toolArgs: "drug + other",
+      },
+    ]);
+    const tool = map.get("cardiologist");
+    expect(tool?.toolName).toBe("drug-interaction");
+  });
+
+  test("specialist_complete clears active tool", () => {
+    const map = deriveActiveTools([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Searching PubMed → chest pain",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+        toolArgs: "chest pain",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Received analysis from cardiologist",
+        eventType: "specialist_complete",
+        agentId: "cardiologist",
+      },
+    ]);
+    expect(map.has("cardiologist")).toBe(false);
+  });
+
+  test("tracks multiple agents independently", () => {
+    const map = deriveActiveTools([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Searching PubMed → chest pain",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+        toolArgs: "chest pain",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Neurologist: Searching PubMed → migraine",
+        eventType: "tool_call",
+        agentId: "neurologist",
+        toolName: "pubmed-search",
+        toolArgs: "migraine",
+      },
+    ]);
+    expect(map.get("cardiologist")?.args).toBe("chest pain");
+    expect(map.get("neurologist")?.args).toBe("migraine");
+  });
+
+  test("toolArgs defaults to empty string when null", () => {
+    const map = deriveActiveTools([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Searching PubMed",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+        toolArgs: null,
+      },
+    ]);
+    expect(map.get("cardiologist")?.args).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WaitingRoom — progress log styling logic
+// ---------------------------------------------------------------------------
+// Tests the CSS class derivation logic used in the progress log's rendering.
+// This covers the critical visual differentiation between tool-call entries
+// (indented, muted) and regular entries (brighter, full width).
+describe("WaitingRoom — progress log class logic", () => {
+  function getLogEntryClasses(
+    eventType: string | undefined,
+  ): { indent: string; color: string } {
+    const isTool =
+      eventType === "tool_call" || eventType === "tool_result";
+    return {
+      indent: isTool ? "ml-4" : "",
+      color: isTool ? "text-cyan-400/70" : "text-cyan-300",
+    };
+  }
+
+  test("tool_call entries get indentation and muted color", () => {
+    const classes = getLogEntryClasses("tool_call");
+    expect(classes.indent).toBe("ml-4");
+    expect(classes.color).toBe("text-cyan-400/70");
+  });
+
+  test("tool_result entries get indentation and muted color", () => {
+    const classes = getLogEntryClasses("tool_result");
+    expect(classes.indent).toBe("ml-4");
+    expect(classes.color).toBe("text-cyan-400/70");
+  });
+
+  test("round_start entries get no indentation and bright color", () => {
+    const classes = getLogEntryClasses("round_start");
+    expect(classes.indent).toBe("");
+    expect(classes.color).toBe("text-cyan-300");
+  });
+
+  test("specialist_start entries get no indentation and bright color", () => {
+    const classes = getLogEntryClasses("specialist_start");
+    expect(classes.indent).toBe("");
+    expect(classes.color).toBe("text-cyan-300");
+  });
+
+  test("specialist_complete entries get no indentation and bright color", () => {
+    const classes = getLogEntryClasses("specialist_complete");
+    expect(classes.indent).toBe("");
+    expect(classes.color).toBe("text-cyan-300");
+  });
+
+  test("cmo_decision entries get no indentation and bright color", () => {
+    const classes = getLogEntryClasses("cmo_decision");
+    expect(classes.indent).toBe("");
+    expect(classes.color).toBe("text-cyan-300");
+  });
+
+  test("cmo_final entries get no indentation and bright color", () => {
+    const classes = getLogEntryClasses("cmo_final");
+    expect(classes.indent).toBe("");
+    expect(classes.color).toBe("text-cyan-300");
+  });
+
+  test("general entries get no indentation and bright color", () => {
+    const classes = getLogEntryClasses("general");
+    expect(classes.indent).toBe("");
+    expect(classes.color).toBe("text-cyan-300");
+  });
+
+  test("undefined eventType (legacy events) get no indentation and bright color", () => {
+    const classes = getLogEntryClasses(undefined);
+    expect(classes.indent).toBe("");
+    expect(classes.color).toBe("text-cyan-300");
   });
 });

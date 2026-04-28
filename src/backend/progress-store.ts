@@ -1,8 +1,22 @@
 import { Database, type Statement } from "bun:sqlite";
 
+export type ProgressEventType =
+  | "round_start"
+  | "cmo_decision"
+  | "specialist_start"
+  | "tool_call"
+  | "tool_result"
+  | "specialist_complete"
+  | "cmo_final"
+  | "general";
+
 export interface ProgressEvent {
   time: string;
   message: string;
+  eventType?: ProgressEventType;
+  agentId?: string;
+  toolName?: string;
+  toolArgs?: string | null;
 }
 
 interface JobRow {
@@ -83,8 +97,11 @@ export class JobStore extends EventTarget {
     };
   }
 
-  emitMessage(jobId: string, message: string): void {
-    const event = { time: new Date().toISOString(), message };
+  emitMessage(jobId: string, messageOrEvent: string | ProgressEvent): void {
+    const event: ProgressEvent =
+      typeof messageOrEvent === "string"
+        ? { time: new Date().toISOString(), message: messageOrEvent }
+        : messageOrEvent;
     this.emitStmt.run(JSON.stringify(event), jobId);
 
     this.dispatchEvent(

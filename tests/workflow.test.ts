@@ -10,6 +10,8 @@ import {
   buildSpecialistContext,
   buildCmoContext,
   runDiagnosis,
+  formatToolArgs,
+  mockDiagnosis,
 } from "../src/backend/workflows/diagnostic-workflow";
 
 describe("splitToList", () => {
@@ -1234,6 +1236,232 @@ describe("formatReport — malformed input handling", () => {
 
     const result = diagnosisReportSchema.safeParse(invalid);
     expect(result.success).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatToolArgs
+// ---------------------------------------------------------------------------
+describe("formatToolArgs", () => {
+  test("extracts query from pubmed-search args", () => {
+    const result = formatToolArgs("pubmed-search", {
+      query: "chest pain acute coronary syndrome",
+    });
+    expect(result).toBe("chest pain acute coronary syndrome");
+  });
+
+  test("formats drug-interaction with two drug names", () => {
+    const result = formatToolArgs("drug-interaction", {
+      drugName: "sumatriptan",
+      drugName2: "sertraline",
+    });
+    expect(result).toBe("sumatriptan + sertraline");
+  });
+
+  test("falls back to drugName for other tools", () => {
+    const result = formatToolArgs("drug-labeling", {
+      drugName: "metoprolol",
+    });
+    expect(result).toBe("metoprolol");
+  });
+
+  test("falls back to term field", () => {
+    const result = formatToolArgs("medlineplus-search", {
+      term: "hypertension",
+    });
+    expect(result).toBe("hypertension");
+  });
+
+  test("truncates long args to 80 characters", () => {
+    const longQuery = "a".repeat(100);
+    const result = formatToolArgs("pubmed-search", { query: longQuery });
+    expect(result.length).toBe(81); // 80 chars + "…"
+    expect(result.endsWith("…")).toBe(true);
+  });
+
+  test("returns empty string for unknown arg shape", () => {
+    const result = formatToolArgs("unknown-tool", { foo: "bar" });
+    expect(result).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mockDiagnosis
+// ---------------------------------------------------------------------------
+import { type ProgressEvent } from "../src/backend/progress-store";
+
+describe("mockDiagnosis", () => {
+  test("returns a valid diagnosis report", async () => {
+    const events: ProgressEvent[] = [];
+    const emitProgress = (e: string | ProgressEvent) => {
+      events.push(
+        typeof e === "string" ? { time: "", message: e } : e,
+      );
+    };
+
+    const result = await mockDiagnosis("patient summary", emitProgress);
+
+    expect(result.diagnosisReport).toBeDefined();
+    expect(result.diagnosisReport.chiefComplaint).toBeTruthy();
+    expect(result.diagnosisReport.rankedDiagnoses).toHaveLength(3);
+  });
+
+  test("emits round_start events", async () => {
+    const events: ProgressEvent[] = [];
+    const emitProgress = (e: string | ProgressEvent) => {
+      events.push(
+        typeof e === "string" ? { time: "", message: e } : e,
+      );
+    };
+
+    await mockDiagnosis("patient summary", emitProgress);
+
+    const roundStarts = events.filter(
+      (e) => e.eventType === "round_start",
+    );
+    expect(roundStarts.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("emits specialist_start events with agentId", async () => {
+    const events: ProgressEvent[] = [];
+    const emitProgress = (e: string | ProgressEvent) => {
+      events.push(
+        typeof e === "string" ? { time: "", message: e } : e,
+      );
+    };
+
+    await mockDiagnosis("patient summary", emitProgress);
+
+    const starts = events.filter(
+      (e) => e.eventType === "specialist_start",
+    );
+    expect(starts.length).toBe(3);
+    const agentIds = starts.map((e) => e.agentId).sort();
+    expect(agentIds).toEqual(["cardiologist", "nephrologist", "neurologist"]);
+  });
+
+  test("emits tool_call events with toolName and toolArgs", async () => {
+    const events: ProgressEvent[] = [];
+    const emitProgress = (e: string | ProgressEvent) => {
+      events.push(
+        typeof e === "string" ? { time: "", message: e } : e,
+      );
+    };
+
+    await mockDiagnosis("patient summary", emitProgress);
+
+    const toolCalls = events.filter(
+      (e) => e.eventType === "tool_call",
+    );
+    expect(toolCalls.length).toBe(3);
+    for (const tc of toolCalls) {
+      expect(tc.toolName).toBe("pubmed-search");
+      expect(tc.toolArgs).toBe("hypertensive urgency guidelines");
+      expect(typeof tc.agentId).toBe("string");
+    }
+  });
+
+  test("emits specialist_complete events with agentId", async () => {
+    const events: ProgressEvent[] = [];
+    const emitProgress = (e: string | ProgressEvent) => {
+      events.push(
+        typeof e === "string" ? { time: "", message: e } : e,
+      );
+    };
+
+    await mockDiagnosis("patient summary", emitProgress);
+
+    const completes = events.filter(
+      (e) => e.eventType === "specialist_complete",
+    );
+    expect(completes.length).toBe(3);
+    for (const c of completes) {
+      expect(typeof c.agentId).toBe("string");
+    }
+  });
+
+  test("emits cmo_final event", async () => {
+    const events: ProgressEvent[] = [];
+    const emitProgress = (e: string | ProgressEvent) => {
+      events.push(
+        typeof e === "string" ? { time: "", message: e } : e,
+      );
+    };
+
+    await mockDiagnosis("patient summary", emitProgress);
+
+    const finals = events.filter(
+      (e) => e.eventType === "cmo_final",
+    );
+    expect(finals.length).toBe(1);
+  });
+
+  test("emits events in expected order: start → tool_call → complete for each specialist", async () => {
+    const events: ProgressEvent[] = [];
+    const emitProgress = (e: string | ProgressEvent) => {
+      events.push(
+        typeof e === "string" ? { time: "", message: e } : e,
+      );
+    };
+
+    await mockDiagnosis("patient summary", emitProgress);
+
+    const specialistEvents = events.filter(
+      (e) =>
+        e.eventType === "specialist_start" ||
+        e.eventType === "tool_call" ||
+        e.eventType === "specialist_complete",
+    );
+
+    // Verify the pattern: start → tool_call → complete repeats 3 times
+    for (let i = 0; i < 3; i++) {
+      const base = i * 3;
+      expect(specialistEvents[base].eventType).toBe("specialist_start");
+      expect(specialistEvents[base + 1].eventType).toBe("tool_call");
+      expect(specialistEvents[base + 2].eventType).toBe("specialist_complete");
+      // All three events in a group share the same agentId
+      expect(specialistEvents[base].agentId).toBe(
+        specialistEvents[base + 1].agentId,
+      );
+      expect(specialistEvents[base + 1].agentId).toBe(
+        specialistEvents[base + 2].agentId,
+      );
+    }
+  });
+
+  test("handles string emitProgress (backward compat)", async () => {
+    // Tests that the emitProgress still accepts plain strings
+    // The actual mockDiagnosis always passes ProgressEvent objects,
+    // but the type signature supports both
+    const events: ProgressEvent[] = [];
+    const emitProgress = (e: string | ProgressEvent) => {
+      events.push(
+        typeof e === "string" ? { time: "", message: e } : e,
+      );
+    };
+
+    await mockDiagnosis("patient summary", emitProgress);
+
+    // All events should have eventType set (mock uses ProgressEvent objects)
+    const withEventType = events.filter((e) => e.eventType !== undefined);
+    expect(withEventType.length).toBeGreaterThan(0);
+  });
+
+  test("emit helper produces valid ISO timestamps on all events", async () => {
+    const events: ProgressEvent[] = [];
+    const emitProgress = (e: string | ProgressEvent) => {
+      events.push(
+        typeof e === "string" ? { time: "", message: e } : e,
+      );
+    };
+
+    await mockDiagnosis("patient summary", emitProgress);
+
+    for (const e of events) {
+      expect(e.time).toBeTruthy();
+      const parsed = new Date(e.time);
+      expect(parsed.getTime()).not.toBeNaN();
+    }
   });
 });
 

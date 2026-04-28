@@ -1,5 +1,6 @@
 import { AgentIcon } from "./AgentIcon";
 import { CheckCircleIcon } from "@heroicons/react/24/outline";
+import { formatToolLabel } from "../../../backend/tools/tool-labels";
 
 export type SpecialistStatus = "idle" | "active" | "completed";
 
@@ -8,6 +9,7 @@ interface AgentStatusCardProps {
   agentId: string;
   description: string;
   status?: SpecialistStatus;
+  activeTool?: { toolName: string; args: string };
 }
 
 const statusStyles: Record<
@@ -39,6 +41,7 @@ export function AgentStatusCard({
   agentId,
   description,
   status = "idle",
+  activeTool,
 }: AgentStatusCardProps) {
   const styles = statusStyles[status];
 
@@ -68,13 +71,20 @@ export function AgentStatusCard({
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium truncate">{name}</p>
-        <p className={`text-xs truncate ${styles.text}`}>
-          {status === "idle"
-            ? "Waiting..."
-            : status === "active"
-              ? "Consulting..."
-              : "Analysis complete"}
-        </p>
+        {status === "active" && activeTool ? (
+          <p className="text-xs text-primary/80 dark:text-primary/60 mt-0.5 truncate">
+            {formatToolLabel(activeTool.toolName)}
+            {activeTool.args ? `: ${activeTool.args}` : ""}
+          </p>
+        ) : (
+          <p className={`text-xs truncate ${styles.text}`}>
+            {status === "idle"
+              ? "Waiting..."
+              : status === "active"
+                ? "Consulting..."
+                : "Analysis complete"}
+          </p>
+        )}
       </div>
     </div>
   );
