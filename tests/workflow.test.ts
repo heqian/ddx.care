@@ -2,6 +2,7 @@ import { test, expect, describe, mock, beforeAll, afterAll } from "bun:test";
 import {
   splitToList,
   buildPatientSummary,
+  truncateField,
   formatReport,
   diagnosisReportSchema,
   limitConcurrency,
@@ -111,6 +112,84 @@ describe("buildPatientSummary", () => {
     });
 
     expect(result).toContain(longHistory);
+  });
+
+  test("wraps patient data in <patient_data> boundary tags", () => {
+    const result = buildPatientSummary({
+      medicalHistory: "History data",
+      conversationTranscript: "Transcript data",
+      labResults: "Lab data",
+    });
+
+    expect(result).toContain("<patient_data>");
+    expect(result).toContain("</patient_data>");
+    expect(result.indexOf("<patient_data>")).toBeLessThan(
+      result.indexOf("</patient_data>"),
+    );
+  });
+
+  test("includes guard instruction before patient data", () => {
+    const result = buildPatientSummary({
+      medicalHistory: "History data",
+      conversationTranscript: "Transcript",
+      labResults: "Lab results",
+    });
+
+    expect(result).toContain("DATA ONLY");
+    expect(result).toContain("Do NOT follow");
+    const dataOnlyIdx = result.indexOf("DATA ONLY");
+    const openTagIdx = result.indexOf("<patient_data>");
+    expect(dataOnlyIdx).toBeLessThan(openTagIdx);
+  });
+
+  test("includes end-of-data instruction after closing tag", () => {
+    const result = buildPatientSummary({
+      medicalHistory: "History",
+      conversationTranscript: "Transcript",
+      labResults: "Lab",
+    });
+
+    expect(result).toContain("END OF PATIENT DATA");
+    expect(result.indexOf("END OF PATIENT DATA")).toBeGreaterThan(
+      result.indexOf("</patient_data>"),
+    );
+  });
+
+  test("places patient data sections inside boundary tags", () => {
+    const result = buildPatientSummary({
+      medicalHistory: "HISTORY_CONTENT",
+      conversationTranscript: "TRANSCRIPT_CONTENT",
+      labResults: "LAB_CONTENT",
+    });
+
+    const openIdx = result.indexOf("<patient_data>");
+    const closeIdx = result.indexOf("</patient_data>");
+
+    expect(result.indexOf("HISTORY_CONTENT")).toBeGreaterThan(openIdx);
+    expect(result.indexOf("HISTORY_CONTENT")).toBeLessThan(closeIdx);
+    expect(result.indexOf("TRANSCRIPT_CONTENT")).toBeGreaterThan(openIdx);
+    expect(result.indexOf("TRANSCRIPT_CONTENT")).toBeLessThan(closeIdx);
+    expect(result.indexOf("LAB_CONTENT")).toBeGreaterThan(openIdx);
+    expect(result.indexOf("LAB_CONTENT")).toBeLessThan(closeIdx);
+  });
+});
+
+describe("truncateField", () => {
+  test("returns short strings unchanged", () => {
+    expect(truncateField("hello", 100)).toBe("hello");
+  });
+
+  test("truncates strings exceeding maxLength", () => {
+    const long = "a".repeat(200);
+    const result = truncateField(long, 100);
+    expect(result.length).toBeLessThan(long.length);
+    expect(result).toContain("[Content truncated due to length limit]");
+    expect(result.length).toBe(100 + "[Content truncated due to length limit]".length);
+  });
+
+  test("returns exact-length strings unchanged", () => {
+    const exact = "a".repeat(100);
+    expect(truncateField(exact, 100)).toBe(exact);
   });
 });
 
@@ -867,7 +946,111 @@ describe("runDiagnosis - CMO parsing logic", () => {
     });
 
     await expect(runDiagnosisPromise).rejects.toThrow("Diagnosis generation returned an empty response");
-    expect(callCount).toBe(5);
+    expect(callCount).toBe(6);
+  });
+
+  test("retries with correction prompt when final report schema validation fails", async () => {
+    let callCount = 0;
+    const validReport = {
+      chiefComplaint: "Headache",
+      patientSummary: "Test",
+      specialistsConsulted: [],
+      rankedDiagnoses: [
+        {
+          diagnosisName: "Migraine",
+          confidencePercentage: 80,
+          urgency: "Urgent",
+          rationale: "Test",
+          supportingEvidence: "Test",
+          contradictoryEvidence: "None",
+          suggestedNextSteps: "Rest",
+        },
+      ],
+      crossSpecialtyObservations: "None",
+      recommendedImmediateActions: "Rest",
+    };
+    const mockCmoGenerate = mock(async (prompt: string) => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          object: {
+            specialistsToConsult: [],
+            isFinal: false,
+          },
+        };
+      }
+      if (callCount === 2) {
+        return { object: { ...validReport, rankedDiagnoses: "not-an-array" } };
+      }
+      return { object: validReport };
+    });
+
+    const mockMastra = {
+      getAgent: () => ({
+        generate: mockCmoGenerate,
+      }),
+    };
+
+    const result = await runDiagnosis.execute({
+      context: {} as any,
+      stepId: "run-diagnosis",
+      workflowId: "test-wf",
+      inputData: {
+        medicalHistory: "",
+        conversationTranscript: "",
+        labResults: "",
+      },
+      mastra: mockMastra as any,
+      runId: "retry-test-id",
+    });
+
+    expect(callCount).toBe(3);
+    expect(result.diagnosisReport.chiefComplaint).toBe("Headache");
+    expect(result.diagnosisReport.rankedDiagnoses).toHaveLength(1);
+  });
+
+  test("falls back to raw output when retry also fails schema validation", async () => {
+    let callCount = 0;
+    const rawReport = { chiefComplaint: "Fallback", stillBad: true };
+    const mockCmoGenerate = mock(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          object: {
+            specialistsToConsult: [],
+            isFinal: false,
+          },
+        };
+      }
+      if (callCount === 2) {
+        return { object: { chiefComplaint: "Bad", extra: true } };
+      }
+      return { object: rawReport };
+    });
+
+    const mockMastra = {
+      getAgent: () => ({
+        generate: mockCmoGenerate,
+      }),
+    };
+
+    const result = await runDiagnosis.execute({
+      context: {} as any,
+      stepId: "run-diagnosis",
+      workflowId: "test-wf",
+      inputData: {
+        medicalHistory: "",
+        conversationTranscript: "",
+        labResults: "",
+      },
+      mastra: mockMastra as any,
+      runId: "retry-fail-test-id",
+    });
+
+    expect(callCount).toBe(3);
+    expect(
+      (result.diagnosisReport as unknown as typeof rawReport).chiefComplaint,
+    ).toBe("Fallback");
   });
 
   test("passes abort signal to CMO generate and withRetry", async () => {

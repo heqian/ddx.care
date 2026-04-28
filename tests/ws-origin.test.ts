@@ -132,3 +132,93 @@ describe("WebSocket origin validation (integration — wildcard mode)", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("WebSocket token authentication logic", () => {
+  function generateToken(jobId: string, secret: string): string {
+    if (!secret) return "";
+    const { createHmac } = require("node:crypto");
+    return createHmac("sha256", secret).update(jobId).digest("hex");
+  }
+
+  function verifyToken(
+    jobId: string,
+    token: string,
+    secret: string,
+  ): boolean {
+    if (!secret) return true;
+    const expected = generateToken(jobId, secret);
+    if (!expected || !token) return false;
+    if (expected.length !== token.length) return false;
+    const { timingSafeEqual } = require("node:crypto");
+    return timingSafeEqual(Buffer.from(expected), Buffer.from(token));
+  }
+
+  test("generateToken produces consistent HMAC for same jobId", () => {
+    const token1 = generateToken("job-123", "test-secret-key");
+    const token2 = generateToken("job-123", "test-secret-key");
+    expect(token1).toBe(token2);
+    expect(token1.length).toBeGreaterThan(0);
+  });
+
+  test("verifyToken returns true for valid token", () => {
+    const token = generateToken("job-456", "test-secret-key");
+    expect(verifyToken("job-456", token, "test-secret-key")).toBe(true);
+  });
+
+  test("verifyToken returns false for wrong token", () => {
+    expect(
+      verifyToken("job-456", "invalid-token", "test-secret-key"),
+    ).toBe(false);
+  });
+
+  test("verifyToken returns false for token from different jobId", () => {
+    const token = generateToken("job-A", "test-secret-key");
+    expect(verifyToken("job-B", token, "test-secret-key")).toBe(false);
+  });
+
+  test("verifyToken returns true when secret is empty (dev mode)", () => {
+    expect(verifyToken("job-123", "any-token", "")).toBe(true);
+  });
+
+  test("generateToken returns empty string when secret is empty", () => {
+    expect(generateToken("job-123", "")).toBe("");
+  });
+
+  test("different secrets produce different tokens", () => {
+    const token1 = generateToken("job-123", "secret-A");
+    const token2 = generateToken("job-123", "secret-B");
+    expect(token1).not.toBe(token2);
+  });
+
+  test("TRUSTED_ORIGINS takes precedence over ALLOWED_ORIGINS for WS", () => {
+    const isOriginAllowed = (
+      trustedOrigins: string,
+      allowedOrigins: string,
+      requestOrigin: string | null,
+    ): boolean => {
+      if (!requestOrigin) return false;
+      const originsList = trustedOrigins
+        ? trustedOrigins
+            .split(",")
+            .map((o) => o.trim())
+        : allowedOrigins === "*"
+          ? null
+          : allowedOrigins
+              .split(",")
+              .map((o) => o.trim());
+      if (!originsList) return true;
+      return originsList.includes(requestOrigin);
+    };
+
+    expect(
+      isOriginAllowed("https://ddx.care", "*", "https://ddx.care"),
+    ).toBe(true);
+    expect(
+      isOriginAllowed("https://ddx.care", "*", "https://evil.com"),
+    ).toBe(false);
+    expect(
+      isOriginAllowed("", "https://other.com", "https://other.com"),
+    ).toBe(true);
+    expect(isOriginAllowed("", "*", "https://anything.com")).toBe(true);
+  });
+});

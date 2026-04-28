@@ -21,8 +21,16 @@ ddx.care {
   # Forward the client's real IP to the backend app
   header_up X-Real-IP {remote_host}
 
+  # HTTP Strict Transport Security — 2-year max-age with preload
+  header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+
   reverse_proxy localhost:3000
 
   # Compress responses
   encode gzip
+
+  # Structured JSON logging for production log aggregation
+  log {
+    format json
+  }
 }

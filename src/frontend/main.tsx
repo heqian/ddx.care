@@ -19,6 +19,7 @@ function App() {
   const lastPayload = useRef<DiagnoseRequest | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [deepLinkError, setDeepLinkError] = useState(false);
+  const [wsToken, setWsToken] = useState<string>("");
 
   // When navigating to results via router (deep link / back button), fetch the result
   const _jobId =
@@ -31,7 +32,9 @@ function App() {
       setDeepLinkError(false);
       getJobStatus(route.jobId)
         .then((res) => {
-          if (res.status === "completed") setJobResult(res);
+          if (res.status === "completed" || res.status === "failed") {
+            setJobResult(res);
+          }
         })
         .catch(() => setDeepLinkError(true));
     }
@@ -48,7 +51,10 @@ function App() {
     navigate({ screen: "input" });
   }, [navigate]);
 
-  const { showWarning, extendSession } = useAutoLogout(handleReset);
+  const { showWarning, extendSession } = useAutoLogout(
+    handleReset,
+    route.screen === "waiting",
+  );
 
   useEffect(() => {
     if (!hasPatientData) return;
@@ -60,9 +66,10 @@ function App() {
   }, [hasPatientData]);
 
   const handleSubmit = useCallback(
-    (newJobId: string, payload: DiagnoseRequest) => {
+    (newJobId: string, payload: DiagnoseRequest, token?: string) => {
       lastPayload.current = payload;
       setJobResult(null);
+      setWsToken(token ?? "");
       navigate({ screen: "waiting", jobId: newJobId });
     },
     [navigate],
@@ -124,13 +131,29 @@ function App() {
       {route.screen === "waiting" && (
         <WaitingRoom
           jobId={route.jobId}
+          token={wsToken}
           onComplete={handleComplete}
           onCancel={handleCancel}
           onRetry={retrying ? handleCancel : handleRetry}
         />
       )}
-      {route.screen === "results" && jobResult && (
-        <ResultsView result={jobResult} onNewCase={handleReset} />
+      {route.screen === "results" &&
+        jobResult &&
+        jobResult.status !== "failed" && (
+          <ResultsView result={jobResult} onNewCase={handleReset} />
+        )}
+      {route.screen === "results" && jobResult?.status === "failed" && (
+        <div className="max-w-md mx-auto text-center py-16 space-y-4">
+          <p className="text-slate-700 dark:text-slate-300 text-sm">
+            {jobResult.error || "An error occurred while processing this case."}
+          </p>
+          <button
+            onClick={handleReset}
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors"
+          >
+            New Case
+          </button>
+        </div>
       )}
       {route.screen === "results" && !jobResult && !deepLinkError && (
         <div className="flex flex-col items-center justify-center py-24 space-y-4">

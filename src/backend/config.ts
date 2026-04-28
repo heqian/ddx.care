@@ -1,6 +1,11 @@
 export const PORT = parseInt(process.env.PORT ?? "3000", 10);
 export const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ?? "*";
-export const JOB_TTL_MS = 30 * 60 * 1000;
+export const TRUSTED_ORIGINS = process.env.TRUSTED_ORIGINS ?? "";
+export const WS_TOKEN_SECRET = process.env.WS_TOKEN_SECRET ?? "";
+export const JOB_TTL_MS = parseInt(
+  process.env.JOB_TTL_MS ?? String(60 * 60 * 1000),
+  10,
+);
 export const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 export const RATE_LIMIT_PRUNE_INTERVAL_MS = 10 * 60 * 1000;
 export const RATE_LIMIT_MAX_ENTRIES = parseInt(
@@ -153,6 +158,11 @@ export function validateConfig() {
   if (Number.isNaN(AUDIT_LOG_MAX_FILES) || AUDIT_LOG_MAX_FILES < 0) {
     throw new Error(
       `Invalid AUDIT_LOG_MAX_FILES: ${process.env.AUDIT_LOG_MAX_FILES}. Must be a non-negative number.`,
+    );
+  }
+  if (Number.isNaN(JOB_TTL_MS) || JOB_TTL_MS <= 0) {
+    throw new Error(
+      `Invalid JOB_TTL_MS: ${process.env.JOB_TTL_MS}. Must be a positive number.`,
     );
   }
 }

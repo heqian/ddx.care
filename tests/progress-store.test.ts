@@ -308,3 +308,53 @@ describe("JobStore — Cleanup", () => {
     expect(store.getJob("recent")).toBeDefined();
   });
 });
+
+describe("JobStore — markStalePending", () => {
+  test("marks all pending jobs as failed", () => {
+    store.createJob("stale-1");
+    store.createJob("stale-2");
+    store.createJob("stale-3");
+    store.markStalePending();
+
+    expect(store.getJob("stale-1")!.status).toBe("failed");
+    expect(store.getJob("stale-1")!.error).toBe(
+      "Server restarted — job interrupted",
+    );
+    expect(store.getJob("stale-2")!.status).toBe("failed");
+    expect(store.getJob("stale-3")!.status).toBe("failed");
+  });
+
+  test("does not modify completed jobs", () => {
+    store.createJob("completed-1");
+    store.complete("completed-1", { result: "done" });
+    store.createJob("pending-1");
+
+    store.markStalePending();
+
+    expect(store.getJob("completed-1")!.status).toBe("completed");
+    expect(store.getJob("pending-1")!.status).toBe("failed");
+  });
+
+  test("does not modify already failed jobs", () => {
+    store.createJob("already-failed");
+    store.fail("already-failed", "Original error");
+    store.createJob("pending-2");
+
+    store.markStalePending();
+
+    expect(store.getJob("already-failed")!.error).toBe("Original error");
+    expect(store.getJob("pending-2")!.status).toBe("failed");
+  });
+
+  test("handles no pending jobs gracefully", () => {
+    store.createJob("done-1");
+    store.complete("done-1", { ok: true });
+
+    expect(() => store.markStalePending()).not.toThrow();
+    expect(store.getJob("done-1")!.status).toBe("completed");
+  });
+
+  test("handles empty store gracefully", () => {
+    expect(() => store.markStalePending()).not.toThrow();
+  });
+});

@@ -97,24 +97,28 @@ Shared utilities:
 
 - `rate-limiter.ts` — `RateLimiter` class: per-IP sliding window rate limiting + global concurrent workflow cap. In-memory (resets on restart, logs a warning on first request post-restart). Configurable via `RATE_LIMIT_MAX_REQUESTS`, `RATE_LIMIT_WINDOW_MS`, `MAX_CONCURRENT_WORKFLOWS`.
 - `logger.ts` — Structured logger with `info`, `warn`, `error`, `request`, `workflowStart`, `workflowComplete`, `workflowFail`, `specialistCall` methods. Supports `LOG_FORMAT=json` env var for JSON-line output (for log aggregation). Default: human-readable text.
+- `ws-token.ts` — `generateToken(jobId)` and `verifyToken(jobId, token)` functions using HMAC-SHA256 with `WS_TOKEN_SECRET`. When `WS_TOKEN_SECRET` is empty (dev mode), tokens are not required for WebSocket connections.
+- `abort-controller-store.ts` — `Map<string, AbortController>` with exported `set`, `get`, `remove` functions. Stores abort controllers for running workflows, enabling cancellation via `DELETE /v1/diagnose/:jobId`.
 
 #### Progress Store (`src/backend/progress-store.ts`)
 
 - `JobStore` class (extends `EventTarget`) — SQLite-backed (`bun:sqlite`) job persistence.
 - Stores job status (`pending` | `completed` | `failed`), progress events (JSON array), and results.
 - Pub/sub via `CustomEvent` dispatch for real-time WebSocket updates.
-- TTL-based cleanup: `cleanupExpired()` called every 5 minutes, removes jobs older than 30 minutes.
+- TTL-based cleanup: `cleanupExpired()` called every 5 minutes, removes jobs older than 60 minutes.
+- `markStalePending()` called on startup, marks all `pending` jobs as `failed("Server restarted — job interrupted")`.
 - Singleton exported as `progressStore`.
 
 #### Configuration (`src/backend/config.ts`)
 
 All constants centralized here, read from environment variables with defaults:
-- `PORT` (3000), `ALLOWED_ORIGINS` (`*`), `JOB_TTL_MS` (30min), `CLEANUP_INTERVAL_MS` (5min), `RATE_LIMIT_PRUNE_INTERVAL_MS` (10min)
+- `PORT` (3000), `ALLOWED_ORIGINS` (`*`), `TRUSTED_ORIGINS` (empty/dev-only), `JOB_TTL_MS` (60min), `CLEANUP_INTERVAL_MS` (5min), `RATE_LIMIT_PRUNE_INTERVAL_MS` (10min)
 - `SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL` (both `opencode-go/qwen3.6-plus`)
 - `DIAGNOSIS_TIMEOUT_MS` (900s / 15 min), `MAX_DIAGNOSIS_ROUNDS` (3)
 - `RATE_LIMIT_MAX_REQUESTS` (5), `RATE_LIMIT_WINDOW_MS` (60s / 1 min), `MAX_CONCURRENT_WORKFLOWS` (3)
 - `MAX_INPUT_FIELD_LENGTH` (50,000 chars), `MAX_PAYLOAD_BYTES` (1MB)
 - `MOCK_LLM`, `LOG_FORMAT`, `SPECIALIST_CONTEXT_MODE`, `SPECIALIST_CONTEXT_MAX_CHARS`, `CMO_CONTEXT_MAX_CHARS`
+- `WS_TOKEN_SECRET` (empty = dev mode, no token required; set for production)
 
 ### Frontend (`src/frontend/`)
 
@@ -138,15 +142,15 @@ All constants centralized here, read from environment variables with defaults:
 
 #### Hooks (`src/frontend/hooks/`)
 
-- `useJobStream` — WebSocket connection with exponential backoff reconnection (3 attempts: 1s → 2s → 4s) before HTTP polling fallback
+- `useJobStream` — WebSocket connection with exponential backoff reconnection (5 attempts: 1s → 2s → 4s → 8s → 16s) and pre-reconnect status check via `getJobStatus()`, before HTTP polling fallback. Includes HMAC token for authentication when `WS_TOKEN_SECRET` is set.
 - `usePolling` — Interval-based status polling
-- `useAutoLogout` — Inactivity timeout
+- `useAutoLogout` — Inactivity timeout with `paused` prop support (pauses timer during active diagnosis)
 - `useRouter` — Simple hash-based client-side routing
 
 #### Other Frontend Files
 
 - `context/ThemeContext.tsx` — Light/dark mode toggle
-- `api/client.ts` — API client functions (`submitDiagnosis`, `getJobStatus`, `getAgents`)
+- `api/client.ts` — API client functions (`submitDiagnosis`, `getJobStatus`, `getAgents`, `cancelDiagnosis`)
 - `api/types.ts` — Shared TypeScript types (`DiagnoseRequest`, `StatusResponse`, `WsMessage`, etc.). `DiagnosisReport` type is derived from the backend Zod schema via `z.infer<typeof reportSchema>`.
 - `types/speech.d.ts` — Ambient type declarations for `SpeechRecognition`, `SpeechRecognitionEvent`, etc.
 
@@ -155,15 +159,16 @@ All constants centralized here, read from environment variables with defaults:
 Entry point. Creates the `Bun.serve()` instance with:
 
 **Routes** (defined in `src/backend/api/routes.ts`):
-- `POST /v1/diagnose` — Submit a diagnostic case. Validates input (Zod schema, payload size limit), checks rate limit (per-IP + concurrent workflow cap), starts async workflow, returns `202 Accepted` with `jobId`.
+- `POST /v1/diagnose` — Submit a diagnostic case. Validates input (Zod schema, payload size limit), checks rate limit (per-IP + concurrent workflow cap), starts async workflow, returns `202 Accepted` with `jobId` and `token`.
 - `GET /v1/status/:jobId` — Poll job status and progress events.
+- `DELETE /v1/diagnose/:jobId` — Cancel a running diagnostic workflow. Aborts the workflow's `AbortController`, marks the job as `failed("Cancelled by user")`, and frees the concurrent workflow slot.
 - `GET /v1/health` — Health check endpoint (uptime, active workflows, SQLite connectivity).
 - `GET /v1/agents` — List available specialist agents (id, name, description).
-- `GET /ws?jobId=...` — WebSocket for real-time progress streaming. Validates `Origin` header against `ALLOWED_ORIGINS`. Replays history on connect, subscribes to live updates.
+- `GET /ws?jobId=...&token=...` — WebSocket for real-time progress streaming. Validates `Origin` header against `TRUSTED_ORIGINS` (or `ALLOWED_ORIGINS` when not set). Validates HMAC token when `WS_TOKEN_SECRET` is set. Replays history on connect, subscribes to live updates.
 - `OPTIONS /v1/*` — CORS preflight catch-all.
 - `/*` — SPA fallback (serves `index.html`).
 
-**CORS**: Configurable via `ALLOWED_ORIGINS` env var (comma-separated whitelist, default `*`). Applied to all `/v1/*` routes.
+**CORS**: When `TRUSTED_ORIGINS` is set, reflects the request's `Origin` header if it matches the whitelist. When not set, falls back to `ALLOWED_ORIGINS` (default `*`). All responses include `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` headers.
 
 **WebSocket** (defined in `src/backend/api/websocket.ts`):
 - On open: validates job exists, replays progress history, subscribes to live events.
@@ -174,8 +179,9 @@ Entry point. Creates the `Bun.serve()` instance with:
 - Stops accepting new connections, clears cleanup intervals, waits for in-flight workflows (30s timeout), then exits.
 
 **Background tasks**:
-- Job cleanup interval (every 5 minutes, removes jobs older than 30 minutes)
+- Job cleanup interval (every 5 minutes, removes jobs older than 60 minutes)
 - Rate limiter prune interval (every 10 minutes)
+- `progressStore.markStalePending()` on startup marks all pending jobs as failed
 
 ### Environment Variables
 
@@ -183,7 +189,10 @@ Entry point. Creates the `Bun.serve()` instance with:
 |---|---|---|
 | `OPENCODE_API_KEY` | *required* | OpenCode API key |
 | `PORT` | `3000` | Server port |
-| `ALLOWED_ORIGINS` | `*` | CORS + WebSocket origin whitelist (comma-separated) |
+| `ALLOWED_ORIGINS` | `*` | CORS + WebSocket origin whitelist (comma-separated, used when `TRUSTED_ORIGINS` is not set) |
+| `TRUSTED_ORIGINS` | (empty) | Production CORS + WebSocket origin whitelist (comma-separated). When set, `ALLOWED_ORIGINS` is ignored |
+| `WS_TOKEN_SECRET` | (empty) | HMAC secret for WebSocket authentication. When empty, tokens are not required (dev mode) |
+| `JOB_TTL_MS` | `3600000` (60 min) | Job TTL before cleanup |
 | `SPECIALIST_MODEL` | `opencode-go/qwen3.6-plus` | Override specialist agent model |
 | `ORCHESTRATOR_MODEL` | `opencode-go/qwen3.6-plus` | Override CMO agent model |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max CMO consultation rounds |
