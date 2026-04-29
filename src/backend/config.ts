@@ -13,9 +13,9 @@ export const RATE_LIMIT_MAX_ENTRIES = parseInt(
   10,
 );
 export const SPECIALIST_MODEL =
-  process.env.SPECIALIST_MODEL ?? "opencode-go/qwen3.6-plus";
+  process.env.SPECIALIST_MODEL ?? "ollama-cloud/gemma4:31b";
 export const ORCHESTRATOR_MODEL =
-  process.env.ORCHESTRATOR_MODEL ?? "opencode-go/qwen3.6-plus";
+  process.env.ORCHESTRATOR_MODEL ?? "ollama-cloud/gemma4:31b";
 export const DIAGNOSIS_TIMEOUT_MS = 15 * 60 * 1000;
 export const MAX_DIAGNOSIS_ROUNDS = parseInt(
   process.env.MAX_DIAGNOSIS_ROUNDS ?? "3",
@@ -86,9 +86,9 @@ export const AUDIT_LOG_MAX_FILES = parseInt(
 );
 
 export function validateConfig() {
-  if (!process.env.OPENCODE_API_KEY && process.env.MOCK_LLM !== "1") {
+  if (!process.env.OLLAMA_API_KEY && process.env.MOCK_LLM !== "1") {
     throw new Error(
-      "Missing OPENCODE_API_KEY environment variable. It must be set unless MOCK_LLM=1 is used.",
+      "Missing OLLAMA_API_KEY environment variable. It must be set unless MOCK_LLM=1 is used.",
     );
   }
   if (Number.isNaN(PORT) || PORT <= 0 || PORT > 65535) {

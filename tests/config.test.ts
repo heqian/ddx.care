@@ -81,32 +81,32 @@ describe("Config — validateConfig", () => {
     }
   });
 
-  test("passes with OPENCODE_API_KEY set", () => {
-    const original = process.env.OPENCODE_API_KEY;
-    process.env.OPENCODE_API_KEY = "test-key";
+  test("passes with OLLAMA_API_KEY set", () => {
+    const original = process.env.OLLAMA_API_KEY;
+    process.env.OLLAMA_API_KEY = "test-key";
     try {
       expect(() => validateConfig()).not.toThrow();
     } finally {
       if (original !== undefined) {
-        process.env.OPENCODE_API_KEY = original;
+        process.env.OLLAMA_API_KEY = original;
       } else {
-        delete process.env.OPENCODE_API_KEY;
+        delete process.env.OLLAMA_API_KEY;
       }
     }
   });
 
-  test("throws when OPENCODE_API_KEY is missing and MOCK_LLM is not 1", () => {
-    const original = process.env.OPENCODE_API_KEY;
+  test("throws when OLLAMA_API_KEY is missing and MOCK_LLM is not 1", () => {
+    const original = process.env.OLLAMA_API_KEY;
     const originalMock = process.env.MOCK_LLM;
-    delete process.env.OPENCODE_API_KEY;
+    delete process.env.OLLAMA_API_KEY;
     process.env.MOCK_LLM = "0";
     try {
-      expect(() => validateConfig()).toThrow("Missing OPENCODE_API_KEY");
+      expect(() => validateConfig()).toThrow("Missing OLLAMA_API_KEY");
     } finally {
       if (original !== undefined) {
-        process.env.OPENCODE_API_KEY = original;
+        process.env.OLLAMA_API_KEY = original;
       } else {
-        delete process.env.OPENCODE_API_KEY;
+        delete process.env.OLLAMA_API_KEY;
       }
       if (originalMock !== undefined) {
         process.env.MOCK_LLM = originalMock;
