@@ -6,7 +6,7 @@ AI-powered differential diagnosis system that simulates a panel of medical speci
 
 ### Backend (`src/backend/`)
 - **Mastra framework** (`@mastra/core`) — agent orchestration, workflows, tool definitions
-- **AI Model**: OpenCode Go (`opencode-go/qwen3.6-plus` by default), configured via `OPENCODE_API_KEY`
+- **AI Model**: Ollama Cloud (`ollama-cloud/gemma4:31b` by default), configured via `OLLAMA_API_KEY`. Other providers are supported — see [Mastra providers](https://mastra.ai/models/providers) for available API key env var names and supported models.
 - **Agents** — 35 medical specialist agents + Chief Medical Officer (CMO). Created via factory pattern in `factory.ts`
 - **Tools** — Medical API integrations:
   - PubMed/NCBI literature search
@@ -31,7 +31,7 @@ AI-powered differential diagnosis system that simulates a panel of medical speci
 ```bash
 bun install
 cp .env.example .env
-# Edit .env and add your OpenCode API key
+# Edit .env and add your LLM provider API key (see https://mastra.ai/models/providers)
 bun run dev
 ```
 
@@ -55,10 +55,10 @@ The app runs on `http://localhost:3000` by default.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENCODE_API_KEY` | — | **Required.** OpenCode API key |
+| `OLLAMA_API_KEY` | — | **Required.** LLM provider API key. Env var name varies by provider — see [Mastra providers](https://mastra.ai/models/providers) |
 | `PORT` | `3000` | Server port |
-| `SPECIALIST_MODEL` | `opencode-go/qwen3.6-plus` | Model for specialist agents |
-| `ORCHESTRATOR_MODEL` | `opencode-go/qwen3.6-plus` | Model for CMO orchestrator |
+| `SPECIALIST_MODEL` | `ollama-cloud/gemma4:31b` | Model for specialist agents. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
+| `ORCHESTRATOR_MODEL` | `ollama-cloud/gemma4:31b` | Model for CMO orchestrator. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max consultation rounds per diagnosis |
 | `RATE_LIMIT_MAX_REQUESTS` | `5` | Max requests per IP per window |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window (1 minute) |
@@ -88,7 +88,7 @@ See [`.env.example`](.env.example) for a template.
 
 - **Runtime:** Bun
 - **AI Framework:** Mastra (`@mastra/core`)
-- **AI Model:** OpenCode Go (`opencode-go/qwen3.6-plus`)
+- **AI Model:** Ollama Cloud (`ollama-cloud/gemma4:31b`). Other providers supported — see [Mastra providers](https://mastra.ai/models/providers)
 - **Frontend:** React 19, Tailwind CSS v4
 - **Validation:** Zod
 - **Markdown / Sanitization:** `marked`, `isomorphic-dompurify`
