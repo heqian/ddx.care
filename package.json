@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "pretest": "bun run typecheck",
     "lint": "biome check src/",
-    "test": "bun test tests/api.test.ts tests/tools.test.ts tests/api-integration.test.ts tests/workflow.test.ts tests/progress-store.test.ts tests/rate-limiter.test.ts tests/logger.test.ts tests/fetch-utils.test.ts tests/websocket.test.ts tests/config.test.ts tests/tool-execute.test.ts tests/routes-helpers.test.ts tests/router.test.ts tests/ws-origin.test.ts tests/shutdown.test.ts tests/api-client.test.ts",
+    "test": "bun test tests/api.test.ts tests/tools.test.ts tests/api-integration.test.ts tests/workflow.test.ts tests/progress-store.test.ts tests/rate-limiter.test.ts tests/logger.test.ts tests/fetch-utils.test.ts tests/websocket.test.ts tests/config.test.ts tests/tool-execute.test.ts tests/routes-helpers.test.ts tests/router.test.ts tests/ws-origin.test.ts tests/shutdown.test.ts tests/api-client.test.ts tests/audit-logger.test.ts tests/prompt-injection.test.ts",
     "test:frontend": "bun test tests/frontend.test.tsx",
     "test:e2e": "bunx playwright test",
     "test:all": "bun run test && bun run test:frontend && bun run test:e2e",
@@ -24,7 +24,7 @@
     "@types/react-dom": "^19.2.3",
     "bun-plugin-tailwind": "^0.1.2",
     "happy-dom": "^20.9.0",
-    "mastra": "^1.6.3",
+    "mastra": "^1.7.3",
     "tailwindcss": "^4.2.4"
   },
   "peerDependencies": {
@@ -32,11 +32,11 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
-    "@mastra/core": "^1.28.0",
-    "isomorphic-dompurify": "^3.10.0",
+    "@mastra/core": "^1.31.0",
+    "isomorphic-dompurify": "^3.11.0",
     "marked": "^17.0.6",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "zod": "^4.3.6"
+    "zod": "^4.4.1"
   }
 }

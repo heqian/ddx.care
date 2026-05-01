@@ -358,3 +358,23 @@ describe("JobStore — markStalePending", () => {
     expect(() => store.markStalePending()).not.toThrow();
   });
 });
+
+describe("JobStore — SQLite indexes", () => {
+  test("creates index on createdAt column for efficient cleanup queries", () => {
+    const db = (store as any).db;
+    const indexes = db
+      .query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'jobs'")
+      .all() as { name: string }[];
+    const indexNames = indexes.map((i) => i.name);
+    expect(indexNames).toContain("idx_jobs_createdAt");
+  });
+
+  test("creates index on status column for efficient markStalePending queries", () => {
+    const db = (store as any).db;
+    const indexes = db
+      .query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'jobs'")
+      .all() as { name: string }[];
+    const indexNames = indexes.map((i) => i.name);
+    expect(indexNames).toContain("idx_jobs_status");
+  });
+});

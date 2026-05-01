@@ -11,9 +11,11 @@ import {
   buildSpecialistContext,
   buildCmoContext,
   runDiagnosis,
+  generateFinalReport,
   formatToolArgs,
   mockDiagnosis,
 } from "../src/backend/workflows/diagnostic-workflow";
+import * as abortStore from "../src/backend/utils/abort-controller-store";
 
 describe("splitToList", () => {
   test("returns empty array for undefined", () => {
@@ -1648,3 +1650,303 @@ describe("mockDiagnosis", () => {
   });
 });
 
+describe("generateFinalReport", () => {
+  const validReport = {
+    chiefComplaint: "Headache",
+    patientSummary: "Test patient",
+    specialistsConsulted: [],
+    rankedDiagnoses: [
+      {
+        diagnosisName: "Migraine",
+        confidencePercentage: 80,
+        urgency: "Urgent" as const,
+        rationale: "Test",
+        supportingEvidence: "Evidence",
+        contradictoryEvidence: "None",
+        suggestedNextSteps: "Rest",
+      },
+    ],
+    crossSpecialtyObservations: "None",
+    recommendedImmediateActions: "Rest",
+  };
+
+  test("returns validated report on first try when schema passes", async () => {
+    const mockCmo = {
+      generate: mock(async () => ({ object: validReport })),
+    };
+    const emitted: string[] = [];
+    const emit = (_type: string, msg: string) => emitted.push(msg);
+    const ac = new AbortController();
+
+    const result = await generateFinalReport({
+      cmo: mockCmo as any,
+      prompt: "Generate final report",
+      builtContextHistory: "context",
+      abortSignal: ac.signal,
+      emit: emit as any,
+      logContext: { jobId: "test" },
+    });
+
+    expect(result.chiefComplaint).toBe("Headache");
+    expect(result.rankedDiagnoses).toHaveLength(1);
+    expect(mockCmo.generate).toHaveBeenCalledTimes(1);
+    // No retry messages should be emitted
+    expect(emitted.filter((m) => m.includes("validation failed"))).toHaveLength(
+      0,
+    );
+  });
+
+  test("retries with correction prompt when first response fails schema validation", async () => {
+    let callCount = 0;
+    const mockCmo = {
+      generate: mock(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // Invalid: rankedDiagnoses is a string, not an array
+          return { object: { chiefComplaint: "Bad", rankedDiagnoses: "nope" } };
+        }
+        return { object: validReport };
+      }),
+    };
+    const emitted: string[] = [];
+    const emit = (_type: string, msg: string) => emitted.push(msg);
+    const ac = new AbortController();
+
+    const result = await generateFinalReport({
+      cmo: mockCmo as any,
+      prompt: "Generate final report",
+      builtContextHistory: "context",
+      abortSignal: ac.signal,
+      emit: emit as any,
+      logContext: { jobId: "retry-test" },
+    });
+
+    expect(callCount).toBe(2);
+    expect(result.chiefComplaint).toBe("Headache");
+    expect(emitted.some((m) => m.includes("validation failed"))).toBe(true);
+  });
+
+  test("falls back to raw output when both attempts fail schema validation", async () => {
+    const rawOutput = { chiefComplaint: "Raw fallback", broken: true };
+    const mockCmo = {
+      generate: mock(async () => ({ object: rawOutput })),
+    };
+    const emitted: string[] = [];
+    const emit = (_type: string, msg: string) => emitted.push(msg);
+    const ac = new AbortController();
+
+    const result = await generateFinalReport({
+      cmo: mockCmo as any,
+      prompt: "Generate final report",
+      builtContextHistory: "context",
+      abortSignal: ac.signal,
+      emit: emit as any,
+      logContext: { jobId: "fallback-test" },
+    });
+
+    expect(mockCmo.generate).toHaveBeenCalledTimes(2);
+    expect((result as any).chiefComplaint).toBe("Raw fallback");
+    expect(emitted.some((m) => m.includes("Using raw output"))).toBe(true);
+  });
+
+  test("respects abort signal", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const mockCmo = {
+      generate: mock(async () => ({ object: validReport })),
+    };
+    const emit = mock(() => {});
+
+    await expect(
+      generateFinalReport({
+        cmo: mockCmo as any,
+        prompt: "Generate final report",
+        builtContextHistory: "context",
+        abortSignal: ac.signal,
+        emit: emit as any,
+        logContext: { jobId: "abort-test" },
+      }),
+    ).rejects.toThrow("Aborted");
+  });
+});
+
+describe("runDiagnosis - abort store integration", () => {
+  let savedMockLlm: string | undefined;
+
+  beforeAll(() => {
+    savedMockLlm = process.env.MOCK_LLM;
+    delete process.env.MOCK_LLM;
+  });
+
+  afterAll(() => {
+    if (savedMockLlm !== undefined) {
+      process.env.MOCK_LLM = savedMockLlm;
+    } else {
+      delete process.env.MOCK_LLM;
+    }
+  });
+
+  test("uses AbortController from abort-controller-store when available", async () => {
+    const storeAc = new AbortController();
+    const runId = "abort-store-test-" + crypto.randomUUID();
+    abortStore.set(runId, storeAc);
+
+    let capturedSignal: AbortSignal | undefined;
+    const mockCmoGenerate = mock(
+      async (_prompt: string, options?: { abortSignal?: AbortSignal }) => {
+        capturedSignal = options?.abortSignal;
+        return {
+          object: {
+            specialistsToConsult: [],
+            isFinal: true,
+            finalReport: {
+              chiefComplaint: "",
+              patientSummary: "",
+              specialistsConsulted: [],
+              rankedDiagnoses: [
+                {
+                  diagnosisName: "Test",
+                  confidencePercentage: 50,
+                  urgency: "Routine",
+                  rationale: "",
+                  supportingEvidence: "",
+                  contradictoryEvidence: "",
+                  suggestedNextSteps: "",
+                },
+              ],
+              crossSpecialtyObservations: "",
+              recommendedImmediateActions: "",
+            },
+          },
+        };
+      },
+    );
+
+    const mockMastra = {
+      getAgent: () => ({
+        generate: mockCmoGenerate,
+      }),
+    };
+
+    await runDiagnosis.execute({
+      context: {} as any,
+      stepId: "run-diagnosis",
+      workflowId: "test-wf",
+      inputData: {
+        medicalHistory: "",
+        conversationTranscript: "",
+        labResults: "",
+      },
+      mastra: mockMastra as any,
+      runId,
+    });
+
+    // The abort signal passed to CMO should be the SAME object from the store
+    expect(capturedSignal).toBe(storeAc.signal);
+
+    // Cleanup
+    abortStore.remove(runId);
+  });
+
+  test("falls back to local AbortController when store has no entry", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const mockCmoGenerate = mock(
+      async (_prompt: string, options?: { abortSignal?: AbortSignal }) => {
+        capturedSignal = options?.abortSignal;
+        return {
+          object: {
+            specialistsToConsult: [],
+            isFinal: true,
+            finalReport: {
+              chiefComplaint: "",
+              patientSummary: "",
+              specialistsConsulted: [],
+              rankedDiagnoses: [
+                {
+                  diagnosisName: "Test",
+                  confidencePercentage: 50,
+                  urgency: "Routine",
+                  rationale: "",
+                  supportingEvidence: "",
+                  contradictoryEvidence: "",
+                  suggestedNextSteps: "",
+                },
+              ],
+              crossSpecialtyObservations: "",
+              recommendedImmediateActions: "",
+            },
+          },
+        };
+      },
+    );
+
+    const mockMastra = {
+      getAgent: () => ({
+        generate: mockCmoGenerate,
+      }),
+    };
+
+    const runId = "no-store-entry-" + crypto.randomUUID();
+
+    await runDiagnosis.execute({
+      context: {} as any,
+      stepId: "run-diagnosis",
+      workflowId: "test-wf",
+      inputData: {
+        medicalHistory: "",
+        conversationTranscript: "",
+        labResults: "",
+      },
+      mastra: mockMastra as any,
+      runId,
+    });
+
+    // Should still get an abort signal (from a locally-created controller)
+    expect(capturedSignal).toBeDefined();
+    expect(capturedSignal!.aborted).toBe(false);
+  });
+
+  test("aborting the store controller cancels the running workflow", async () => {
+    const storeAc = new AbortController();
+    const runId = "cancel-test-" + crypto.randomUUID();
+    abortStore.set(runId, storeAc);
+
+    let generateCallCount = 0;
+    const mockCmoGenerate = mock(async () => {
+      generateCallCount++;
+      if (generateCallCount === 1) {
+        // Simulate a long-running first CMO call. Abort during this call.
+        storeAc.abort();
+        throw new Error("Aborted");
+      }
+      return { object: {} };
+    });
+
+    const mockMastra = {
+      getAgent: () => ({
+        generate: mockCmoGenerate,
+      }),
+    };
+
+    await expect(
+      runDiagnosis.execute({
+        context: {} as any,
+        stepId: "run-diagnosis",
+        workflowId: "test-wf",
+        inputData: {
+          medicalHistory: "",
+          conversationTranscript: "",
+          labResults: "",
+        },
+        mastra: mockMastra as any,
+        runId,
+      }),
+    ).rejects.toThrow();
+
+    // Should have aborted after the first call
+    expect(generateCallCount).toBe(1);
+
+    // Cleanup
+    abortStore.remove(runId);
+  });
+});

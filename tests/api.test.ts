@@ -58,8 +58,17 @@ describe("API Endpoints", () => {
   });
 
   test("GET /v1/status/:jobId returns 404 for unknown job", async () => {
-    const res = await fetch(`${BASE}/v1/status/nonexistent-id`);
+    const res = await fetch(
+      `${BASE}/v1/status/00000000-0000-4000-a000-000000000000`,
+    );
     expect(res.status).toBe(404);
+  });
+
+  test("GET /v1/status/:jobId returns 400 for invalid job ID format", async () => {
+    const res = await fetch(`${BASE}/v1/status/nonexistent-id`);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain("Invalid job ID");
   });
 
   test("POST /v1/diagnose creates a job and completes with mock", async () => {
@@ -189,7 +198,9 @@ describe("API Endpoints", () => {
     });
 
     test("GET /v1/status/:jobId includes CORS headers on 404", async () => {
-      const res = await fetch(`${BASE}/v1/status/nonexistent-cors-test`);
+      const res = await fetch(
+        `${BASE}/v1/status/00000000-0000-4000-a000-000000000001`,
+      );
       expect(res.status).toBe(404);
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
     });
@@ -259,6 +270,7 @@ describe("API Endpoints", () => {
       expect(csp).toContain("default-src 'self'");
       expect(csp).toContain("script-src 'self'");
       expect(csp).toContain("style-src 'self' 'unsafe-inline'");
+      expect(csp).toContain("font-src 'self' https://fonts.gstatic.com");
       expect(csp).toContain("img-src 'self' data:");
       expect(csp).toContain("connect-src 'self' ws: wss:");
       expect(csp).toContain("frame-ancestors 'none'");
@@ -392,6 +404,8 @@ describe("API Endpoints", () => {
         if (origin && allowed.includes(origin)) {
           headers["Access-Control-Allow-Origin"] = origin;
         }
+        // Dynamic origin reflection requires Vary: Origin
+        headers["Vary"] = "Origin";
       } else {
         headers["Access-Control-Allow-Origin"] = allowedOrigins;
       }
@@ -421,6 +435,20 @@ describe("API Endpoints", () => {
       const headers = buildCorsHeaders("", "*", "https://anything.com");
       expect(headers["Access-Control-Allow-Origin"]).toBe("*");
     });
+
+    test("includes Vary: Origin when TRUSTED_ORIGINS is set", () => {
+      const headers = buildCorsHeaders(
+        "https://ddx.care",
+        "*",
+        "https://ddx.care",
+      );
+      expect(headers["Vary"]).toBe("Origin");
+    });
+
+    test("does not include Vary: Origin when using wildcard ALLOWED_ORIGINS", () => {
+      const headers = buildCorsHeaders("", "*", "https://anything.com");
+      expect(headers["Vary"]).toBeUndefined();
+    });
   });
 
   describe("Diagnose response includes token", () => {
@@ -448,12 +476,24 @@ describe("API Endpoints", () => {
 
   describe("DELETE /v1/diagnose/:jobId", () => {
     test("returns 404 for unknown job", async () => {
-      const res = await fetch(`${BASE}/v1/diagnose/nonexistent-id`, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        `${BASE}/v1/diagnose/00000000-0000-4000-a000-000000000002`,
+        {
+          method: "DELETE",
+        },
+      );
       expect(res.status).toBe(404);
       const body = (await res.json()) as { error: string };
       expect(body.error).toContain("Job not found");
+    });
+
+    test("returns 400 for invalid job ID format", async () => {
+      const res = await fetch(`${BASE}/v1/diagnose/nonexistent-id`, {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("Invalid job ID");
     });
 
     test("cancels a pending job and returns 200", async () => {
