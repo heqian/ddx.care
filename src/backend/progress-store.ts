@@ -62,6 +62,8 @@ export class JobStore extends EventTarget {
         createdAt INTEGER NOT NULL,
         progress TEXT NOT NULL
       );
+      CREATE INDEX IF NOT EXISTS idx_jobs_createdAt ON jobs (createdAt);
+      CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs (status);
     `);
 
     this.insertStmt = this.db.prepare(

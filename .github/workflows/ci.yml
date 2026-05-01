@@ -10,62 +10,64 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.12"
+          bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run lint
 
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.12"
+          bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
 
   test:
     runs-on: ubuntu-latest
+    env:
+      MOCK_LLM: "1"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.12"
+          bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run test
 
   frontend-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.12"
+          bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run test:frontend
 
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.12"
+          bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run build
 
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.12"
+          bun-version: latest
       - run: bun install --frozen-lockfile
-      - run: bunx playwright install --with-deps
+      - run: bunx playwright install --with-deps chromium
       - run: bun run test:e2e
         env:
           MOCK_LLM: "1"

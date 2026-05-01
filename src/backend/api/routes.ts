@@ -22,9 +22,13 @@ const CSP_VALUE =
   "default-src 'self'; " +
   "script-src 'self'; " +
   "style-src 'self' 'unsafe-inline'; " +
+  "font-src 'self' https://fonts.gstatic.com; " +
   "img-src 'self' data:; " +
   "connect-src 'self' ws: wss:; " +
   "frame-ancestors 'none'";
+
+const JOB_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function corsHeaders(req?: Request): Record<string, string> {
   const headers: Record<string, string> = {
@@ -41,6 +45,9 @@ function corsHeaders(req?: Request): Record<string, string> {
     if (allowed.includes(origin)) {
       headers["Access-Control-Allow-Origin"] = origin;
     }
+    // Dynamic origin reflection requires Vary: Origin so CDNs/proxies
+    // don't serve a cached response with the wrong origin.
+    headers["Vary"] = "Origin";
   } else {
     headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGINS;
   }
@@ -204,15 +211,6 @@ export function createRoutes(
         const { medicalHistory, conversationTranscript, labResults } =
           parsed.data;
 
-        const trunc = (s: string) =>
-          s.length > MAX_INPUT_FIELD_LENGTH
-            ? s.slice(0, MAX_INPUT_FIELD_LENGTH) +
-              "[Content truncated due to length limit]"
-            : s;
-        const tMedicalHistory = trunc(medicalHistory);
-        const tConversationTranscript = trunc(conversationTranscript);
-        const tLabResults = trunc(labResults);
-
         const jobId = crypto.randomUUID();
         progressStore.createJob(jobId);
         logger.workflowStart(jobId);
@@ -230,9 +228,9 @@ export function createRoutes(
         run
           .start({
             inputData: {
-              medicalHistory: tMedicalHistory,
-              conversationTranscript: tConversationTranscript,
-              labResults: tLabResults,
+              medicalHistory,
+              conversationTranscript,
+              labResults,
             },
           })
           .then((result) => {
@@ -272,6 +270,12 @@ export function createRoutes(
       DELETE: (req: RouteRequest) => {
         const start = Date.now();
         const { jobId } = req.params;
+        if (!JOB_ID_RE.test(jobId)) {
+          return withCors(
+            Response.json({ error: "Invalid job ID" }, { status: 400 }),
+            req,
+          );
+        }
         const entry = progressStore.getJob(jobId);
 
         if (!entry) {
@@ -323,6 +327,12 @@ export function createRoutes(
       GET: (req: RouteRequest) => {
         const start = Date.now();
         const { jobId } = req.params;
+        if (!JOB_ID_RE.test(jobId)) {
+          return withCors(
+            Response.json({ error: "Invalid job ID" }, { status: 400 }),
+            req,
+          );
+        }
         const entry = progressStore.getJob(jobId);
 
         if (!entry) {

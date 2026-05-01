@@ -7,8 +7,14 @@ import {
   JOB_TTL_MS,
   CLEANUP_INTERVAL_MS,
   RATE_LIMIT_PRUNE_INTERVAL_MS,
+  SPECIALIST_MODEL,
+  ORCHESTRATOR_MODEL,
+  SPECIALIST_CONTEXT_MODE,
+  MAX_DIAGNOSIS_ROUNDS,
+  MAX_CONCURRENT_WORKFLOWS,
   validateConfig,
 } from "./src/backend/config";
+import { logger } from "./src/backend/utils/logger";
 
 validateConfig();
 
@@ -44,7 +50,15 @@ server = Bun.serve<WsData>({
 
 export { server };
 
-console.log("ddx.care API server running on port " + server.port);
+logger.info("server_start", {
+  port: server.port,
+  specialistModel: SPECIALIST_MODEL,
+  orchestratorModel: ORCHESTRATOR_MODEL,
+  mockLlm: process.env.MOCK_LLM === "1",
+  contextMode: SPECIALIST_CONTEXT_MODE,
+  maxRounds: MAX_DIAGNOSIS_ROUNDS,
+  maxConcurrent: MAX_CONCURRENT_WORKFLOWS,
+});
 
 // --- Graceful shutdown ---
 const SHUTDOWN_TIMEOUT_MS = 30_000;

@@ -1,5 +1,6 @@
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z, type infer as zInfer } from "zod";
+import type { Agent } from "@mastra/core/agent";
 import {
   AGENT_GENERATE_MAX_RETRIES,
   AGENT_GENERATE_RETRY_BASE_DELAY,
@@ -17,6 +18,7 @@ import {
   type ProgressEventType,
 } from "../progress-store";
 import { logger } from "../utils/logger";
+import * as abortStore from "../utils/abort-controller-store";
 import { agentList } from "../agents";
 import { formatToolLabel } from "../tools/tool-labels";
 
@@ -433,6 +435,82 @@ export async function mockDiagnosis(
 // currently accommodate the multi-round context accumulation pattern needed here.
 // If Mastra adds support for multi-round supervisor workflows, migrating would reduce
 // maintenance burden.
+/**
+ * Generate the final CMO report with validate → retry → fallback.
+ * Extracted to avoid duplicating this pattern in the "no new specialists" and
+ * "max rounds reached" code paths.
+ */
+export async function generateFinalReport(opts: {
+  cmo: Agent;
+  prompt: string;
+  builtContextHistory: string;
+  abortSignal: AbortSignal;
+  emit: (
+    eventType: ProgressEventType,
+    message: string,
+    extra?: Partial<ProgressEvent>,
+  ) => void;
+  logContext: Record<string, unknown>;
+}): Promise<DiagnosisReport> {
+  const { cmo, prompt, builtContextHistory, abortSignal, emit, logContext } =
+    opts;
+
+  const finalResponse = await withRetry(
+    () =>
+      cmo.generate(prompt, {
+        structuredOutput: {
+          jsonPromptInjection: true,
+          schema: diagnosisReportSchema,
+        },
+        abortSignal,
+      }),
+    AGENT_GENERATE_MAX_RETRIES,
+    AGENT_GENERATE_RETRY_BASE_DELAY,
+    abortSignal,
+  );
+
+  const validated = diagnosisReportSchema.safeParse(finalResponse.object);
+  if (validated.success) {
+    return validated.data;
+  }
+
+  const zodErrors = validated.error.issues
+    .map((i) => `${i.path.join(".")}: ${i.message}`)
+    .join("; ");
+  logger.warn("report_validation_failed", {
+    ...logContext,
+    errors: zodErrors,
+  });
+  emit(
+    "general",
+    `Final report validation failed, retrying with correction prompt...`,
+  );
+
+  const correctionPrompt = `The previous response did not match the expected schema. Errors: ${zodErrors}. Please provide the response again, ensuring it conforms to the schema.\n\n${builtContextHistory}`;
+  const retryResponse = await withRetry(
+    () =>
+      cmo.generate(correctionPrompt, {
+        structuredOutput: {
+          jsonPromptInjection: true,
+          schema: diagnosisReportSchema,
+        },
+        abortSignal,
+      }),
+    AGENT_GENERATE_MAX_RETRIES,
+    AGENT_GENERATE_RETRY_BASE_DELAY,
+    abortSignal,
+  );
+
+  const retryValidated = diagnosisReportSchema.safeParse(retryResponse.object);
+  if (retryValidated.success) {
+    return retryValidated.data;
+  }
+
+  logger.warn("report_validation_retry_failed", logContext);
+  emit("general", `Retry also failed. Using raw output.`);
+  return retryResponse.object as DiagnosisReport;
+}
+
 export const runDiagnosis = createStep({
   id: "run-diagnosis",
   inputSchema: z.object({
@@ -480,7 +558,11 @@ export const runDiagnosis = createStep({
 
     let finalDiagnosisReport: DiagnosisReport | null = null;
 
-    const abortController = new AbortController();
+    // Use the AbortController from the store (set by the route handler) so
+    // that DELETE /v1/diagnose/:jobId can actually cancel the running workflow.
+    // Falls back to a local controller if no entry exists (e.g. tests).
+    const storedAc = runId ? abortStore.get(runId) : undefined;
+    const abortController = storedAc ?? new AbortController();
 
     const runLoop = async () => {
       while (round <= MAX_ROUNDS) {
@@ -614,68 +696,14 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
             "cmo_final",
             "No new specialists requested. Compiling final report...",
           );
-          const finalPrompt = `You did not request any new specialists, or there are no more to consult. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
-
-${builtContextHistory}`;
-          const finalResponse = await withRetry(
-            () =>
-              cmo.generate(finalPrompt, {
-                structuredOutput: {
-                  jsonPromptInjection: true,
-                  schema: diagnosisReportSchema,
-                },
-                abortSignal: abortController.signal,
-              }),
-            AGENT_GENERATE_MAX_RETRIES,
-            AGENT_GENERATE_RETRY_BASE_DELAY,
-            abortController.signal,
-          );
-          const validated = diagnosisReportSchema.safeParse(
-            finalResponse.object,
-          );
-          if (validated.success) {
-            finalDiagnosisReport = validated.data;
-          } else {
-            const zodErrors = validated.error.issues
-              .map((i) => `${i.path.join(".")}: ${i.message}`)
-              .join("; ");
-            logger.warn("report_validation_failed", {
-              jobId: runId,
-              round,
-              errors: zodErrors,
-            });
-            emit(
-              "general",
-              `Final report validation failed, retrying with correction prompt...`,
-            );
-            const correctionPrompt = `The previous response did not match the expected schema. Errors: ${zodErrors}. Please provide the response again, ensuring it conforms to the schema.\n\n${builtContextHistory}`;
-            const retryResponse = await withRetry(
-              () =>
-                cmo.generate(correctionPrompt, {
-                  structuredOutput: {
-                    jsonPromptInjection: true,
-                    schema: diagnosisReportSchema,
-                  },
-                  abortSignal: abortController.signal,
-                }),
-              AGENT_GENERATE_MAX_RETRIES,
-              AGENT_GENERATE_RETRY_BASE_DELAY,
-              abortController.signal,
-            );
-            const retryValidated = diagnosisReportSchema.safeParse(
-              retryResponse.object,
-            );
-            if (retryValidated.success) {
-              finalDiagnosisReport = retryValidated.data;
-            } else {
-              logger.warn("report_validation_retry_failed", {
-                jobId: runId,
-                round,
-              });
-              emit("general", `Retry also failed. Using raw output.`);
-              finalDiagnosisReport = retryResponse.object as DiagnosisReport;
-            }
-          }
+          finalDiagnosisReport = await generateFinalReport({
+            cmo,
+            prompt: `You did not request any new specialists, or there are no more to consult. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.\n\n${builtContextHistory}`,
+            builtContextHistory,
+            abortSignal: abortController.signal,
+            emit,
+            logContext: { jobId: runId, round },
+          });
           break;
         }
 
@@ -800,66 +828,14 @@ ${builtContextHistory}`;
           contextHistory,
           CMO_CONTEXT_MAX_CHARS,
         );
-        const finalPrompt = `Maximum diagnostic rounds (${MAX_ROUNDS}) reached. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.
-          
-${builtContextHistory}`;
-        const finalResponse = await withRetry(
-          () =>
-            cmo.generate(finalPrompt, {
-              structuredOutput: {
-                jsonPromptInjection: true,
-                schema: diagnosisReportSchema,
-              },
-              abortSignal: abortController.signal,
-            }),
-          AGENT_GENERATE_MAX_RETRIES,
-          AGENT_GENERATE_RETRY_BASE_DELAY,
-          abortController.signal,
-        );
-        const validated = diagnosisReportSchema.safeParse(finalResponse.object);
-        if (validated.success) {
-          finalDiagnosisReport = validated.data;
-        } else {
-          const zodErrors = validated.error.issues
-            .map((i) => `${i.path.join(".")}: ${i.message}`)
-            .join("; ");
-          logger.warn("report_validation_failed", {
-            jobId: runId,
-            context: "max_rounds",
-            errors: zodErrors,
-          });
-          emit(
-            "general",
-            `Final report validation failed, retrying with correction prompt...`,
-          );
-          const correctionPrompt = `The previous response did not match the expected schema. Errors: ${zodErrors}. Please provide the response again, ensuring it conforms to the schema.\n\n${builtContextHistory}`;
-          const retryResponse = await withRetry(
-            () =>
-              cmo.generate(correctionPrompt, {
-                structuredOutput: {
-                  jsonPromptInjection: true,
-                  schema: diagnosisReportSchema,
-                },
-                abortSignal: abortController.signal,
-              }),
-            AGENT_GENERATE_MAX_RETRIES,
-            AGENT_GENERATE_RETRY_BASE_DELAY,
-            abortController.signal,
-          );
-          const retryValidated = diagnosisReportSchema.safeParse(
-            retryResponse.object,
-          );
-          if (retryValidated.success) {
-            finalDiagnosisReport = retryValidated.data;
-          } else {
-            logger.warn("report_validation_retry_failed", {
-              jobId: runId,
-              context: "max_rounds",
-            });
-            emit("general", `Retry also failed. Using raw output.`);
-            finalDiagnosisReport = retryResponse.object as DiagnosisReport;
-          }
-        }
+        finalDiagnosisReport = await generateFinalReport({
+          cmo,
+          prompt: `Maximum diagnostic rounds (${MAX_ROUNDS}) reached. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.\n\n${builtContextHistory}`,
+          builtContextHistory,
+          abortSignal: abortController.signal,
+          emit,
+          logContext: { jobId: runId, context: "max_rounds" },
+        });
       }
     };
 
