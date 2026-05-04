@@ -338,10 +338,10 @@ describe("API Endpoints", () => {
       rateLimiter["hasLoggedReset"] = true;
 
       // Pre-fill the rate limit window to exhaust the per-IP quota
-      // Default is 5 requests per 60s window
+      // Default is 10 requests per 60s window
       const testIp = "::1";
       rateLimiter["clients"].set(testIp, {
-        timestamps: Array(5).fill(Date.now()),
+        timestamps: Array(10).fill(Date.now()),
       });
 
       // The next request from the same IP should be rate limited

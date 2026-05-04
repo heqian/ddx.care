@@ -22,7 +22,7 @@ export const MAX_DIAGNOSIS_ROUNDS = parseInt(
   10,
 );
 export const RATE_LIMIT_MAX_REQUESTS = parseInt(
-  process.env.RATE_LIMIT_MAX_REQUESTS ?? "5",
+  process.env.RATE_LIMIT_MAX_REQUESTS ?? "10",
   10,
 );
 export const RATE_LIMIT_WINDOW_MS = parseInt(
