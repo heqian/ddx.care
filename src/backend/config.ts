@@ -75,6 +75,8 @@ export const CMO_CONTEXT_MAX_CHARS = parseInt(
   10,
 );
 
+export const ORPHADATA_ENABLED = process.env.ORPHADATA_ENABLED !== "0";
+
 export const AUDIT_LOG_PATH = process.env.AUDIT_LOG_PATH ?? "";
 export const AUDIT_LOG_MAX_SIZE_MB = parseInt(
   process.env.AUDIT_LOG_MAX_SIZE_MB ?? "10",

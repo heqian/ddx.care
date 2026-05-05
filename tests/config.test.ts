@@ -17,6 +17,7 @@ import {
   MAX_PAYLOAD_BYTES,
   AGENT_GENERATE_MAX_RETRIES,
   AGENT_GENERATE_RETRY_BASE_DELAY,
+  ORPHADATA_ENABLED,
 } from "../src/backend/config";
 
 describe("Config — Constants", () => {
@@ -63,6 +64,10 @@ describe("Config — Constants", () => {
 
   test("MAX_DIAGNOSIS_ROUNDS is positive", () => {
     expect(MAX_DIAGNOSIS_ROUNDS).toBeGreaterThan(0);
+  });
+
+  test("ORPHADATA_ENABLED is a boolean", () => {
+    expect(typeof ORPHADATA_ENABLED).toBe("boolean");
   });
 });
 

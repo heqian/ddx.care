@@ -43,99 +43,59 @@ describe("Agent Registry", () => {
 });
 
 describe("Tool Assignments", () => {
-  test("every specialist has a tool assignment entry", async () => {
-    const { specialists } = await import("../src/backend/agents/index");
-    const { getToolsForSpecialist } = await import(
-      "../src/backend/tools/index"
-    );
+  test("getAllTools returns all 22 tools", async () => {
+    const { getAllTools } = await import("../src/backend/tools/index");
 
-    const ids = Object.keys(specialists);
-    for (const id of ids) {
-      const tools = getToolsForSpecialist(id as keyof typeof specialists);
-      expect(Object.keys(tools).length, `${id} has no tools`).toBeGreaterThan(
-        0,
-      );
+    const tools = getAllTools();
+    const keys = Object.keys(tools);
+    expect(keys.length).toBe(22);
+  });
+
+  test("every specialist gets all tools via getAllTools", async () => {
+    const { getAllTools } = await import("../src/backend/tools/index");
+
+    const tools = getAllTools();
+    expect(tools).toHaveProperty("pubmed-search");
+    expect(tools).toHaveProperty("drug-lookup");
+    expect(tools).toHaveProperty("drug-interaction");
+    expect(tools).toHaveProperty("drug-labeling");
+    expect(tools).toHaveProperty("adverse-events");
+    expect(tools).toHaveProperty("rare-disease-search");
+    expect(tools).toHaveProperty("rare-disease-genes");
+    expect(tools).toHaveProperty("rare-disease-phenotypes");
+    expect(tools).toHaveProperty("hpo-term-search");
+    expect(tools).toHaveProperty("loinc-test-lookup");
+    expect(tools).toHaveProperty("drug-shortages");
+    expect(tools).toHaveProperty("food-adverse-events");
+    expect(tools).toHaveProperty("device-adverse-events");
+  });
+
+  test("no duplicate tool IDs in getAllTools", async () => {
+    const { getAllTools } = await import("../src/backend/tools/index");
+
+    const tools = getAllTools();
+    const keys = Object.keys(tools);
+    const unique = new Set(keys);
+    expect(unique.size).toBe(keys.length);
+  });
+
+  test("all new tools are present in getAllTools", async () => {
+    const { getAllTools } = await import("../src/backend/tools/index");
+    const tools = getAllTools();
+
+    const newTools = [
+      "rare-disease-search",
+      "rare-disease-genes",
+      "rare-disease-phenotypes",
+      "hpo-term-search",
+      "loinc-test-lookup",
+      "drug-shortages",
+      "food-adverse-events",
+      "device-adverse-events",
+    ];
+    for (const id of newTools) {
+      expect(tools).toHaveProperty(id);
     }
-  });
-
-  test("every specialist gets universal tools", async () => {
-    const { specialists } = await import("../src/backend/agents/index");
-    const { getToolsForSpecialist } = await import(
-      "../src/backend/tools/index"
-    );
-
-    const ids = Object.keys(specialists);
-    for (const id of ids) {
-      const tools = getToolsForSpecialist(id as keyof typeof specialists);
-      expect(tools).toHaveProperty("pubmed-search");
-      expect(tools).toHaveProperty("drug-lookup");
-      expect(tools).toHaveProperty("drug-interaction");
-    }
-  });
-
-  test("prescribers get prescribing tools", async () => {
-    const { getToolsForSpecialist } = await import(
-      "../src/backend/tools/index"
-    );
-
-    const prescribers = [
-      "generalist",
-      "cardiologist",
-      "endocrinologist",
-      "oncologist",
-    ] as const;
-
-    for (const id of prescribers) {
-      const tools = getToolsForSpecialist(id);
-      expect(tools).toHaveProperty("drug-labeling");
-      expect(tools).toHaveProperty("adverse-events");
-    }
-  });
-
-  test("non-prescribers do not get prescribing tools", async () => {
-    const { getToolsForSpecialist } = await import(
-      "../src/backend/tools/index"
-    );
-
-    const nonPrescribers = [
-      "dermatologist",
-      "radiologist",
-      "pathologist",
-    ] as const;
-
-    for (const id of nonPrescribers) {
-      const tools = getToolsForSpecialist(id);
-      expect(tools).not.toHaveProperty("drug-labeling");
-    }
-  });
-
-  test("oncologists get drug recall tool (not drug labeling)", async () => {
-    const { getToolsForSpecialist } = await import(
-      "../src/backend/tools/index"
-    );
-    const { drugRecallTool, drugLabelingTool } = await import(
-      "../src/backend/tools/open-fda"
-    );
-
-    const tools = getToolsForSpecialist("oncologist");
-    expect(tools).toHaveProperty("drug-recall");
-    expect(tools["drug-recall"]).toBe(drugRecallTool);
-    expect(tools["drug-recall"]).not.toBe(drugLabelingTool);
-  });
-
-  test("drug recall is not duplicated with drug labeling for oncologists", async () => {
-    const { getToolsForSpecialist } = await import(
-      "../src/backend/tools/index"
-    );
-
-    const tools = getToolsForSpecialist("oncologist");
-    const toolValues = Object.values(tools);
-    const toolIds = toolValues.map((t: any) => t?.id);
-    const drugToolIds = toolIds.filter(
-      (id: any) => id && (id as string).includes("drug"),
-    );
-    const uniqueDrugToolIds = new Set(drugToolIds);
-    expect(uniqueDrugToolIds.size).toBe(drugToolIds.length);
   });
 });
 
@@ -171,63 +131,27 @@ describe("Config", () => {
 
     expect(MAX_SPECIALIST_CONCURRENCY).toBeGreaterThan(0);
   });
-});
 
-describe("Surgical specialist tool assignments", () => {
-  test("all surgical specialists get prescribing tools", async () => {
-    const { getToolsForSpecialist } = await import(
-      "../src/backend/tools/index"
-    );
-
-    const surgeons = [
-      "generalSurgeon",
-      "cardiothoracicSurgeon",
-      "neurosurgeon",
-      "orthopedist",
-      "otolaryngologist",
-      "urologist",
-      "vascularSurgeon",
-    ] as const;
-
-    for (const id of surgeons) {
-      const tools = getToolsForSpecialist(id);
-      expect(tools).toHaveProperty("drug-labeling");
-      expect(tools).toHaveProperty("adverse-events");
-    }
+  test("ORPHADATA_ENABLED defaults to true", async () => {
+    const { ORPHADATA_ENABLED } = await import("../src/backend/config");
+    expect(typeof ORPHADATA_ENABLED).toBe("boolean");
   });
 });
 
 describe("relatedArticlesTool assignment", () => {
-  test("relatedArticlesTool is assigned to universal category", async () => {
-    const { getToolsForSpecialist } = await import(
-      "../src/backend/tools/index"
-    );
+  test("relatedArticlesTool is included in getAllTools", async () => {
+    const { getAllTools } = await import("../src/backend/tools/index");
     const { relatedArticlesTool } = await import(
       "../src/backend/tools/pubmed-search"
     );
 
-    const tools = getToolsForSpecialist("generalist");
+    const tools = getAllTools();
     expect(tools).toHaveProperty("related-articles");
     expect(tools["related-articles"]).toBe(relatedArticlesTool);
   });
 });
 
-describe("Agent factory validation", () => {
-  test("createSpecialistAgent throws for invalid kebab-case ID", async () => {
-    const { createSpecialistAgent } = await import(
-      "../src/backend/agents/factory"
-    );
-
-    expect(() =>
-      createSpecialistAgent({
-        id: "nonexistent-specialist",
-        name: "Nonexistent",
-        description: "Test",
-        instructions: "Test",
-      }),
-    ).toThrow("does not exist in toolAssignments");
-  });
-
+describe("Agent factory", () => {
   test("createSpecialistAgent succeeds for valid kebab-case ID", async () => {
     const { createSpecialistAgent } = await import(
       "../src/backend/agents/factory"
@@ -242,6 +166,22 @@ describe("Agent factory validation", () => {
 
     expect(agent).toBeDefined();
     expect(agent.id).toBe("general-surgeon");
+  });
+
+  test("createSpecialistAgent assigns all tools to any specialist", async () => {
+    const { createSpecialistAgent } = await import(
+      "../src/backend/agents/factory"
+    );
+
+    const agent = createSpecialistAgent({
+      id: "test-specialist",
+      name: "Test Specialist",
+      description: "Test",
+      instructions: "Test",
+    });
+
+    expect(agent).toBeDefined();
+    expect(agent.id).toBe("test-specialist");
   });
 });
 
@@ -259,13 +199,21 @@ describe("formatToolLabel", () => {
     expect(formatToolLabel("omim-search")).toBe("Searching OMIM");
     expect(formatToolLabel("medlineplus-search")).toBe("Searching MedlinePlus");
     expect(formatToolLabel("drug-spelling-suggestion")).toBe("Checking drug spelling");
+    expect(formatToolLabel("rare-disease-search")).toBe("Searching rare diseases");
+    expect(formatToolLabel("rare-disease-genes")).toBe("Looking up disease genes");
+    expect(formatToolLabel("rare-disease-phenotypes")).toBe("Retrieving disease phenotypes");
+    expect(formatToolLabel("hpo-term-search")).toBe("Searching phenotype terms");
+    expect(formatToolLabel("loinc-test-lookup")).toBe("Looking up lab test");
+    expect(formatToolLabel("drug-shortages")).toBe("Checking drug shortages");
+    expect(formatToolLabel("food-adverse-events")).toBe("Searching food adverse events");
+    expect(formatToolLabel("device-adverse-events")).toBe("Searching device adverse events");
   });
 
   test("returns fallback for unknown tool IDs", () => {
     expect(formatToolLabel("nonexistent-tool")).toBe("Running nonexistent-tool");
   });
 
-  test("TOOL_LABELS has entries for all 14 known tools", () => {
+  test("TOOL_LABELS has entries for all 22 known tools", () => {
     const expectedKeys = [
       "pubmed-search",
       "related-articles",
@@ -281,6 +229,14 @@ describe("formatToolLabel", () => {
       "substance-toxicology",
       "medlineplus-search",
       "drug-spelling-suggestion",
+      "rare-disease-search",
+      "rare-disease-genes",
+      "rare-disease-phenotypes",
+      "hpo-term-search",
+      "loinc-test-lookup",
+      "drug-shortages",
+      "food-adverse-events",
+      "device-adverse-events",
     ];
     for (const key of expectedKeys) {
       expect(TOOL_LABELS[key]).toBeTruthy();

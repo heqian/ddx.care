@@ -50,6 +50,62 @@ interface FdaSubstanceRecord {
   approval_id?: string;
 }
 
+interface FdaDrugShortageRecord {
+  generic_name?: string;
+  brand_name?: string;
+  availability?: string;
+  shortage_reason?: string;
+  status?: string;
+  company_name?: string;
+  presentation?: string;
+  therapeutic_category?: string[];
+  update_date?: string;
+  initial_posting_date?: string;
+  openfda?: {
+    brand_name?: string[];
+    generic_name?: string[];
+    manufacturer_name?: string[];
+  };
+}
+
+interface FdaFoodEventRecord {
+  report_number?: string;
+  outcomes?: string[];
+  reactions?: string[];
+  date_started?: string;
+  consumer?: {
+    age?: string;
+    age_unit?: string;
+    gender?: string;
+  };
+  products?: Array<{
+    role?: string;
+    name_brand?: string;
+    industry_name?: string;
+  }>;
+}
+
+interface FdaDeviceEventRecord {
+  report_number?: string;
+  event_type?: string;
+  date_of_event?: string;
+  date_received?: string;
+  event_location?: string;
+  type_of_report?: string[];
+  product_problem_flag?: string;
+  source_type?: string[];
+  patient?: {
+    patient_problems?: string[];
+    sequence_number_treatment?: string[];
+    sequence_number_outcome?: string[];
+  };
+  openfda?: {
+    device_name?: string[];
+    medical_specialty_description?: string[];
+    regulation_number?: string[];
+  };
+}
+
 const FDA_BASE = "https://api.fda.gov";
 
 async function fetchJSON(url: string) {
@@ -305,6 +361,185 @@ export const substanceToxicologyTool = createTool({
       substanceId: r.substance_id ?? undefined,
       substanceName: r.substance_name ?? undefined,
       approvalId: r.approval_id ?? undefined,
+    }));
+
+    return { results };
+  },
+});
+
+export const drugShortagesTool = createTool({
+  id: "drug-shortages",
+  description:
+    "Search FDA drug shortage database for current and resolved drug shortages. Returns availability, reason for shortage, and therapeutic category. Useful for identifying alternative therapies when a drug is unavailable.",
+  inputSchema: z.object({
+    drugName: z
+      .string()
+      .describe("Drug generic or brand name to check for shortages"),
+    limit: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(5)
+      .describe("Number of shortage records"),
+  }),
+  outputSchema: z.object({
+    results: z.array(
+      z.object({
+        genericName: z.string().optional(),
+        brandName: z.string().optional(),
+        availability: z.string().optional(),
+        reason: z.string().optional(),
+        status: z.string().optional(),
+        company: z.string().optional(),
+        presentation: z.string().optional(),
+        therapeuticCategory: z.array(z.string()).optional(),
+        updateDate: z.string().optional(),
+      }),
+    ),
+    error: z.string().optional(),
+  }),
+  execute: async ({ drugName, limit }) => {
+    const url = `${FDA_BASE}/drug/shortages.json?search=generic_name:${encodeURIComponent(drugName)}+openfda.brand_name:${encodeURIComponent(drugName)}&limit=${limit}`;
+    const result = await fetchJSON(url);
+
+    if (result.error) {
+      return { results: [], error: "No drug shortage data found." };
+    }
+
+    const results = (result.results ?? []).map((r: FdaDrugShortageRecord) => ({
+      genericName:
+        r.generic_name ?? r.openfda?.generic_name?.join(", ") ?? undefined,
+      brandName: r.brand_name ?? r.openfda?.brand_name?.join(", ") ?? undefined,
+      availability: r.availability ?? undefined,
+      reason: r.shortage_reason ?? undefined,
+      status: r.status ?? undefined,
+      company:
+        r.company_name ?? r.openfda?.manufacturer_name?.join(", ") ?? undefined,
+      presentation: r.presentation ?? undefined,
+      therapeuticCategory: r.therapeutic_category ?? undefined,
+      updateDate: r.update_date ?? undefined,
+    }));
+
+    return { results };
+  },
+});
+
+export const foodAdverseEventsTool = createTool({
+  id: "food-adverse-events",
+  description:
+    "Search FDA CFSAN adverse event reporting system (CAERS) for food, cosmetic, and dietary supplement adverse events. Returns product names, reactions, and outcomes. Useful for identifying food-supplement interactions or adverse reactions.",
+  inputSchema: z.object({
+    productName: z
+      .string()
+      .describe(
+        "Product name to search (e.g. 'centrum', 'ensure', 'whey protein')",
+      ),
+    limit: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(5)
+      .describe("Number of reports to return"),
+  }),
+  outputSchema: z.object({
+    results: z.array(
+      z.object({
+        reportNumber: z.string().optional(),
+        reactions: z.array(z.string()).optional(),
+        outcomes: z.array(z.string()).optional(),
+        products: z
+          .array(
+            z.object({
+              name: z.string().optional(),
+              industry: z.string().optional(),
+            }),
+          )
+          .optional(),
+        consumerAge: z.string().optional(),
+        consumerGender: z.string().optional(),
+        dateStarted: z.string().optional(),
+      }),
+    ),
+    error: z.string().optional(),
+  }),
+  execute: async ({ productName, limit }) => {
+    const url = `${FDA_BASE}/food/event.json?search=products.name_brand:${encodeURIComponent(productName)}&limit=${limit}`;
+    const result = await fetchJSON(url);
+
+    if (result.error) {
+      return { results: [], error: "No food adverse event reports found." };
+    }
+
+    const results = (result.results ?? []).map((r: FdaFoodEventRecord) => ({
+      reportNumber: r.report_number ?? undefined,
+      reactions: r.reactions ?? [],
+      outcomes: r.outcomes ?? [],
+      products:
+        r.products?.map((p) => ({
+          name: p.name_brand ?? undefined,
+          industry: p.industry_name ?? undefined,
+        })) ?? [],
+      consumerAge: r.consumer?.age
+        ? `${r.consumer.age} ${r.consumer.age_unit ?? ""}`.trim()
+        : undefined,
+      consumerGender: r.consumer?.gender ?? undefined,
+      dateStarted: r.date_started ?? undefined,
+    }));
+
+    return { results };
+  },
+});
+
+export const deviceAdverseEventsTool = createTool({
+  id: "device-adverse-events",
+  description:
+    "Search FDA MAUDE database for medical device adverse events. Returns device names, event types, patient problems, and outcomes. Useful for identifying device-related complications or failures.",
+  inputSchema: z.object({
+    deviceName: z
+      .string()
+      .describe(
+        "Device name to search (e.g. 'pacemaker', 'ventilator', 'infusion pump')",
+      ),
+    limit: z
+      .number()
+      .min(1)
+      .max(10)
+      .default(5)
+      .describe("Number of reports to return"),
+  }),
+  outputSchema: z.object({
+    results: z.array(
+      z.object({
+        reportNumber: z.string().optional(),
+        eventType: z.string().optional(),
+        deviceName: z.string().optional(),
+        medicalSpecialty: z.string().optional(),
+        patientProblems: z.array(z.string()).optional(),
+        eventLocation: z.string().optional(),
+        dateOfEvent: z.string().optional(),
+        dateReceived: z.string().optional(),
+      }),
+    ),
+    error: z.string().optional(),
+  }),
+  execute: async ({ deviceName, limit }) => {
+    const url = `${FDA_BASE}/device/event.json?search=openfda.device_name:${encodeURIComponent(deviceName)}&limit=${limit}`;
+    const result = await fetchJSON(url);
+
+    if (result.error) {
+      return { results: [], error: "No device adverse event reports found." };
+    }
+
+    const results = (result.results ?? []).map((r: FdaDeviceEventRecord) => ({
+      reportNumber: r.report_number ?? undefined,
+      eventType: r.event_type ?? undefined,
+      deviceName: r.openfda?.device_name?.join(", ") ?? undefined,
+      medicalSpecialty:
+        r.openfda?.medical_specialty_description?.join(", ") ?? undefined,
+      patientProblems: r.patient?.patient_problems ?? [],
+      eventLocation: r.event_location ?? undefined,
+      dateOfEvent: r.date_of_event ?? undefined,
+      dateReceived: r.date_received ?? undefined,
     }));
 
     return { results };

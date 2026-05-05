@@ -12,13 +12,19 @@ import {
   SPECIALIST_CONTEXT_MODE,
   MAX_DIAGNOSIS_ROUNDS,
   MAX_CONCURRENT_WORKFLOWS,
+  ORPHADATA_ENABLED,
   validateConfig,
 } from "./src/backend/config";
 import { logger } from "./src/backend/utils/logger";
+import { initializeOrphadataCache } from "./src/backend/orphadata-cache";
 
 validateConfig();
 
 progressStore.markStalePending();
+
+if (ORPHADATA_ENABLED) {
+  initializeOrphadataCache().catch(() => {});
+}
 
 const cleanupTimer = setInterval(() => {
   progressStore.cleanupExpired(JOB_TTL_MS);

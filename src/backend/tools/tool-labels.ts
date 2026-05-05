@@ -13,6 +13,14 @@ export const TOOL_LABELS: Record<string, string> = {
   "substance-toxicology": "Checking toxicology",
   "medlineplus-search": "Searching MedlinePlus",
   "drug-spelling-suggestion": "Checking drug spelling",
+  "rare-disease-search": "Searching rare diseases",
+  "rare-disease-genes": "Looking up disease genes",
+  "rare-disease-phenotypes": "Retrieving disease phenotypes",
+  "hpo-term-search": "Searching phenotype terms",
+  "loinc-test-lookup": "Looking up lab test",
+  "drug-shortages": "Checking drug shortages",
+  "food-adverse-events": "Searching food adverse events",
+  "device-adverse-events": "Searching device adverse events",
 };
 
 export function formatToolLabel(toolName: string): string {
