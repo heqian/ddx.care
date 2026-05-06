@@ -138,6 +138,47 @@ describe("Logger — Specialized Methods", () => {
     // success is stringified
     expect(output).toContain('"success":"true"');
   });
+
+  test("toolCall() logs agent, jobId, toolName, and toolArgs", () => {
+    logger.toolCall("cardiologist", "job-1", "pubmed-search", "chest pain");
+    const output = logSpy.mock.calls[0][0] as string;
+    expect(output).toContain("tool_call");
+    expect(output).toContain('"agentId":"cardiologist"');
+    expect(output).toContain('"jobId":"job-1"');
+    expect(output).toContain('"toolName":"pubmed-search"');
+    expect(output).toContain('"toolArgs":"chest pain"');
+  });
+
+  test("toolCall() logs null toolArgs", () => {
+    logger.toolCall("neurologist", "job-2", "drug-interaction", null);
+    const output = logSpy.mock.calls[0][0] as string;
+    expect(output).toContain('"toolArgs":null');
+  });
+
+  test("toolResult() logs success result", () => {
+    logger.toolResult("cardiologist", "job-1", "pubmed-search", true, 1200, "15 results for 'chest pain'");
+    const output = logSpy.mock.calls[0][0] as string;
+    expect(output).toContain("tool_result");
+    expect(output).toContain('"agentId":"cardiologist"');
+    expect(output).toContain('"toolName":"pubmed-search"');
+    expect(output).toContain('"success":"true"');
+    expect(output).toContain('"durationMs":1200');
+    expect(output).toContain('"resultSummary":"15 results for \'chest pain\'"');
+  });
+
+  test("toolResult() logs error result", () => {
+    logger.toolResult("neurologist", "job-2", "drug-interaction", false, 0, "API error");
+    const output = logSpy.mock.calls[0][0] as string;
+    expect(output).toContain('"success":"false"');
+    expect(output).toContain('"durationMs":0');
+    expect(output).toContain('"resultSummary":"API error"');
+  });
+
+  test("toolResult() logs null resultSummary", () => {
+    logger.toolResult("oncologist", "job-3", "clinical-trials-search", true, 500, null);
+    const output = logSpy.mock.calls[0][0] as string;
+    expect(output).toContain('"resultSummary":null');
+  });
 });
 
 describe("Logger — Audit Log Integration", () => {

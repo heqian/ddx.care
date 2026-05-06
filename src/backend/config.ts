@@ -34,7 +34,7 @@ export const MAX_CONCURRENT_WORKFLOWS = parseInt(
   10,
 );
 export const MAX_SPECIALIST_CONCURRENCY = parseInt(
-  process.env.MAX_SPECIALIST_CONCURRENCY ?? "3",
+  process.env.MAX_SPECIALIST_CONCURRENCY ?? "1",
   10,
 );
 export const MAX_INPUT_FIELD_LENGTH = 50_000;

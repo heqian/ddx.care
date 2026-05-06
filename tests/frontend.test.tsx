@@ -585,7 +585,7 @@ describe("AgentStatusCard", () => {
     expect(getByText(container, "Waiting...")).toBeTruthy();
   });
 
-  test("shows active tool label when activeTool is provided", () => {
+  test("shows tool history when active with running tool", () => {
     resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
@@ -593,14 +593,39 @@ describe("AgentStatusCard", () => {
         agentId: "cardiologist",
         description: "Heart specialist",
         status: "active",
-        activeTool: { toolName: "pubmed-search", args: "chest pain" },
+        toolHistory: [
+          {
+            toolName: "pubmed-search",
+            toolArgs: "chest pain",
+            status: "running",
+          },
+        ],
       }),
     );
     expect(getByText(container, "Searching PubMed")).toBeTruthy();
-    expect(getByText(container, "Searching PubMed: chest pain")).toBeTruthy();
   });
 
-  test("shows 'Consulting...' when active but no activeTool", () => {
+  test("shows tool history with args for latest running entry", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Cardiologist",
+        agentId: "cardiologist",
+        description: "Heart specialist",
+        status: "active",
+        toolHistory: [
+          {
+            toolName: "pubmed-search",
+            toolArgs: "chest pain",
+            status: "running",
+          },
+        ],
+      }),
+    );
+    expect(getByText(container, /chest pain/)).toBeTruthy();
+  });
+
+  test("shows 'Consulting...' when active but no toolHistory", () => {
     resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
@@ -613,7 +638,7 @@ describe("AgentStatusCard", () => {
     expect(getByText(container, "Consulting...")).toBeTruthy();
   });
 
-  test("does not show tool label when completed", () => {
+  test("shows summary line when completed with tool history", () => {
     resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
@@ -621,14 +646,55 @@ describe("AgentStatusCard", () => {
         agentId: "cardiologist",
         description: "Heart specialist",
         status: "completed",
-        activeTool: { toolName: "pubmed-search", args: "chest pain" },
+        toolHistory: [
+          {
+            toolName: "pubmed-search",
+            toolArgs: "chest pain",
+            status: "success",
+            durationMs: 1200,
+          },
+          {
+            toolName: "drug-interaction",
+            toolArgs: "aspirin + warfarin",
+            status: "success",
+            durationMs: 800,
+          },
+        ],
       }),
     );
-    expect(getByText(container, "Analysis complete")).toBeTruthy();
-    expect(queryByText(container, "Searching PubMed")).toBeNull();
+    expect(getByText(container, "2 tools used")).toBeTruthy();
+    expect(getByText(container, "all successful")).toBeTruthy();
   });
 
-  test("shows fallback label for unknown tool via shared formatToolLabel", () => {
+  test("shows failure count when completed with errors", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Cardiologist",
+        agentId: "cardiologist",
+        description: "Heart specialist",
+        status: "completed",
+        toolHistory: [
+          {
+            toolName: "pubmed-search",
+            toolArgs: "chest pain",
+            status: "success",
+            durationMs: 1200,
+          },
+          {
+            toolName: "drug-interaction",
+            toolArgs: null,
+            status: "error",
+            durationMs: 500,
+          },
+        ],
+      }),
+    );
+    expect(getByText(container, "2 tools used")).toBeTruthy();
+    expect(getByText(container, "1 failed")).toBeTruthy();
+  });
+
+  test("shows fallback label for unknown tool", () => {
     resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
@@ -636,7 +702,13 @@ describe("AgentStatusCard", () => {
         agentId: "cardiologist",
         description: "Heart specialist",
         status: "active",
-        activeTool: { toolName: "custom-future-tool", args: "some query" },
+        toolHistory: [
+          {
+            toolName: "custom-future-tool",
+            toolArgs: "some query",
+            status: "running",
+          },
+        ],
       }),
     );
     expect(getByText(container, "Running custom-future-tool")).toBeTruthy();
@@ -894,9 +966,7 @@ describe("ConsentGate", () => {
       }),
     );
     const buttons = Array.from(container.getElementsByTagName("button"));
-    const acceptBtn = buttons.find((b) =>
-      b.textContent?.includes("I Accept"),
-    );
+    const acceptBtn = buttons.find((b) => b.textContent?.includes("I Accept"));
     expect(acceptBtn).toBeTruthy();
     expect(acceptBtn!.disabled).toBe(true);
   });
@@ -991,9 +1061,7 @@ describe("ConsentGate", () => {
     fireEvent.click(declineBtn!);
 
     // Re-query buttons after state change
-    const updatedButtons = Array.from(
-      container.getElementsByTagName("button"),
-    );
+    const updatedButtons = Array.from(container.getElementsByTagName("button"));
     const reviewBtn = updatedButtons.find((b) =>
       b.textContent?.includes("Review terms again"),
     );
@@ -1697,9 +1765,7 @@ describe("Accessibility — ResultsView tabs", () => {
       }),
     );
 
-    const firstTab = container.querySelector(
-      '[role="tab"]',
-    ) as HTMLElement;
+    const firstTab = container.querySelector('[role="tab"]') as HTMLElement;
 
     await act(async () => {
       fireEvent.keyDown(firstTab, { key: "ArrowRight" });
@@ -1756,32 +1822,56 @@ describe("deriveSpecialistStatuses", () => {
 
   test("sets status to active when calling specialist", () => {
     const map = deriveSpecialistStatuses([
-      { time: "2026-01-01T00:00:00Z", message: "Calling specialist cardiologist..." },
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Calling specialist cardiologist...",
+      },
     ]);
     expect(map.get("cardiologist")).toBe("active");
   });
 
   test("sets status to completed when analysis received", () => {
     const map = deriveSpecialistStatuses([
-      { time: "2026-01-01T00:00:00Z", message: "Calling specialist cardiologist..." },
-      { time: "2026-01-01T00:00:01Z", message: "Received analysis from cardiologist" },
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Calling specialist cardiologist...",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Received analysis from cardiologist",
+      },
     ]);
     expect(map.get("cardiologist")).toBe("completed");
   });
 
   test("sets status to completed when analysis failed", () => {
     const map = deriveSpecialistStatuses([
-      { time: "2026-01-01T00:00:00Z", message: "Calling specialist neurologist..." },
-      { time: "2026-01-01T00:00:01Z", message: "Failed to receive analysis from neurologist" },
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Calling specialist neurologist...",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Failed to receive analysis from neurologist",
+      },
     ]);
     expect(map.get("neurologist")).toBe("completed");
   });
 
   test("tracks multiple specialists independently", () => {
     const map = deriveSpecialistStatuses([
-      { time: "2026-01-01T00:00:00Z", message: "Calling specialist cardiologist..." },
-      { time: "2026-01-01T00:00:01Z", message: "Calling specialist neurologist..." },
-      { time: "2026-01-01T00:00:02Z", message: "Received analysis from cardiologist" },
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Calling specialist cardiologist...",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Calling specialist neurologist...",
+      },
+      {
+        time: "2026-01-01T00:00:02Z",
+        message: "Received analysis from cardiologist",
+      },
     ]);
     expect(map.get("cardiologist")).toBe("completed");
     expect(map.get("neurologist")).toBe("active");
@@ -1789,16 +1879,28 @@ describe("deriveSpecialistStatuses", () => {
 
   test("ignores unrelated progress messages", () => {
     const map = deriveSpecialistStatuses([
-      { time: "2026-01-01T00:00:00Z", message: "Round 1 Analysis: Asking CMO for decision..." },
-      { time: "2026-01-01T00:00:01Z", message: "CMO has determined no further consultations are needed." },
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Round 1 Analysis: Asking CMO for decision...",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "CMO has determined no further consultations are needed.",
+      },
     ]);
     expect(map.size).toBe(0);
   });
 
   test("handles multi-word specialist IDs", () => {
     const map = deriveSpecialistStatuses([
-      { time: "2026-01-01T00:00:00Z", message: "Calling specialist emergencyPhysician..." },
-      { time: "2026-01-01T00:00:01Z", message: "Received analysis from emergencyPhysician" },
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Calling specialist emergencyPhysician...",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Received analysis from emergencyPhysician",
+      },
     ]);
     expect(map.get("emergencyPhysician")).toBe("completed");
   });
@@ -1853,8 +1955,14 @@ describe("deriveSpecialistStatuses", () => {
 
   test("fallback regex still works for events without eventType", () => {
     const map = deriveSpecialistStatuses([
-      { time: "2026-01-01T00:00:00Z", message: "Calling specialist nephrologist..." },
-      { time: "2026-01-01T00:00:01Z", message: "Received analysis from nephrologist" },
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Calling specialist nephrologist...",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Received analysis from nephrologist",
+      },
     ]);
     expect(map.get("nephrologist")).toBe("completed");
   });
@@ -1887,23 +1995,23 @@ describe("deriveSpecialistStatuses", () => {
 });
 
 // ---------------------------------------------------------------------------
-// deriveActiveTools
+// deriveToolHistory
 // ---------------------------------------------------------------------------
-import { deriveActiveTools } from "../src/frontend/pages/WaitingRoom";
+import { deriveToolHistory } from "../src/frontend/pages/WaitingRoom";
 
-describe("deriveActiveTools", () => {
+describe("deriveToolHistory", () => {
   test("returns empty map for undefined progress", () => {
-    const map = deriveActiveTools(undefined);
+    const map = deriveToolHistory(undefined);
     expect(map.size).toBe(0);
   });
 
   test("returns empty map for empty array", () => {
-    const map = deriveActiveTools([]);
+    const map = deriveToolHistory([]);
     expect(map.size).toBe(0);
   });
 
-  test("sets active tool from tool_call event", () => {
-    const map = deriveActiveTools([
+  test("creates running entry from tool_call event", () => {
+    const map = deriveToolHistory([
       {
         time: "2026-01-01T00:00:00Z",
         message: "Cardiologist: Searching PubMed → chest pain",
@@ -1913,90 +2021,168 @@ describe("deriveActiveTools", () => {
         toolArgs: "chest pain",
       },
     ]);
-    const tool = map.get("cardiologist");
-    expect(tool).toBeTruthy();
-    expect(tool?.toolName).toBe("pubmed-search");
-    expect(tool?.args).toBe("chest pain");
+    const history = map.get("cardiologist");
+    expect(history).toBeTruthy();
+    expect(history!.length).toBe(1);
+    expect(history![0].toolName).toBe("pubmed-search");
+    expect(history![0].toolArgs).toBe("chest pain");
+    expect(history![0].status).toBe("running");
   });
 
-  test("last tool_call wins for same agent", () => {
-    const map = deriveActiveTools([
+  test("updates running entry to success on tool_result", () => {
+    const map = deriveToolHistory([
       {
         time: "2026-01-01T00:00:00Z",
-        message: "Cardiologist: Searching PubMed → query A",
+        message: "Cardiologist: Searching PubMed → chest pain",
         eventType: "tool_call",
         agentId: "cardiologist",
         toolName: "pubmed-search",
-        toolArgs: "query A",
+        toolArgs: "chest pain",
       },
       {
         time: "2026-01-01T00:00:01Z",
-        message: "Cardiologist: Checking interactions → drug + other",
+        message: "Cardiologist: Searching PubMed completed",
+        eventType: "tool_result",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+        success: true,
+        durationMs: 1200,
+        resultSummary: "15 results for 'chest pain'",
+      },
+    ]);
+    const history = map.get("cardiologist");
+    expect(history!.length).toBe(1);
+    expect(history![0].status).toBe("success");
+    expect(history![0].durationMs).toBe(1200);
+    expect(history![0].resultSummary).toBe("15 results for 'chest pain'");
+  });
+
+  test("updates running entry to error on failed tool_result", () => {
+    const map = deriveToolHistory([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Neurologist: Checking interactions → aspirin + warfarin",
+        eventType: "tool_call",
+        agentId: "neurologist",
+        toolName: "drug-interaction",
+        toolArgs: "aspirin + warfarin",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Neurologist: Checking interactions failed",
+        eventType: "tool_result",
+        agentId: "neurologist",
+        toolName: "drug-interaction",
+        success: false,
+        durationMs: 500,
+        resultSummary: "API error",
+      },
+    ]);
+    const history = map.get("neurologist");
+    expect(history!.length).toBe(1);
+    expect(history![0].status).toBe("error");
+    expect(history![0].durationMs).toBe(500);
+  });
+
+  test("tracks multiple tools per specialist", () => {
+    const map = deriveToolHistory([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Search 1",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+        toolArgs: "chest pain",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Cardiologist: Result 1",
+        eventType: "tool_result",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+        success: true,
+        durationMs: 1000,
+        resultSummary: "10 results",
+      },
+      {
+        time: "2026-01-01T00:00:02Z",
+        message: "Cardiologist: Search 2",
         eventType: "tool_call",
         agentId: "cardiologist",
         toolName: "drug-interaction",
-        toolArgs: "drug + other",
+        toolArgs: "aspirin + clopidogrel",
+      },
+      {
+        time: "2026-01-01T00:00:03Z",
+        message: "Cardiologist: Result 2",
+        eventType: "tool_result",
+        agentId: "cardiologist",
+        toolName: "drug-interaction",
+        success: true,
+        durationMs: 800,
+        resultSummary: "2 interactions found",
       },
     ]);
-    const tool = map.get("cardiologist");
-    expect(tool?.toolName).toBe("drug-interaction");
+    const history = map.get("cardiologist");
+    expect(history!.length).toBe(2);
+    expect(history![0].status).toBe("success");
+    expect(history![0].toolName).toBe("pubmed-search");
+    expect(history![1].status).toBe("success");
+    expect(history![1].toolName).toBe("drug-interaction");
   });
 
-  test("specialist_complete clears active tool", () => {
-    const map = deriveActiveTools([
-      {
-        time: "2026-01-01T00:00:00Z",
-        message: "Cardiologist: Searching PubMed → chest pain",
-        eventType: "tool_call",
-        agentId: "cardiologist",
-        toolName: "pubmed-search",
-        toolArgs: "chest pain",
-      },
-      {
-        time: "2026-01-01T00:00:01Z",
-        message: "Received analysis from cardiologist",
-        eventType: "specialist_complete",
-        agentId: "cardiologist",
-      },
-    ]);
-    expect(map.has("cardiologist")).toBe(false);
-  });
-
-  test("tracks multiple agents independently", () => {
-    const map = deriveActiveTools([
-      {
-        time: "2026-01-01T00:00:00Z",
-        message: "Cardiologist: Searching PubMed → chest pain",
-        eventType: "tool_call",
-        agentId: "cardiologist",
-        toolName: "pubmed-search",
-        toolArgs: "chest pain",
-      },
-      {
-        time: "2026-01-01T00:00:01Z",
-        message: "Neurologist: Searching PubMed → migraine",
-        eventType: "tool_call",
-        agentId: "neurologist",
-        toolName: "pubmed-search",
-        toolArgs: "migraine",
-      },
-    ]);
-    expect(map.get("cardiologist")?.args).toBe("chest pain");
-    expect(map.get("neurologist")?.args).toBe("migraine");
-  });
-
-  test("toolArgs defaults to empty string when null", () => {
-    const map = deriveActiveTools([
+  test("tracks multiple specialists independently", () => {
+    const map = deriveToolHistory([
       {
         time: "2026-01-01T00:00:00Z",
         message: "Cardiologist: Searching PubMed",
         eventType: "tool_call",
         agentId: "cardiologist",
         toolName: "pubmed-search",
-        toolArgs: null,
+        toolArgs: "chest pain",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Neurologist: Searching PubMed",
+        eventType: "tool_call",
+        agentId: "neurologist",
+        toolName: "pubmed-search",
+        toolArgs: "migraine",
       },
     ]);
-    expect(map.get("cardiologist")?.args).toBe("");
+    expect(map.get("cardiologist")!.length).toBe(1);
+    expect(map.get("neurologist")!.length).toBe(1);
+    expect(map.get("cardiologist")![0].toolArgs).toBe("chest pain");
+    expect(map.get("neurologist")![0].toolArgs).toBe("migraine");
+  });
+
+  test("toolArgs defaults to null when not provided", () => {
+    const map = deriveToolHistory([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Searching PubMed",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+      },
+    ]);
+    const history = map.get("cardiologist");
+    expect(history![0].toolArgs).toBeNull();
+  });
+
+  test("leaves status as running when no matching tool_result arrives", () => {
+    const map = deriveToolHistory([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Searching PubMed",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "pubmed-search",
+        toolArgs: "chest pain",
+      },
+    ]);
+    expect(map.get("cardiologist")![0].status).toBe("running");
+    expect(map.get("cardiologist")![0].durationMs).toBeUndefined();
   });
 });
 
@@ -2007,11 +2193,11 @@ describe("deriveActiveTools", () => {
 // This covers the critical visual differentiation between tool-call entries
 // (indented, muted) and regular entries (brighter, full width).
 describe("WaitingRoom — progress log class logic", () => {
-  function getLogEntryClasses(
-    eventType: string | undefined,
-  ): { indent: string; color: string } {
-    const isTool =
-      eventType === "tool_call" || eventType === "tool_result";
+  function getLogEntryClasses(eventType: string | undefined): {
+    indent: string;
+    color: string;
+  } {
+    const isTool = eventType === "tool_call" || eventType === "tool_result";
     return {
       indent: isTool ? "ml-4" : "",
       color: isTool ? "text-cyan-400/70" : "text-cyan-300",

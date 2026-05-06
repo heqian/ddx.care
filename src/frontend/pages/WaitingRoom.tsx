@@ -3,6 +3,7 @@ import { ArrowPathIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Spinner } from "../components/ui/Spinner";
 import { AgentGrid } from "../components/agents/AgentGrid";
 import type { SpecialistStatus } from "../components/agents/AgentStatusCard";
+import type { ToolHistoryEntry } from "../api/types";
 import { useJobStream } from "../hooks/useJobStream";
 import { cancelDiagnosis, getAgents } from "../api/client";
 import type { AgentInfo, StatusResponse, ProgressEvent } from "../api/types";
@@ -51,22 +52,40 @@ export function deriveSpecialistStatuses(
   return map;
 }
 
-export function deriveActiveTools(
+export function deriveToolHistory(
   progress: ProgressEvent[] | undefined,
-): Map<string, { toolName: string; args: string }> {
-  const map = new Map<string, { toolName: string; args: string }>();
+): Map<string, ToolHistoryEntry[]> {
+  const map = new Map<string, ToolHistoryEntry[]>();
   if (!progress) return map;
 
   for (const p of progress) {
-    if (p.eventType === "specialist_complete" && p.agentId) {
-      map.delete(p.agentId);
-      continue;
-    }
     if (p.eventType === "tool_call" && p.agentId && p.toolName) {
-      map.set(p.agentId, {
+      const history = map.get(p.agentId) ?? [];
+      history.push({
         toolName: p.toolName,
-        args: p.toolArgs || "",
+        toolArgs: p.toolArgs ?? null,
+        status: "running",
       });
+      map.set(p.agentId, history);
+    }
+    if (p.eventType === "tool_result" && p.agentId && p.toolName) {
+      const history = map.get(p.agentId);
+      if (history) {
+        const runningIdx = [...history]
+          .reverse()
+          .findIndex(
+            (e) => e.toolName === p.toolName && e.status === "running",
+          );
+        if (runningIdx !== -1) {
+          const actualIdx = history.length - 1 - runningIdx;
+          history[actualIdx] = {
+            ...history[actualIdx],
+            status: p.success === false ? "error" : "success",
+            durationMs: p.durationMs,
+            resultSummary: p.resultSummary,
+          };
+        }
+      }
     }
   }
   return map;
@@ -110,8 +129,8 @@ export function WaitingRoom({
     [status?.progress],
   );
 
-  const activeTools = useMemo(
-    () => deriveActiveTools(status?.progress),
+  const toolHistory = useMemo(
+    () => deriveToolHistory(status?.progress),
     [status?.progress],
   );
 
@@ -161,19 +180,34 @@ export function WaitingRoom({
             </div>
           )}
           {status?.progress?.map((p, i) => {
-            const isTool =
-              p.eventType === "tool_call" || p.eventType === "tool_result";
+            const isToolCall = p.eventType === "tool_call";
+            const isToolResult = p.eventType === "tool_result";
+            const isTool = isToolCall || isToolResult;
             const indent = isTool ? "ml-4" : "";
-            const color = isTool ? "text-cyan-400/70" : "text-cyan-300";
+            const baseColor = isTool ? "text-cyan-400/70" : "text-cyan-300";
+
+            let statusIcon = "";
+            let durationText = "";
+            if (isToolResult) {
+              statusIcon = p.success ? " ✓" : " ✗";
+              if (p.durationMs !== undefined) {
+                durationText = ` (${(p.durationMs / 1000).toFixed(1)}s)`;
+              }
+            } else if (isToolCall) {
+              statusIcon = " ⟳";
+            }
+
             return (
               <div
                 key={i}
-                className={`${color} opacity-90 break-words ${indent}`}
+                className={`${baseColor} opacity-90 break-words ${indent}`}
               >
                 <span className="text-slate-500 text-xs mr-2">
                   [{new Date(p.time).toLocaleTimeString()}]
                 </span>
                 {p.message}
+                {statusIcon}
+                {durationText}
               </div>
             );
           })}
@@ -203,7 +237,7 @@ export function WaitingRoom({
           <AgentGrid
             agents={agents}
             specialistStatuses={specialistStatuses}
-            activeTools={activeTools}
+            toolHistory={toolHistory}
           />
         </div>
       )}

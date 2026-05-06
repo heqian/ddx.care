@@ -330,7 +330,9 @@ test.describe("Full diagnosis flow", () => {
     ).toBeVisible();
   });
 
-  test("tool-call progress entries appear in waiting room", async ({ page }) => {
+  test("tool-call and tool-result progress entries appear in waiting room", async ({
+    page,
+  }) => {
     // Fill the form
     await page.getByPlaceholder("e.g., 45").fill("60");
     await page
@@ -342,9 +344,7 @@ test.describe("Full diagnosis flow", () => {
     await page
       .getByPlaceholder(/Doctor-patient encounter/)
       .fill("Dizzy spells");
-    await page
-      .getByPlaceholder(/Blood panels, urinalysis/)
-      .fill("BP 160/100");
+    await page.getByPlaceholder(/Blood panels, urinalysis/).fill("BP 160/100");
 
     await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
 
@@ -358,11 +358,25 @@ test.describe("Full diagnosis flow", () => {
     // Tool-call progress entries should appear in the progress log
     // The mock emits "cardiologist: Searching PubMed → hypertensive urgency guidelines"
     const progressLog = page.locator('[role="log"]');
-    await expect(progressLog.getByText("Searching PubMed").first()).toBeVisible({
-      timeout: 10_000,
+    await expect(progressLog.getByText("Searching PubMed").first()).toBeVisible(
+      {
+        timeout: 10_000,
+      },
+    );
+
+    // Tool-call entries should have the ⟳ (running) indicator
+    await expect(
+      progressLog.getByText(/Searching PubMed.*⟳/).first(),
+    ).toBeVisible({
+      timeout: 5_000,
     });
 
-    // Indented tool-call entries should have the muted color class
+    // Tool-result entries should appear with ✓ (success) indicator and duration
+    await expect(progressLog.getByText(/completed.*✓/).first()).toBeVisible({
+      timeout: 5_000,
+    });
+
+    // Indented tool entries should have the muted color class
     const indentedEntry = progressLog.locator(".ml-4").first();
     await expect(indentedEntry).toBeVisible({ timeout: 5_000 });
 
@@ -372,6 +386,98 @@ test.describe("Full diagnosis flow", () => {
     ).toBeVisible({
       timeout: 15_000,
     });
+  });
+
+  test("tool-call and tool-result progress events have correct structure", async ({
+    page,
+  }) => {
+    // Fill and submit a case
+    await page.getByPlaceholder("e.g., 45").fill("55");
+    await page
+      .getByPlaceholder(/Chest pain, shortness of breath/)
+      .fill("Chest pain");
+    await page
+      .getByPlaceholder(/Past diagnoses, medications/)
+      .fill("Hypertension");
+    await page.getByPlaceholder(/Blood panels, urinalysis/).fill("BP 180/110");
+
+    await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
+
+    // Wait for completion
+    await expect(
+      page.getByRole("heading", { name: "Differential Diagnosis" }),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // Extract jobId from the URL (format: /results/<jobId>)
+    const url = page.url();
+    const jobId = url.split("/results/")[1]?.split(/[?/]/)[0];
+    expect(jobId).toBeTruthy();
+
+    // Fetch the completed job status via API to inspect progress event structure
+    const baseUrl = `http://localhost:${process.env.PORT || 3999}`;
+    const statusRes = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+    expect(statusRes.ok()).toBe(true);
+    const statusData = await statusRes.json();
+    expect(statusData.status).toBe("completed");
+
+    const progress = statusData.progress;
+    expect(progress).toBeTruthy();
+
+    // Verify tool_call events exist
+    const toolCalls = progress.filter(
+      (e: { eventType: string }) => e.eventType === "tool_call",
+    );
+    expect(toolCalls.length).toBeGreaterThan(0);
+
+    // Verify tool_result events exist
+    const toolResults = progress.filter(
+      (e: { eventType: string }) => e.eventType === "tool_result",
+    );
+    expect(toolResults.length).toBeGreaterThan(0);
+
+    // Every tool_result should have success, toolName, and agentId
+    for (const tr of toolResults) {
+      expect(typeof tr.success).toBe("boolean");
+      expect(typeof tr.toolName).toBe("string");
+      expect(typeof tr.agentId).toBe("string");
+    }
+
+    // Successful tool_results should have durationMs >= 0
+    for (const tr of toolResults) {
+      if (tr.success) {
+        expect(typeof tr.durationMs).toBe("number");
+        expect(tr.durationMs).toBeGreaterThanOrEqual(0);
+      }
+    }
+
+    // At least some tool_results should have a resultSummary
+    const withSummary = toolResults.filter(
+      (tr: { resultSummary: unknown }) =>
+        tr.resultSummary !== null && tr.resultSummary !== undefined,
+    );
+    expect(withSummary.length).toBeGreaterThan(0);
+
+    // Specialist tool calls should exist (not just CMO)
+    const specialistCalls = toolCalls.filter(
+      (tc: { agentId: string }) => tc.agentId !== "chiefMedicalOfficer",
+    );
+    expect(specialistCalls.length).toBeGreaterThan(0);
+
+    // tool_call and tool_result counts should pair per specialist
+    const specialistIds = new Set(
+      toolCalls.map((tc: { agentId: string }) => tc.agentId),
+    );
+    for (const id of specialistIds) {
+      const calls = toolCalls.filter(
+        (tc: { agentId: string }) => tc.agentId === id,
+      );
+      const results = toolResults.filter(
+        (tr: { agentId: string }) => tr.agentId === id,
+      );
+      expect(results.length).toBeGreaterThanOrEqual(calls.length * 0.5);
+    }
   });
 
   test("SPA fallback serves the app for unknown routes", async ({ page }) => {

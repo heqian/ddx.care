@@ -28,6 +28,16 @@ export interface DiagnosisResult {
   disclaimer: string;
 }
 
+export type ToolStatus = "running" | "success" | "error";
+
+export interface ToolHistoryEntry {
+  toolName: string;
+  toolArgs: string | null;
+  status: ToolStatus;
+  durationMs?: number;
+  resultSummary?: string | null;
+}
+
 export interface ProgressEvent {
   time: string;
   message: string;
@@ -35,6 +45,9 @@ export interface ProgressEvent {
   agentId?: string;
   toolName?: string;
   toolArgs?: string | null;
+  success?: boolean;
+  durationMs?: number;
+  resultSummary?: string | null;
 }
 
 export interface StatusResponse {

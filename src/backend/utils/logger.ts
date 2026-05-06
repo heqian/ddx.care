@@ -114,4 +114,36 @@ export const logger = {
       success: String(success),
     });
   },
+
+  toolCall(
+    agentId: string,
+    jobId: string,
+    toolName: string,
+    toolArgs: string | null,
+  ): void {
+    this.info("tool_call", {
+      agentId,
+      jobId,
+      toolName,
+      toolArgs,
+    });
+  },
+
+  toolResult(
+    agentId: string,
+    jobId: string,
+    toolName: string,
+    success: boolean,
+    durationMs: number,
+    resultSummary: string | null,
+  ): void {
+    this.info("tool_result", {
+      agentId,
+      jobId,
+      toolName,
+      success: String(success),
+      durationMs,
+      resultSummary,
+    });
+  },
 };

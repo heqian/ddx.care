@@ -21,6 +21,7 @@ import { logger } from "../utils/logger";
 import * as abortStore from "../utils/abort-controller-store";
 import { agentList } from "../agents";
 import { formatToolLabel } from "../tools/tool-labels";
+import { createStepEventHandler } from "./on-step-finish";
 
 const specialistNameMap = new Map<string, string>();
 for (const agent of agentList) {
@@ -295,7 +296,9 @@ export function buildCmoContext(
 export async function mockDiagnosis(
   _patientSummary: string,
   emitProgress: (msg: string | ProgressEvent) => void,
+  options?: { stepDelayMs?: number },
 ): Promise<{ diagnosisReport: DiagnosisReport }> {
+  const stepDelay = options?.stepDelayMs ?? 200;
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const emit = (
     eventType: ProgressEventType,
@@ -314,7 +317,7 @@ export async function mockDiagnosis(
     "round_start",
     "Round 1 Analysis: Asking CMO for decision on needed specialists...",
   );
-  await delay(100);
+  await delay(stepDelay * 1.5);
 
   const specialists = [
     { id: "cardiologist", hasContext: false },
@@ -327,7 +330,7 @@ export async function mockDiagnosis(
       `Calling specialist ${spec.id}${spec.hasContext ? " (with CMO context directive)" : ""}...`,
       { agentId: spec.id },
     );
-    await delay(40);
+    await delay(stepDelay);
     emit(
       "tool_call",
       `${spec.id}: Searching PubMed → hypertensive urgency guidelines`,
@@ -337,23 +340,32 @@ export async function mockDiagnosis(
         toolArgs: "hypertensive urgency guidelines",
       },
     );
-    await delay(40);
+    await delay(stepDelay * 1.5);
+    emit("tool_result", `${spec.id}: Searching PubMed completed`, {
+      agentId: spec.id,
+      toolName: "pubmed-search",
+      success: true,
+      durationMs: 1200,
+      resultSummary: "15 results for 'hypertensive urgency guidelines'",
+    });
+    await delay(stepDelay * 0.5);
     emit("specialist_complete", `Received analysis from ${spec.id}`, {
       agentId: spec.id,
     });
+    await delay(stepDelay);
   }
 
   emit(
     "round_start",
     "Round 2 Analysis: CMO sharing prior findings with additional specialists...",
   );
-  await delay(100);
+  await delay(stepDelay * 1.5);
 
   emit(
     "cmo_final",
     "CMO has determined no further consultations are needed and finalized the report.",
   );
-  await delay(50);
+  await delay(stepDelay);
 
   return {
     diagnosisReport: {
@@ -451,64 +463,149 @@ export async function generateFinalReport(opts: {
     extra?: Partial<ProgressEvent>,
   ) => void;
   logContext: Record<string, unknown>;
+  jobId: string;
 }): Promise<DiagnosisReport> {
-  const { cmo, prompt, builtContextHistory, abortSignal, emit, logContext } =
-    opts;
-
-  const finalResponse = await withRetry(
-    () =>
-      cmo.generate(prompt, {
-        structuredOutput: {
-          jsonPromptInjection: true,
-          schema: diagnosisReportSchema,
-        },
-        abortSignal,
-      }),
-    AGENT_GENERATE_MAX_RETRIES,
-    AGENT_GENERATE_RETRY_BASE_DELAY,
+  const {
+    cmo,
+    prompt,
+    builtContextHistory,
     abortSignal,
+    emit,
+    logContext,
+    jobId,
+  } = opts;
+
+  const cmoOnStepFinish = createStepEventHandler(
+    "chiefMedicalOfficer",
+    jobId,
+    emit,
   );
 
-  const validated = diagnosisReportSchema.safeParse(finalResponse.object);
-  if (validated.success) {
-    return validated.data;
+  let finalResponse: Awaited<ReturnType<typeof cmo.generate>> | undefined;
+  try {
+    finalResponse = await withRetry(
+      () =>
+        cmo.generate(prompt, {
+          structuredOutput: {
+            jsonPromptInjection: true,
+            schema: diagnosisReportSchema,
+          },
+          abortSignal,
+          onStepFinish: cmoOnStepFinish,
+        }),
+      AGENT_GENERATE_MAX_RETRIES,
+      AGENT_GENERATE_RETRY_BASE_DELAY,
+      abortSignal,
+    );
+  } catch (e) {
+    if (
+      (e instanceof Error && e.name === "AbortError") ||
+      abortSignal.aborted
+    ) {
+      throw e;
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.warn("report_structured_output_failed", {
+      ...logContext,
+      error: msg,
+    });
+    emit(
+      "general",
+      `Final report structured output validation failed, retrying with correction prompt...`,
+    );
   }
 
-  const zodErrors = validated.error.issues
-    .map((i) => `${i.path.join(".")}: ${i.message}`)
-    .join("; ");
-  logger.warn("report_validation_failed", {
-    ...logContext,
-    errors: zodErrors,
-  });
+  if (finalResponse?.object) {
+    const validated = diagnosisReportSchema.safeParse(finalResponse.object);
+    if (validated.success) {
+      return validated.data;
+    }
+
+    const zodErrors = validated.error.issues
+      .map((i) => `${i.path.join(".")}: ${i.message}`)
+      .join("; ");
+    logger.warn("report_validation_failed", {
+      ...logContext,
+      errors: zodErrors,
+    });
+    emit(
+      "general",
+      `Final report validation failed, retrying with correction prompt...`,
+    );
+
+    const correctionPrompt = `The previous response did not match the expected schema. Errors: ${zodErrors}. Please provide the response again, ensuring it conforms to the schema.\n\n${builtContextHistory}`;
+    const retryResponse = await withRetry(
+      () =>
+        cmo.generate(correctionPrompt, {
+          structuredOutput: {
+            jsonPromptInjection: true,
+            schema: diagnosisReportSchema,
+          },
+          abortSignal,
+          onStepFinish: cmoOnStepFinish,
+        }),
+      AGENT_GENERATE_MAX_RETRIES,
+      AGENT_GENERATE_RETRY_BASE_DELAY,
+      abortSignal,
+    );
+
+    const retryValidated = diagnosisReportSchema.safeParse(
+      retryResponse.object,
+    );
+    if (retryValidated.success) {
+      return retryValidated.data;
+    }
+
+    logger.warn("report_validation_retry_failed", logContext);
+    emit("general", `Retry also failed. Using raw output.`);
+    return retryResponse.object as DiagnosisReport;
+  }
+
+  // Structured output threw — fall back to generating without structured output
+  logger.warn("report_fallback_no_structured_output", logContext);
   emit(
     "general",
-    `Final report validation failed, retrying with correction prompt...`,
+    `Structured output unavailable, generating report without schema constraints...`,
   );
 
-  const correctionPrompt = `The previous response did not match the expected schema. Errors: ${zodErrors}. Please provide the response again, ensuring it conforms to the schema.\n\n${builtContextHistory}`;
-  const retryResponse = await withRetry(
+  const fallbackResponse = await withRetry(
     () =>
-      cmo.generate(correctionPrompt, {
-        structuredOutput: {
-          jsonPromptInjection: true,
-          schema: diagnosisReportSchema,
+      cmo.generate(
+        `${prompt}\n\nYou MUST respond with a valid JSON object matching this schema:\n${JSON.stringify(diagnosisReportSchema.shape, null, 2)}`,
+        {
+          abortSignal,
+          onStepFinish: cmoOnStepFinish,
         },
-        abortSignal,
-      }),
+      ),
     AGENT_GENERATE_MAX_RETRIES,
     AGENT_GENERATE_RETRY_BASE_DELAY,
     abortSignal,
   );
 
-  const retryValidated = diagnosisReportSchema.safeParse(retryResponse.object);
-  if (retryValidated.success) {
-    return retryValidated.data;
+  const fallbackText = fallbackResponse.text;
+  if (fallbackText) {
+    try {
+      const jsonMatch = fallbackText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const validated = diagnosisReportSchema.safeParse(parsed);
+        if (validated.success) {
+          return validated.data;
+        }
+      }
+    } catch {
+      // Fall through to final fallback
+    }
   }
 
-  logger.warn("report_validation_retry_failed", logContext);
-  emit("general", `Retry also failed. Using raw output.`);
-  return retryResponse.object as DiagnosisReport;
+  // Last resort: return the object if it exists, or throw
+  if (fallbackResponse.object) {
+    return fallbackResponse.object as DiagnosisReport;
+  }
+
+  throw new Error(
+    "Failed to generate a valid diagnosis report after all retries and fallbacks",
+  );
 }
 
 export const runDiagnosis = createStep({
@@ -598,51 +695,86 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
           "round_start",
           `Round ${round} Analysis: Asking CMO for decision on needed specialists...`,
         );
-        const cmoDecision = await withRetry(
-          () =>
-            cmo.generate(prompt, {
-              structuredOutput: {
-                jsonPromptInjection: true,
-                schema: z.object({
-                  specialistsToConsult: z
-                    .array(
-                      z.object({
-                        id: z
-                          .string()
-                          .describe(
-                            "Specialist ID (e.g. 'generalist', 'cardiologist')",
-                          ),
-                        contextDirective: z
-                          .string()
-                          .optional()
-                          .describe(
-                            "Brief instruction telling this specialist what prior findings to focus on. 1-3 sentences. Omit if no relevant prior findings exist.",
-                          ),
-                      }),
-                    )
-                    .describe(
-                      "List of specialists to consult this round. Empty if no more needed.",
-                    ),
-                  isFinal: z
-                    .boolean()
-                    .describe(
-                      "True if you are ready to produce the final report.",
-                    ),
-                  finalReport: diagnosisReportSchema
-                    .optional()
-                    .describe(
-                      "The final comprehensive differential diagnosis report. Only required if isFinal is true.",
-                    ),
-                }),
-              },
-              abortSignal: abortController.signal,
-            }),
-          AGENT_GENERATE_MAX_RETRIES,
-          AGENT_GENERATE_RETRY_BASE_DELAY,
-          abortController.signal,
+        const cmoOnStepFinish = createStepEventHandler(
+          "chiefMedicalOfficer",
+          runId ?? "unknown",
+          emit,
         );
+        let cmoDecision: Awaited<ReturnType<typeof cmo.generate>> | undefined;
+        try {
+          cmoDecision = await withRetry(
+            () =>
+              cmo.generate(prompt, {
+                structuredOutput: {
+                  jsonPromptInjection: true,
+                  schema: z.object({
+                    specialistsToConsult: z
+                      .array(
+                        z.object({
+                          id: z
+                            .string()
+                            .describe(
+                              "Specialist ID (e.g. 'generalist', 'cardiologist')",
+                            ),
+                          contextDirective: z
+                            .string()
+                            .optional()
+                            .describe(
+                              "Brief instruction telling this specialist what prior findings to focus on. 1-3 sentences. Omit if no relevant prior findings exist.",
+                            ),
+                        }),
+                      )
+                      .describe(
+                        "List of specialists to consult this round. Empty if no more needed.",
+                      ),
+                    isFinal: z
+                      .boolean()
+                      .describe(
+                        "True if you are ready to produce the final report.",
+                      ),
+                    finalReport: diagnosisReportSchema
+                      .optional()
+                      .describe(
+                        "The final comprehensive differential diagnosis report. Only required if isFinal is true.",
+                      ),
+                  }),
+                },
+                abortSignal: abortController.signal,
+                onStepFinish: cmoOnStepFinish,
+              }),
+            AGENT_GENERATE_MAX_RETRIES,
+            AGENT_GENERATE_RETRY_BASE_DELAY,
+            abortController.signal,
+          );
+        } catch (e) {
+          if (
+            (e instanceof Error && e.name === "AbortError") ||
+            abortController.signal.aborted
+          ) {
+            throw e;
+          }
+          const msg = e instanceof Error ? e.message : String(e);
+          logger.warn("cmo_structured_output_failed", {
+            jobId: runId,
+            round,
+            error: msg,
+          });
+          emit(
+            "general",
+            `CMO structured output validation failed in round ${round}, retrying round...`,
+          );
+          parseFailureCount++;
+          if (parseFailureCount > MAX_PARSE_FAILURES) {
+            emit(
+              "general",
+              `CMO returned unparseable responses ${parseFailureCount} times. Forcing final report generation.`,
+            );
+            break;
+          }
+          continue;
+        }
 
-        if (!cmoDecision.object) {
+        if (!cmoDecision?.object) {
           parseFailureCount++;
           if (parseFailureCount > MAX_PARSE_FAILURES) {
             emit(
@@ -703,6 +835,7 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
             abortSignal: abortController.signal,
             emit,
             logContext: { jobId: runId, round },
+            jobId: runId ?? "unknown",
           });
           break;
         }
@@ -739,41 +872,16 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
                   : `Please analyze this case from the perspective of a ${specId}:\n\n${patientSummary}`;
 
                 const specStart = Date.now();
+                const specOnStepFinish = createStepEventHandler(
+                  specId,
+                  runId ?? "unknown",
+                  emit,
+                );
                 const specResponse = await withRetry(
                   () =>
                     specAgent.generate(specPrompt, {
                       abortSignal: abortController.signal,
-                      onStepFinish: (step) => {
-                        for (const tc of step.toolCalls) {
-                          const args = formatToolArgs(
-                            tc.payload.toolName,
-                            tc.payload.args as Record<string, unknown>,
-                          );
-                          // formatToolArgs returns "" for unknown args → coerced to null
-                          emit(
-                            "tool_call",
-                            `${specId}: ${formatToolLabel(tc.payload.toolName)}${args ? ` → ${args}` : ""}`,
-                            {
-                              agentId: specId,
-                              toolName: tc.payload.toolName,
-                              toolArgs: args || null,
-                            },
-                          );
-                        }
-                        for (const tr of step.toolResults) {
-                          if (tr.payload.isError) {
-                            emit(
-                              "tool_result",
-                              `${specId}: ${formatToolLabel(tr.payload.toolName)} failed`,
-                              {
-                                agentId: specId,
-                                toolName: tr.payload.toolName,
-                                toolArgs: "error",
-                              },
-                            );
-                          }
-                        }
-                      },
+                      onStepFinish: specOnStepFinish,
                     }),
                   AGENT_GENERATE_MAX_RETRIES,
                   AGENT_GENERATE_RETRY_BASE_DELAY,
@@ -835,6 +943,7 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
           abortSignal: abortController.signal,
           emit,
           logContext: { jobId: runId, context: "max_rounds" },
+          jobId: runId ?? "unknown",
         });
       }
     };

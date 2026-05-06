@@ -62,12 +62,80 @@ Tool-call entries in the progress log SHALL be visually distinct from general pr
 
 ### Requirement: Tool names map to human-readable labels
 
-Each tool ID used in progress events SHALL map to a short, user-facing label via a static lookup table. Labels SHALL use present-tense action phrases suitable for UI display.
+Each tool ID used in progress events SHALL map to a short, user-facing label via a static lookup table. Labels SHALL use present-tense action phrases suitable for UI display. The lookup table SHALL include labels for all 24 tools (16 existing + 8 new).
 
 #### Scenario: Known tool maps to label
 - **WHEN** `toolName` is `"pubmed-search"`
 - **THEN** the human-readable label is `"Searching PubMed"`
 
+#### Scenario: New Orphadata tool maps to label
+- **WHEN** `toolName` is `"rare-disease-search"`
+- **THEN** the human-readable label is `"Searching rare diseases"`
+
+#### Scenario: New HPO tool maps to label
+- **WHEN** `toolName` is `"hpo-term-search"`
+- **THEN** the human-readable label is `"Searching phenotype terms"`
+
+#### Scenario: New LOINC tool maps to label
+- **WHEN** `toolName` is `"loinc-test-lookup"`
+- **THEN** the human-readable label is `"Looking up lab test"`
+
+#### Scenario: New drug shortages tool maps to label
+- **WHEN** `toolName` is `"drug-shortages"`
+- **THEN** the human-readable label is `"Checking drug shortages"`
+
+#### Scenario: New food adverse events tool maps to label
+- **WHEN** `toolName` is `"food-adverse-events"`
+- **THEN** the human-readable label is `"Searching food adverse events"`
+
+#### Scenario: New device adverse events tool maps to label
+- **WHEN** `toolName` is `"device-adverse-events"`
+- **THEN** the human-readable label is `"Searching device adverse events"`
+
 #### Scenario: Unknown tool uses fallback
 - **WHEN** `toolName` is an unrecognized ID not in the label map
 - **THEN** the label falls back to `"Running {toolName}"` with the raw tool ID
+
+### Requirement: All tools are available to all specialist agents and the CMO
+
+Every tool registered in the system SHALL be available to all 36 specialist agents and the Chief Medical Officer agent without per-specialist restrictions. The `getToolsForSpecialist(id)` function SHALL return the same set of tools regardless of the specialist ID passed.
+
+#### Scenario: Geneticist accesses drug interaction tool
+- **WHEN** the geneticist agent is initialized
+- **THEN** it has access to `drug-interaction` tool alongside `omim-search` and all other tools
+
+#### Scenario: All specialists get new tools
+- **WHEN** any specialist agent is initialized
+- **THEN** it has access to all 8 new tools (rare-disease-search, rare-disease-genes, rare-disease-phenotypes, hpo-term-search, loinc-test-lookup, drug-shortages, food-adverse-events, device-adverse-events) in addition to all 16 existing tools
+
+#### Scenario: CMO has all tools
+- **WHEN** the CMO agent is initialized
+- **THEN** it has access to all 24 tools for orchestrating specialist consultations
+
+### Requirement: WebSocket reconnection with status check
+
+The `useJobStream` hook SHALL attempt up to 5 WebSocket reconnections with exponential backoff (1s, 2s, 4s, 8s, 16s). Before each reconnection attempt, the hook SHALL poll `/v1/status/:jobId` to check if the job has already reached a terminal state. If the job is `completed` or `failed`, the hook SHALL set the result directly and skip reconnection.
+
+#### Scenario: Reconnection after brief network drop
+- **WHEN** the WebSocket closes abnormally (code !== 1000) on the 2nd attempt
+- **THEN** the hook waits 2 seconds, polls the job status, and if the job is still pending, reconnects
+
+#### Scenario: Job completed during network interruption
+- **WHEN** the WebSocket closes and the job has already completed
+- **THEN** the hook polls `/v1/status/:jobId`, receives the completed result, sets it in state, and does not attempt reconnection
+
+#### Scenario: All reconnection attempts exhausted
+- **WHEN** 5 reconnection attempts all fail
+- **THEN** the hook falls back to HTTP polling every 3 seconds as before
+
+### Requirement: Failed deep-link result handled in UI
+
+When navigating directly to `/results/:jobId` for a job that has `status: "failed"`, the frontend SHALL display the error message from the job's `error` field instead of showing a perpetual loading spinner.
+
+#### Scenario: Deep link to failed job
+- **WHEN** a user navigates to `/results/<jobId>` and the job status is `"failed"`
+- **THEN** the UI shows the error message (e.g., "Cancelled by user" or the failure reason) with a "New Case" button
+
+#### Scenario: Deep link to pending job
+- **WHEN** a user navigates to `/results/<jobId>` and the job is still `"pending"`
+- **THEN** the UI shows a loading spinner and subscribes to WebSocket updates as before

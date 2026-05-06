@@ -87,7 +87,7 @@ Shared utilities:
 #### Workflows (`src/backend/workflows/`)
 
 - `diagnostic-workflow.ts` — Two-step Mastra workflow: `runDiagnosis` → `formatReport`
-  - **runDiagnosis**: Multi-round CMO supervisor loop. The CMO decides which specialists to consult per round, delegates via `limitConcurrency` (max 3 concurrent), and uses `withRetry` (3 attempts, exponential backoff). Continues up to `MAX_DIAGNOSIS_ROUNDS` (default 3) or until the CMO declares `isFinal`. Timeout: 900s (15 min). Supports agent-to-agent context sharing via `SPECIALIST_CONTEXT_MODE` — the CMO can provide per-specialist "context directives" so specialists see prior consultation findings.
+  - **runDiagnosis**: Multi-round CMO supervisor loop. The CMO decides which specialists to consult per round, delegates via `limitConcurrency` (default: max 1 concurrent), and uses `withRetry` (3 attempts, exponential backoff). Continues up to `MAX_DIAGNOSIS_ROUNDS` (default 3) or until the CMO declares `isFinal`. Timeout: 900s (15 min). Supports agent-to-agent context sharing via `SPECIALIST_CONTEXT_MODE` — the CMO can provide per-specialist "context directives" so specialists see prior consultation findings.
   - **formatReport**: Transforms raw diagnosis into frontend-friendly format with ranked diagnoses, urgency levels, evidence arrays, and a disclaimer.
 - Exports `reportSchema` (Zod schema for the formatted report) and `diagnosticWorkflow`.
 - **Mock mode**: When `MOCK_LLM=1`, `runDiagnosis` returns a canned response without calling real LLMs.

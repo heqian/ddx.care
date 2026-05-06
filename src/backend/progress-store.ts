@@ -17,6 +17,9 @@ export interface ProgressEvent {
   agentId?: string;
   toolName?: string;
   toolArgs?: string | null;
+  success?: boolean;
+  durationMs?: number;
+  resultSummary?: string | null;
 }
 
 interface JobRow {

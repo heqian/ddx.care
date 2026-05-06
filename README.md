@@ -14,7 +14,7 @@ AI-powered differential diagnosis system that simulates a panel of medical speci
   - ClinicalTrials.gov trial matching
   - RxNav drug interactions
   - MedlinePlus patient education
-- **Workflows** — Multi-step diagnostic workflow with concurrency control (max 3 concurrent specialist calls) and retry logic
+- **Workflows** — Multi-step diagnostic workflow with concurrency control (default: max 1 concurrent specialist call) and retry logic
 - **Progress Store** — SQLite-backed job persistence with pub/sub for real-time WebSocket updates and TTL-based cleanup
 
 ### Frontend (`src/frontend/`)

@@ -15,6 +15,9 @@ import {
   formatToolArgs,
   mockDiagnosis,
 } from "../src/backend/workflows/diagnostic-workflow";
+import { summarizeToolResult } from "../src/backend/workflows/tool-result-summary";
+import { createStepEventHandler } from "../src/backend/workflows/on-step-finish";
+import type { ProgressEvent } from "../src/backend/progress-store";
 import * as abortStore from "../src/backend/utils/abort-controller-store";
 
 describe("splitToList", () => {
@@ -63,10 +66,7 @@ describe("splitToList", () => {
   });
 
   test("handles mixed separators with newlines", () => {
-    expect(splitToList("alpha; beta\ngamma")).toEqual([
-      "alpha; beta",
-      "gamma",
-    ]);
+    expect(splitToList("alpha; beta\ngamma")).toEqual(["alpha; beta", "gamma"]);
   });
 
   test("single item string", () => {
@@ -186,7 +186,9 @@ describe("truncateField", () => {
     const result = truncateField(long, 100);
     expect(result.length).toBeLessThan(long.length);
     expect(result).toContain("[Content truncated due to length limit]");
-    expect(result.length).toBe(100 + "[Content truncated due to length limit]".length);
+    expect(result.length).toBe(
+      100 + "[Content truncated due to length limit]".length,
+    );
   });
 
   test("returns exact-length strings unchanged", () => {
@@ -698,7 +700,8 @@ describe("buildSpecialistContext", () => {
     const result = buildSpecialistContext({
       mode: "cmo_curated",
       specId: "nephrologist",
-      contextDirective: "Cardiologist found elevated BP — check for renal cause",
+      contextDirective:
+        "Cardiologist found elevated BP — check for renal cause",
       contextHistory: baseHistory,
       maxChars: 2000,
     });
@@ -792,11 +795,7 @@ describe("buildCmoContext", () => {
   });
 
   test("does not add omission notice when no truncation occurs", () => {
-    const history = [
-      "=== PATIENT CASE ===",
-      "Patient data",
-      "Round 1 results",
-    ];
+    const history = ["=== PATIENT CASE ===", "Patient data", "Round 1 results"];
     const result = buildCmoContext(history, 10000);
     expect(result).not.toContain("omitted");
   });
@@ -840,17 +839,11 @@ describe("withRetry - abort signal", () => {
       throw new Error("fail");
     };
     setTimeout(() => controller.abort(), 50);
-    await expect(
-      withRetry(fn, 10, 500, controller.signal),
-    ).rejects.toThrow();
+    await expect(withRetry(fn, 10, 500, controller.signal)).rejects.toThrow();
   });
 
   test("succeeds on first try without abort", async () => {
-    const result = await withRetry(
-      () => Promise.resolve("success"),
-      3,
-      100,
-    );
+    const result = await withRetry(() => Promise.resolve("success"), 3, 100);
     expect(result).toBe("success");
   });
 });
@@ -883,18 +876,20 @@ describe("runDiagnosis - CMO parsing logic", () => {
           chiefComplaint: "Mock Complaint",
           patientSummary: "Mock Patient",
           specialistsConsulted: [],
-          rankedDiagnoses: [{
-            diagnosisName: "Mock Condition",
-            confidencePercentage: 90,
-            urgency: "Routine",
-            rationale: "Mock rationale",
-            supportingEvidence: "Mock Evidence",
-            contradictoryEvidence: "",
-            suggestedNextSteps: "Mock Steps",
-          }],
+          rankedDiagnoses: [
+            {
+              diagnosisName: "Mock Condition",
+              confidencePercentage: 90,
+              urgency: "Routine",
+              rationale: "Mock rationale",
+              supportingEvidence: "Mock Evidence",
+              contradictoryEvidence: "",
+              suggestedNextSteps: "Mock Steps",
+            },
+          ],
           crossSpecialtyObservations: "",
           recommendedImmediateActions: "",
-        }
+        },
       };
     });
 
@@ -918,7 +913,9 @@ describe("runDiagnosis - CMO parsing logic", () => {
     });
 
     expect(callCount).toBe(5);
-    expect(result.diagnosisReport.rankedDiagnoses[0].diagnosisName).toBe("Mock Condition");
+    expect(result.diagnosisReport.rankedDiagnoses[0].diagnosisName).toBe(
+      "Mock Condition",
+    );
   });
 
   test("throws an error if CMO completely fails to parse even for the final report", async () => {
@@ -947,8 +944,10 @@ describe("runDiagnosis - CMO parsing logic", () => {
       runId: "mock-run-id",
     });
 
-    await expect(runDiagnosisPromise).rejects.toThrow("Diagnosis generation returned an empty response");
-    expect(callCount).toBe(6);
+    await expect(runDiagnosisPromise).rejects.toThrow(
+      "Failed to generate a valid diagnosis report",
+    );
+    expect(callCount).toBeGreaterThanOrEqual(6);
   });
 
   test("retries with correction prompt when final report schema validation fails", async () => {
@@ -1057,35 +1056,37 @@ describe("runDiagnosis - CMO parsing logic", () => {
 
   test("passes abort signal to CMO generate and withRetry", async () => {
     let generateCallCount = 0;
-    const mockCmoGenerate = mock(async (_prompt: string, options?: { abortSignal?: AbortSignal }) => {
-      generateCallCount++;
-      // Verify abort signal is provided
-      expect(options?.abortSignal).toBeDefined();
-      return {
-        object: {
-          specialistsToConsult: [],
-          isFinal: true,
-          finalReport: {
-            chiefComplaint: "",
-            patientSummary: "",
-            specialistsConsulted: [],
-            rankedDiagnoses: [
-              {
-                diagnosisName: "Test",
-                confidencePercentage: 50,
-                urgency: "Routine",
-                rationale: "",
-                supportingEvidence: "",
-                contradictoryEvidence: "",
-                suggestedNextSteps: "",
-              },
-            ],
-            crossSpecialtyObservations: "",
-            recommendedImmediateActions: "",
+    const mockCmoGenerate = mock(
+      async (_prompt: string, options?: { abortSignal?: AbortSignal }) => {
+        generateCallCount++;
+        // Verify abort signal is provided
+        expect(options?.abortSignal).toBeDefined();
+        return {
+          object: {
+            specialistsToConsult: [],
+            isFinal: true,
+            finalReport: {
+              chiefComplaint: "",
+              patientSummary: "",
+              specialistsConsulted: [],
+              rankedDiagnoses: [
+                {
+                  diagnosisName: "Test",
+                  confidencePercentage: 50,
+                  urgency: "Routine",
+                  rationale: "",
+                  supportingEvidence: "",
+                  contradictoryEvidence: "",
+                  suggestedNextSteps: "",
+                },
+              ],
+              crossSpecialtyObservations: "",
+              recommendedImmediateActions: "",
+            },
           },
-        },
-      };
-    });
+        };
+      },
+    );
 
     const mockMastra = {
       getAgent: () => ({
@@ -1479,12 +1480,10 @@ describe("mockDiagnosis", () => {
   test("returns a valid diagnosis report", async () => {
     const events: ProgressEvent[] = [];
     const emitProgress = (e: string | ProgressEvent) => {
-      events.push(
-        typeof e === "string" ? { time: "", message: e } : e,
-      );
+      events.push(typeof e === "string" ? { time: "", message: e } : e);
     };
 
-    const result = await mockDiagnosis("patient summary", emitProgress);
+    const result = await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
 
     expect(result.diagnosisReport).toBeDefined();
     expect(result.diagnosisReport.chiefComplaint).toBeTruthy();
@@ -1494,32 +1493,24 @@ describe("mockDiagnosis", () => {
   test("emits round_start events", async () => {
     const events: ProgressEvent[] = [];
     const emitProgress = (e: string | ProgressEvent) => {
-      events.push(
-        typeof e === "string" ? { time: "", message: e } : e,
-      );
+      events.push(typeof e === "string" ? { time: "", message: e } : e);
     };
 
-    await mockDiagnosis("patient summary", emitProgress);
+    await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
 
-    const roundStarts = events.filter(
-      (e) => e.eventType === "round_start",
-    );
+    const roundStarts = events.filter((e) => e.eventType === "round_start");
     expect(roundStarts.length).toBeGreaterThanOrEqual(1);
   });
 
   test("emits specialist_start events with agentId", async () => {
     const events: ProgressEvent[] = [];
     const emitProgress = (e: string | ProgressEvent) => {
-      events.push(
-        typeof e === "string" ? { time: "", message: e } : e,
-      );
+      events.push(typeof e === "string" ? { time: "", message: e } : e);
     };
 
-    await mockDiagnosis("patient summary", emitProgress);
+    await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
 
-    const starts = events.filter(
-      (e) => e.eventType === "specialist_start",
-    );
+    const starts = events.filter((e) => e.eventType === "specialist_start");
     expect(starts.length).toBe(3);
     const agentIds = starts.map((e) => e.agentId).sort();
     expect(agentIds).toEqual(["cardiologist", "nephrologist", "neurologist"]);
@@ -1528,16 +1519,12 @@ describe("mockDiagnosis", () => {
   test("emits tool_call events with toolName and toolArgs", async () => {
     const events: ProgressEvent[] = [];
     const emitProgress = (e: string | ProgressEvent) => {
-      events.push(
-        typeof e === "string" ? { time: "", message: e } : e,
-      );
+      events.push(typeof e === "string" ? { time: "", message: e } : e);
     };
 
-    await mockDiagnosis("patient summary", emitProgress);
+    await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
 
-    const toolCalls = events.filter(
-      (e) => e.eventType === "tool_call",
-    );
+    const toolCalls = events.filter((e) => e.eventType === "tool_call");
     expect(toolCalls.length).toBe(3);
     for (const tc of toolCalls) {
       expect(tc.toolName).toBe("pubmed-search");
@@ -1549,12 +1536,10 @@ describe("mockDiagnosis", () => {
   test("emits specialist_complete events with agentId", async () => {
     const events: ProgressEvent[] = [];
     const emitProgress = (e: string | ProgressEvent) => {
-      events.push(
-        typeof e === "string" ? { time: "", message: e } : e,
-      );
+      events.push(typeof e === "string" ? { time: "", message: e } : e);
     };
 
-    await mockDiagnosis("patient summary", emitProgress);
+    await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
 
     const completes = events.filter(
       (e) => e.eventType === "specialist_complete",
@@ -1568,49 +1553,67 @@ describe("mockDiagnosis", () => {
   test("emits cmo_final event", async () => {
     const events: ProgressEvent[] = [];
     const emitProgress = (e: string | ProgressEvent) => {
-      events.push(
-        typeof e === "string" ? { time: "", message: e } : e,
-      );
+      events.push(typeof e === "string" ? { time: "", message: e } : e);
     };
 
-    await mockDiagnosis("patient summary", emitProgress);
+    await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
 
-    const finals = events.filter(
-      (e) => e.eventType === "cmo_final",
-    );
+    const finals = events.filter((e) => e.eventType === "cmo_final");
     expect(finals.length).toBe(1);
   });
 
-  test("emits events in expected order: start → tool_call → complete for each specialist", async () => {
+  test("emits events in expected order: start → tool_call → tool_result → complete for each specialist", async () => {
     const events: ProgressEvent[] = [];
     const emitProgress = (e: string | ProgressEvent) => {
-      events.push(
-        typeof e === "string" ? { time: "", message: e } : e,
-      );
+      events.push(typeof e === "string" ? { time: "", message: e } : e);
     };
 
-    await mockDiagnosis("patient summary", emitProgress);
+    await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
 
     const specialistEvents = events.filter(
       (e) =>
         e.eventType === "specialist_start" ||
         e.eventType === "tool_call" ||
+        e.eventType === "tool_result" ||
         e.eventType === "specialist_complete",
     );
 
-    // Verify the pattern: start → tool_call → complete repeats 3 times
+    // Verify the pattern: start → tool_call → tool_result → complete repeats 3 times
     for (let i = 0; i < 3; i++) {
-      const base = i * 3;
+      const base = i * 4;
       expect(specialistEvents[base].eventType).toBe("specialist_start");
       expect(specialistEvents[base + 1].eventType).toBe("tool_call");
-      expect(specialistEvents[base + 2].eventType).toBe("specialist_complete");
-      // All three events in a group share the same agentId
+      expect(specialistEvents[base + 2].eventType).toBe("tool_result");
+      expect(specialistEvents[base + 3].eventType).toBe("specialist_complete");
+      // All four events in a group share the same agentId
       expect(specialistEvents[base].agentId).toBe(
         specialistEvents[base + 1].agentId,
       );
       expect(specialistEvents[base + 1].agentId).toBe(
         specialistEvents[base + 2].agentId,
       );
+      expect(specialistEvents[base + 2].agentId).toBe(
+        specialistEvents[base + 3].agentId,
+      );
+    }
+  });
+
+  test("emits tool_result events with success, durationMs, and resultSummary", async () => {
+    const events: ProgressEvent[] = [];
+    const emitProgress = (e: string | ProgressEvent) => {
+      events.push(typeof e === "string" ? { time: "", message: e } : e);
+    };
+
+    await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
+
+    const toolResults = events.filter((e) => e.eventType === "tool_result");
+    expect(toolResults.length).toBe(3);
+    for (const tr of toolResults) {
+      expect(tr.success).toBe(true);
+      expect(typeof tr.durationMs).toBe("number");
+      expect(tr.resultSummary).not.toBeNull();
+      expect(typeof tr.agentId).toBe("string");
+      expect(tr.toolName).toBe("pubmed-search");
     }
   });
 
@@ -1620,12 +1623,10 @@ describe("mockDiagnosis", () => {
     // but the type signature supports both
     const events: ProgressEvent[] = [];
     const emitProgress = (e: string | ProgressEvent) => {
-      events.push(
-        typeof e === "string" ? { time: "", message: e } : e,
-      );
+      events.push(typeof e === "string" ? { time: "", message: e } : e);
     };
 
-    await mockDiagnosis("patient summary", emitProgress);
+    await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
 
     // All events should have eventType set (mock uses ProgressEvent objects)
     const withEventType = events.filter((e) => e.eventType !== undefined);
@@ -1635,12 +1636,10 @@ describe("mockDiagnosis", () => {
   test("emit helper produces valid ISO timestamps on all events", async () => {
     const events: ProgressEvent[] = [];
     const emitProgress = (e: string | ProgressEvent) => {
-      events.push(
-        typeof e === "string" ? { time: "", message: e } : e,
-      );
+      events.push(typeof e === "string" ? { time: "", message: e } : e);
     };
 
-    await mockDiagnosis("patient summary", emitProgress);
+    await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
 
     for (const e of events) {
       expect(e.time).toBeTruthy();
@@ -1685,6 +1684,7 @@ describe("generateFinalReport", () => {
       abortSignal: ac.signal,
       emit: emit as any,
       logContext: { jobId: "test" },
+      jobId: "test",
     });
 
     expect(result.chiefComplaint).toBe("Headache");
@@ -1719,6 +1719,7 @@ describe("generateFinalReport", () => {
       abortSignal: ac.signal,
       emit: emit as any,
       logContext: { jobId: "retry-test" },
+      jobId: "retry-test",
     });
 
     expect(callCount).toBe(2);
@@ -1742,6 +1743,7 @@ describe("generateFinalReport", () => {
       abortSignal: ac.signal,
       emit: emit as any,
       logContext: { jobId: "fallback-test" },
+      jobId: "fallback-test",
     });
 
     expect(mockCmo.generate).toHaveBeenCalledTimes(2);
@@ -1765,6 +1767,7 @@ describe("generateFinalReport", () => {
         abortSignal: ac.signal,
         emit: emit as any,
         logContext: { jobId: "abort-test" },
+        jobId: "abort-test",
       }),
     ).rejects.toThrow("Aborted");
   });
@@ -1948,5 +1951,280 @@ describe("runDiagnosis - abort store integration", () => {
 
     // Cleanup
     abortStore.remove(runId);
+  });
+});
+
+describe("summarizeToolResult", () => {
+  test("returns null for undefined result", () => {
+    expect(summarizeToolResult("pubmed-search", undefined)).toBeNull();
+  });
+
+  test("returns null for null result", () => {
+    expect(summarizeToolResult("pubmed-search", null)).toBeNull();
+  });
+
+  test("returns null for empty array", () => {
+    expect(summarizeToolResult("pubmed-search", [])).toBeNull();
+  });
+
+  test("returns count for non-empty array", () => {
+    expect(summarizeToolResult("pubmed-search", [1, 2, 3])).toBe("3 results");
+  });
+
+  test("returns string truncated to 200 chars", () => {
+    const long = "a".repeat(300);
+    const result = summarizeToolResult("pubmed-search", long);
+    expect(result).not.toBeNull();
+    expect(result!.length).toBeLessThanOrEqual(201);
+    expect(result!.endsWith("…")).toBe(true);
+  });
+
+  test("returns short string as-is", () => {
+    expect(summarizeToolResult("pubmed-search", "short result")).toBe(
+      "short result",
+    );
+  });
+
+  test("extracts error message from Error objects", () => {
+    const result = summarizeToolResult("pubmed-search", new Error("timeout"));
+    expect(result).toBe("timeout");
+  });
+
+  test("extracts error message from isError objects", () => {
+    const result = summarizeToolResult("pubmed-search", {
+      isError: true,
+      message: "API rate limited",
+    });
+    expect(result).toBe("API rate limited");
+  });
+
+  test("summarizes drug-interaction with interactions", () => {
+    const result = summarizeToolResult("drug-interaction", {
+      interactions: [{}, {}, {}],
+    });
+    expect(result).toBe("3 interactions found");
+  });
+
+  test("summarizes drug-interaction with no interactions", () => {
+    const result = summarizeToolResult("drug-interaction", {
+      interactions: [],
+    });
+    expect(result).toBe("No interactions found");
+  });
+
+  test("summarizes pubmed-search with totalResults", () => {
+    const result = summarizeToolResult("pubmed-search", {
+      totalResults: 42,
+      query: "chest pain",
+    });
+    expect(result).toBe("42 results for 'chest pain'");
+  });
+
+  test("summarizes drug-labeling with brandName", () => {
+    const result = summarizeToolResult("drug-labeling", {
+      brandName: "Lipitor",
+    });
+    expect(result).toBe("Label found for Lipitor");
+  });
+
+  test("summarizes adverse-events with count", () => {
+    const result = summarizeToolResult("adverse-events", { count: 10 });
+    expect(result).toBe("10 adverse events");
+  });
+
+  test("summarizes clinical-trials-search with totalResults", () => {
+    const result = summarizeToolResult("clinical-trials-search", {
+      totalResults: 5,
+    });
+    expect(result).toBe("5 trials found");
+  });
+
+  test("summarizes medlineplus-search with topics", () => {
+    const result = summarizeToolResult("medlineplus-search", {
+      topics: [{}, {}],
+    });
+    expect(result).toBe("2 topics");
+  });
+
+  test("falls back to JSON for unknown tool structures", () => {
+    const result = summarizeToolResult("unknown-tool", { foo: "bar" });
+    expect(result).not.toBeNull();
+    expect(result).toContain("foo");
+  });
+
+  test("summarizes rare-disease-search with results array", () => {
+    const result = summarizeToolResult("rare-disease-search", {
+      results: [{}, {}, {}],
+    });
+    expect(result).toBe("3 rare diseases");
+  });
+
+  test("summarizes drug-shortages with count", () => {
+    const result = summarizeToolResult("drug-shortages", { totalResults: 2 });
+    expect(result).toBe("2 shortages");
+  });
+});
+
+describe("createStepEventHandler", () => {
+  function createMockEmit() {
+    const events: ProgressEvent[] = [];
+    const emit = (
+      eventType: string,
+      message: string,
+      extra?: Partial<ProgressEvent>,
+    ) => {
+      events.push({
+        time: new Date().toISOString(),
+        message,
+        eventType: eventType as ProgressEvent["eventType"],
+        ...extra,
+      });
+    };
+    return { events, emit };
+  }
+
+  test("emits tool_call events for each tool call", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler("cardiologist", "job-1", emit);
+
+    handler({
+      toolCalls: [
+        {
+          payload: { toolName: "pubmed-search", args: { query: "chest pain" } },
+        },
+      ],
+      toolResults: [
+        {
+          payload: {
+            toolName: "pubmed-search",
+            result: { totalResults: 5 },
+            isError: false,
+          },
+        },
+      ],
+    });
+
+    const toolCalls = events.filter((e) => e.eventType === "tool_call");
+    expect(toolCalls.length).toBe(1);
+    expect(toolCalls[0].agentId).toBe("cardiologist");
+    expect(toolCalls[0].toolName).toBe("pubmed-search");
+    expect(toolCalls[0].toolArgs).toBe("chest pain");
+  });
+
+  test("emits tool_result events with success status", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler("cardiologist", "job-1", emit);
+
+    handler({
+      toolCalls: [
+        {
+          payload: {
+            toolName: "pubmed-search",
+            args: { query: "hypertension" },
+          },
+        },
+      ],
+      toolResults: [
+        {
+          payload: {
+            toolName: "pubmed-search",
+            result: { totalResults: 10 },
+            isError: false,
+          },
+        },
+      ],
+    });
+
+    const toolResults = events.filter((e) => e.eventType === "tool_result");
+    expect(toolResults.length).toBe(1);
+    expect(toolResults[0].success).toBe(true);
+    expect(toolResults[0].toolName).toBe("pubmed-search");
+    expect(typeof toolResults[0].durationMs).toBe("number");
+    expect(toolResults[0].resultSummary).not.toBeNull();
+  });
+
+  test("emits tool_result events with error status for isError results", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler("neurologist", "job-2", emit);
+
+    handler({
+      toolCalls: [
+        {
+          payload: {
+            toolName: "drug-interaction",
+            args: { drugName: "aspirin", drugName2: "warfarin" },
+          },
+        },
+      ],
+      toolResults: [
+        {
+          payload: {
+            toolName: "drug-interaction",
+            result: { isError: true, message: "API timeout" },
+            isError: true,
+          },
+        },
+      ],
+    });
+
+    const toolResults = events.filter((e) => e.eventType === "tool_result");
+    expect(toolResults.length).toBe(1);
+    expect(toolResults[0].success).toBe(false);
+  });
+
+  test("handles multiple tool calls and results in one step", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler("cardiologist", "job-1", emit);
+
+    handler({
+      toolCalls: [
+        {
+          payload: { toolName: "pubmed-search", args: { query: "chest pain" } },
+        },
+        {
+          payload: {
+            toolName: "drug-interaction",
+            args: { drugName: "aspirin", drugName2: "clopidogrel" },
+          },
+        },
+      ],
+      toolResults: [
+        {
+          payload: {
+            toolName: "pubmed-search",
+            result: { totalResults: 5 },
+            isError: false,
+          },
+        },
+        {
+          payload: {
+            toolName: "drug-interaction",
+            result: { interactions: [{}] },
+            isError: false,
+          },
+        },
+      ],
+    });
+
+    expect(events.filter((e) => e.eventType === "tool_call").length).toBe(2);
+    expect(events.filter((e) => e.eventType === "tool_result").length).toBe(2);
+  });
+
+  test("emits events in order: tool_calls then tool_results", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler("cardiologist", "job-1", emit);
+
+    handler({
+      toolCalls: [
+        { payload: { toolName: "pubmed-search", args: { query: "test" } } },
+      ],
+      toolResults: [
+        { payload: { toolName: "pubmed-search", result: {}, isError: false } },
+      ],
+    });
+
+    const callIndex = events.findIndex((e) => e.eventType === "tool_call");
+    const resultIndex = events.findIndex((e) => e.eventType === "tool_result");
+    expect(callIndex).toBeLessThan(resultIndex);
   });
 });

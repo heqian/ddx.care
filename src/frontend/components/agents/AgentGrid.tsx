@@ -1,16 +1,16 @@
 import { AgentStatusCard, type SpecialistStatus } from "./AgentStatusCard";
-import type { AgentInfo } from "../../api/types";
+import type { AgentInfo, ToolHistoryEntry } from "../../api/types";
 
 interface AgentGridProps {
   agents: AgentInfo[];
   specialistStatuses?: Map<string, SpecialistStatus>;
-  activeTools?: Map<string, { toolName: string; args: string }>;
+  toolHistory?: Map<string, ToolHistoryEntry[]>;
 }
 
 export function AgentGrid({
   agents,
   specialistStatuses,
-  activeTools,
+  toolHistory,
 }: AgentGridProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger-children">
@@ -21,7 +21,7 @@ export function AgentGrid({
           name={agent.name}
           description={agent.description}
           status={specialistStatuses?.get(agent.id) ?? "idle"}
-          activeTool={activeTools?.get(agent.id)}
+          toolHistory={toolHistory?.get(agent.id)}
         />
       ))}
     </div>
