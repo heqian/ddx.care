@@ -48,6 +48,7 @@ export interface ProgressEvent {
   success?: boolean;
   durationMs?: number;
   resultSummary?: string | null;
+  errorType?: string;
 }
 
 export interface StatusResponse {

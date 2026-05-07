@@ -22,6 +22,12 @@ import * as abortStore from "../utils/abort-controller-store";
 import { agentList } from "../agents";
 import { formatToolLabel } from "../tools/tool-labels";
 import { createStepEventHandler } from "./on-step-finish";
+import {
+  LLMTimeoutError,
+  SchemaValidationError,
+  isRetriableError,
+  sanitizeForContext,
+} from "../utils/errors";
 
 const specialistNameMap = new Map<string, string>();
 for (const agent of agentList) {
@@ -88,6 +94,7 @@ export async function withRetry<T>(
   maxRetries = AGENT_GENERATE_MAX_RETRIES,
   baseDelay = AGENT_GENERATE_RETRY_BASE_DELAY,
   abortSignal?: AbortSignal,
+  shouldRetry?: (error: unknown) => boolean,
 ): Promise<T> {
   let attempt = 0;
   while (true) {
@@ -101,6 +108,9 @@ export async function withRetry<T>(
         abortSignal?.aborted ||
         (e instanceof Error && e.name === "AbortError")
       ) {
+        throw e;
+      }
+      if (shouldRetry && !shouldRetry(e)) {
         throw e;
       }
       attempt++;
@@ -188,6 +198,29 @@ export const diagnosisReportSchema = z.object({
 });
 
 type DiagnosisReport = zInfer<typeof diagnosisReportSchema>;
+
+/** Construct a minimal valid report when all generation/validation attempts fail */
+export function createMinimalReport(errorContext: string): DiagnosisReport {
+  return {
+    chiefComplaint: "Unable to generate complete diagnosis",
+    patientSummary: "Report generation encountered errors",
+    specialistsConsulted: [],
+    rankedDiagnoses: [
+      {
+        diagnosisName: "Diagnosis incomplete — generation error",
+        confidencePercentage: 0,
+        urgency: "Routine" as const,
+        rationale: `Automated diagnosis could not be completed: ${errorContext}`,
+        supportingEvidence: "N/A — report generation failed",
+        contradictoryEvidence: "N/A",
+        suggestedNextSteps:
+          "Please retry the diagnosis or consult a physician directly",
+      },
+    ],
+    crossSpecialtyObservations: "",
+    recommendedImmediateActions: "Retry the diagnostic analysis",
+  };
+}
 
 const cmoDecisionSchema = z.object({
   specialistsToConsult: z.array(
@@ -496,6 +529,7 @@ export async function generateFinalReport(opts: {
       AGENT_GENERATE_MAX_RETRIES,
       AGENT_GENERATE_RETRY_BASE_DELAY,
       abortSignal,
+      isRetriableError,
     );
   } catch (e) {
     if (
@@ -533,7 +567,15 @@ export async function generateFinalReport(opts: {
       `Final report validation failed, retrying with correction prompt...`,
     );
 
-    const correctionPrompt = `The previous response did not match the expected schema. Errors: ${zodErrors}. Please provide the response again, ensuring it conforms to the schema.\n\n${builtContextHistory}`;
+    const malformedOutput =
+      typeof finalResponse.text === "string" && finalResponse.text.length > 0
+        ? finalResponse.text.slice(0, 500) +
+          (finalResponse.text.length > 500 ? " [truncated]" : "")
+        : "";
+    const malformedSection = malformedOutput
+      ? `\n\nPrevious malformed output (truncated):\n${malformedOutput}`
+      : "";
+    const correctionPrompt = `The previous response did not match the expected schema. Errors: ${zodErrors}.${malformedSection}\n\nPlease provide the response again, ensuring it conforms to the schema.\n\n${builtContextHistory}`;
     const retryResponse = await withRetry(
       () =>
         cmo.generate(correctionPrompt, {
@@ -547,6 +589,7 @@ export async function generateFinalReport(opts: {
       AGENT_GENERATE_MAX_RETRIES,
       AGENT_GENERATE_RETRY_BASE_DELAY,
       abortSignal,
+      isRetriableError,
     );
 
     const retryValidated = diagnosisReportSchema.safeParse(
@@ -557,8 +600,10 @@ export async function generateFinalReport(opts: {
     }
 
     logger.warn("report_validation_retry_failed", logContext);
-    emit("general", `Retry also failed. Using raw output.`);
-    return retryResponse.object as DiagnosisReport;
+    emit("general", `Retry also failed. Generating minimal report.`);
+    return createMinimalReport(
+      `Schema validation failed after retry. Errors: ${zodErrors}`,
+    );
   }
 
   // Structured output threw — fall back to generating without structured output
@@ -580,6 +625,7 @@ export async function generateFinalReport(opts: {
     AGENT_GENERATE_MAX_RETRIES,
     AGENT_GENERATE_RETRY_BASE_DELAY,
     abortSignal,
+    isRetriableError,
   );
 
   const fallbackText = fallbackResponse.text;
@@ -598,9 +644,17 @@ export async function generateFinalReport(opts: {
     }
   }
 
-  // Last resort: return the object if it exists, or throw
+  // Last resort: return a minimal report instead of an unsafe cast
   if (fallbackResponse.object) {
-    return fallbackResponse.object as DiagnosisReport;
+    const fallbackValidated = diagnosisReportSchema.safeParse(
+      fallbackResponse.object,
+    );
+    if (fallbackValidated.success) {
+      return fallbackValidated.data;
+    }
+    return createMinimalReport(
+      `Report generation failed after all attempts. Raw output was unparseable.`,
+    );
   }
 
   throw new Error(
@@ -745,6 +799,7 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
             AGENT_GENERATE_MAX_RETRIES,
             AGENT_GENERATE_RETRY_BASE_DELAY,
             abortController.signal,
+            isRetriableError,
           );
         } catch (e) {
           if (
@@ -792,6 +847,16 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
 
         const parsed = cmoDecisionSchema.safeParse(cmoDecision.object);
         if (!parsed.success) {
+          const validationErr = new SchemaValidationError(
+            parsed.error.issues
+              .map((i) => `${i.path.join(".")}: ${i.message}`)
+              .join("; "),
+          );
+          logger.warn("cmo_parse_validation_failed", {
+            jobId: runId,
+            round,
+            error: validationErr.message,
+          });
           parseFailureCount++;
           if (parseFailureCount > MAX_PARSE_FAILURES) {
             emit(
@@ -879,13 +944,30 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
                 );
                 const specResponse = await withRetry(
                   () =>
-                    specAgent.generate(specPrompt, {
-                      abortSignal: abortController.signal,
-                      onStepFinish: specOnStepFinish,
-                    }),
+                    specAgent
+                      .generate(specPrompt, {
+                        abortSignal: abortController.signal,
+                        onStepFinish: specOnStepFinish,
+                      })
+                      .catch((e: unknown) => {
+                        // Classify timeout errors from LLM calls
+                        if (e instanceof Error && e.name === "AbortError")
+                          throw e;
+                        if (
+                          e instanceof Error &&
+                          /timeout|timed out/i.test(e.message)
+                        ) {
+                          throw new LLMTimeoutError(
+                            `Specialist ${specId} call timed out: ${e.message}`,
+                            e instanceof Error ? e : undefined,
+                          );
+                        }
+                        throw e;
+                      }),
                   AGENT_GENERATE_MAX_RETRIES,
                   AGENT_GENERATE_RETRY_BASE_DELAY,
                   abortController.signal,
+                  isRetriableError,
                 );
                 logger.specialistCall(
                   specId,
@@ -916,7 +998,7 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
                 `Failed to receive analysis from ${specId}`,
                 { agentId: specId },
               );
-              return `=== ${specId} Consult ===\nFailed to consult specialist: ${message}`;
+              return `=== ${specId} Consult ===\nFailed to consult specialist: ${sanitizeForContext(message)}`;
             }
           },
         );

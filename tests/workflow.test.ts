@@ -14,11 +14,13 @@ import {
   generateFinalReport,
   formatToolArgs,
   mockDiagnosis,
+  createMinimalReport,
 } from "../src/backend/workflows/diagnostic-workflow";
 import { summarizeToolResult } from "../src/backend/workflows/tool-result-summary";
 import { createStepEventHandler } from "../src/backend/workflows/on-step-finish";
 import type { ProgressEvent } from "../src/backend/progress-store";
 import * as abortStore from "../src/backend/utils/abort-controller-store";
+import { APITimeoutError } from "../src/backend/utils/errors";
 
 describe("splitToList", () => {
   test("returns empty array for undefined", () => {
@@ -1010,9 +1012,8 @@ describe("runDiagnosis - CMO parsing logic", () => {
     expect(result.diagnosisReport.rankedDiagnoses).toHaveLength(1);
   });
 
-  test("falls back to raw output when retry also fails schema validation", async () => {
+  test("falls back to minimal report when retry also fails schema validation", async () => {
     let callCount = 0;
-    const rawReport = { chiefComplaint: "Fallback", stillBad: true };
     const mockCmoGenerate = mock(async () => {
       callCount++;
       if (callCount === 1) {
@@ -1026,7 +1027,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       if (callCount === 2) {
         return { object: { chiefComplaint: "Bad", extra: true } };
       }
-      return { object: rawReport };
+      return { object: { chiefComplaint: "Fallback", stillBad: true } };
     });
 
     const mockMastra = {
@@ -1049,9 +1050,11 @@ describe("runDiagnosis - CMO parsing logic", () => {
     });
 
     expect(callCount).toBe(3);
-    expect(
-      (result.diagnosisReport as unknown as typeof rawReport).chiefComplaint,
-    ).toBe("Fallback");
+    // Should get a minimal report since raw output doesn't validate
+    expect(result.diagnosisReport.chiefComplaint).toBe(
+      "Unable to generate complete diagnosis",
+    );
+    expect(result.diagnosisReport.rankedDiagnoses[0].confidencePercentage).toBe(0);
   });
 
   test("passes abort signal to CMO generate and withRetry", async () => {
@@ -1727,7 +1730,7 @@ describe("generateFinalReport", () => {
     expect(emitted.some((m) => m.includes("validation failed"))).toBe(true);
   });
 
-  test("falls back to raw output when both attempts fail schema validation", async () => {
+  test("falls back to minimal report when both attempts fail schema validation", async () => {
     const rawOutput = { chiefComplaint: "Raw fallback", broken: true };
     const mockCmo = {
       generate: mock(async () => ({ object: rawOutput })),
@@ -1747,8 +1750,10 @@ describe("generateFinalReport", () => {
     });
 
     expect(mockCmo.generate).toHaveBeenCalledTimes(2);
-    expect((result as any).chiefComplaint).toBe("Raw fallback");
-    expect(emitted.some((m) => m.includes("Using raw output"))).toBe(true);
+    // Should get a minimal report since raw output doesn't validate
+    expect(result.chiefComplaint).toBe("Unable to generate complete diagnosis");
+    expect(result.rankedDiagnoses[0].confidencePercentage).toBe(0);
+    expect(emitted.some((m) => m.includes("minimal report") || m.includes("Minimal"))).toBe(true);
   });
 
   test("respects abort signal", async () => {
@@ -2170,6 +2175,58 @@ describe("createStepEventHandler", () => {
     const toolResults = events.filter((e) => e.eventType === "tool_result");
     expect(toolResults.length).toBe(1);
     expect(toolResults[0].success).toBe(false);
+    expect(toolResults[0].errorType).toBe("UnknownError");
+  });
+
+  test("errorType is set for classified AppError errors", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler("neurologist", "job-3", emit);
+    const timeoutError = new APITimeoutError("PubMed API timeout after 10000ms");
+
+    handler({
+      toolCalls: [
+        { payload: { toolName: "pubmed-search", args: { query: "chest pain" } } },
+      ],
+      toolResults: [
+        {
+          payload: {
+            toolName: "pubmed-search",
+            result: timeoutError,
+            isError: true,
+          },
+        },
+      ],
+    });
+
+    const toolResults = events.filter((e) => e.eventType === "tool_result");
+    expect(toolResults.length).toBe(1);
+    expect(toolResults[0].success).toBe(false);
+    expect(toolResults[0].errorType).toBe("APITimeoutError");
+  });
+
+  test("errorType is absent on successful tool_result events", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler("cardiologist", "job-4", emit);
+
+    handler({
+      toolCalls: [
+        { payload: { toolName: "pubmed-search", args: { query: "test" } } },
+      ],
+      toolResults: [
+        {
+          payload: {
+            toolName: "pubmed-search",
+            result: {},
+            isError: false,
+          },
+        },
+      ],
+    });
+
+    const toolResults = events.filter((e) => e.eventType === "tool_result");
+    expect(toolResults.length).toBe(1);
+    expect(toolResults[0].success).toBe(true);
+    expect(toolResults[0].errorType).toBeUndefined();
   });
 
   test("handles multiple tool calls and results in one step", () => {
@@ -2226,5 +2283,42 @@ describe("createStepEventHandler", () => {
     const callIndex = events.findIndex((e) => e.eventType === "tool_call");
     const resultIndex = events.findIndex((e) => e.eventType === "tool_result");
     expect(callIndex).toBeLessThan(resultIndex);
+  });
+});
+
+describe("createMinimalReport", () => {
+  test("produces a report that passes Zod validation", () => {
+    const report = createMinimalReport("test error context");
+    const validated = diagnosisReportSchema.safeParse(report);
+    expect(validated.success).toBe(true);
+  });
+
+  test("includes error context in rationale", () => {
+    const report = createMinimalReport("API timeout after 30000ms");
+    expect(report.rankedDiagnoses[0].rationale).toContain(
+      "API timeout after 30000ms",
+    );
+  });
+
+  test("has 0% confidence and Routine urgency", () => {
+    const report = createMinimalReport("error");
+    expect(report.rankedDiagnoses[0].confidencePercentage).toBe(0);
+    expect(report.rankedDiagnoses[0].urgency).toBe("Routine");
+  });
+
+  test("has empty specialistsConsulted and crossSpecialtyObservations", () => {
+    const report = createMinimalReport("error");
+    expect(report.specialistsConsulted).toEqual([]);
+    expect(report.crossSpecialtyObservations).toBe("");
+  });
+
+  test("includes all required DiagnosisReport fields", () => {
+    const report = createMinimalReport("error");
+    expect(report).toHaveProperty("chiefComplaint");
+    expect(report).toHaveProperty("patientSummary");
+    expect(report).toHaveProperty("specialistsConsulted");
+    expect(report).toHaveProperty("rankedDiagnoses");
+    expect(report).toHaveProperty("crossSpecialtyObservations");
+    expect(report).toHaveProperty("recommendedImmediateActions");
   });
 });

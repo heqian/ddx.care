@@ -1,3 +1,9 @@
+import {
+  APITimeoutError,
+  RateLimitError,
+  PermanentAPIError,
+} from "../../utils/errors";
+
 export interface FetchJSONOptions extends RequestInit {
   timeoutMs?: number;
   ignore404?: boolean;
@@ -53,16 +59,34 @@ export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
     });
 
     if (!res.ok) {
+      if (res.status === 429) {
+        throw new RateLimitError(`${errorPrefix} rate limit exceeded (429)`);
+      }
       if (res.status === 404 && ignore404) {
         return { error: true, results: [] };
+      }
+      if (res.status >= 400 && res.status < 500) {
+        throw new PermanentAPIError(
+          `${errorPrefix} error: ${res.status} ${res.statusText}`,
+          res.status,
+        );
       }
       throw new Error(`${errorPrefix} error: ${res.status} ${res.statusText}`);
     }
 
     return await res.json();
   } catch (error: unknown) {
+    if (
+      error instanceof APITimeoutError ||
+      error instanceof RateLimitError ||
+      error instanceof PermanentAPIError
+    ) {
+      throw error;
+    }
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Request timeout after ${timeoutMs}ms for ${url}`);
+      throw new APITimeoutError(
+        `Request timeout after ${timeoutMs}ms for ${url}`,
+      );
     }
     throw error;
   } finally {

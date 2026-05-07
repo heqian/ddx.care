@@ -1,6 +1,12 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { fetchJSON } from "./utils/fetch";
+import type { ToolResult } from "./utils/types";
+import {
+  APITimeoutError,
+  RateLimitError,
+  PermanentAPIError,
+} from "../utils/errors";
 
 const NLM_BASE = "https://clinicaltables.nlm.nih.gov/api";
 
@@ -11,10 +17,21 @@ interface NlmResponse {
   3: string[][];
 }
 
+function classifyError(error: unknown): { error: string; retriable: boolean } {
+  if (error instanceof APITimeoutError)
+    return { error: error.message, retriable: true };
+  if (error instanceof RateLimitError)
+    return { error: error.message, retriable: true };
+  if (error instanceof PermanentAPIError)
+    return { error: error.message, retriable: false };
+  if (error instanceof Error) return { error: error.message, retriable: true };
+  return { error: String(error), retriable: true };
+}
+
 export const hpoTermSearchTool = createTool({
   id: "hpo-term-search",
   description:
-    "Search the Human Phenotype Ontology (HPO) for clinical phenotype terms. Returns HPO IDs and term names. Use this to identify standardized phenotype terms for patient symptoms and signs.",
+    "Search the Human Phenotype Ontology (HPO) for clinical phenotype terms. Returns HPO IDs and term names. Use this to identify standardized phenotype terms for patient symptoms and signs. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
   inputSchema: z.object({
     query: z
       .string()
@@ -28,17 +45,34 @@ export const hpoTermSearchTool = createTool({
       .default(10)
       .describe("Maximum number of results to return"),
   }),
-  outputSchema: z.object({
-    results: z.array(
-      z.object({
-        hpoId: z.string(),
-        name: z.string(),
+  outputSchema: z.union([
+    z.object({
+      ok: z.literal(true),
+      data: z.object({
+        results: z.array(
+          z.object({
+            hpoId: z.string(),
+            name: z.string(),
+          }),
+        ),
+        totalAvailable: z.number().optional(),
       }),
-    ),
-    totalAvailable: z.number().optional(),
-    error: z.string().optional(),
-  }),
-  execute: async ({ query, maxResults }) => {
+    }),
+    z.object({
+      ok: z.literal(false),
+      error: z.string(),
+      retriable: z.boolean(),
+    }),
+  ]),
+  execute: async ({
+    query,
+    maxResults,
+  }): Promise<
+    ToolResult<{
+      results: Array<{ hpoId: string; name: string }>;
+      totalAvailable?: number;
+    }>
+  > => {
     try {
       const url = `${NLM_BASE}/hpo/v3/search?terms=${encodeURIComponent(query)}&maxList=${maxResults}`;
       const data = (await fetchJSON(url, {
@@ -47,7 +81,11 @@ export const hpoTermSearchTool = createTool({
       })) as unknown as NlmResponse;
 
       if (!data || !data[3] || data[3].length === 0) {
-        return { results: [], error: "No HPO terms found matching the query." };
+        return {
+          ok: false,
+          error: "No HPO terms found matching the query.",
+          retriable: false,
+        };
       }
 
       const results = data[3].map((item: string[]) => ({
@@ -55,9 +93,14 @@ export const hpoTermSearchTool = createTool({
         name: item[1],
       }));
 
-      return { results, totalAvailable: data[0] };
-    } catch {
-      return { results: [], error: "Failed to search HPO terms." };
+      return { ok: true as const, data: { results, totalAvailable: data[0] } };
+    } catch (e) {
+      const classified = classifyError(e);
+      return {
+        ok: false as const,
+        error: `HPO term search failed: ${classified.error}`,
+        retriable: classified.retriable,
+      };
     }
   },
 });
@@ -65,7 +108,7 @@ export const hpoTermSearchTool = createTool({
 export const loincTestLookupTool = createTool({
   id: "loinc-test-lookup",
   description:
-    "Search LOINC database for laboratory test codes and names. Returns LOINC codes, component names, and specimen information. Use this to identify or clarify laboratory test codes referenced in patient results.",
+    "Search LOINC database for laboratory test codes and names. Returns LOINC codes, component names, and specimen information. Use this to identify or clarify laboratory test codes referenced in patient results. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
   inputSchema: z.object({
     query: z
       .string()
@@ -79,19 +122,41 @@ export const loincTestLookupTool = createTool({
       .default(10)
       .describe("Maximum number of results to return"),
   }),
-  outputSchema: z.object({
-    results: z.array(
-      z.object({
-        loincCode: z.string(),
-        componentName: z.string(),
-        system: z.string().optional(),
-        method: z.string().optional(),
+  outputSchema: z.union([
+    z.object({
+      ok: z.literal(true),
+      data: z.object({
+        results: z.array(
+          z.object({
+            loincCode: z.string(),
+            componentName: z.string(),
+            system: z.string().optional(),
+            method: z.string().optional(),
+          }),
+        ),
+        totalAvailable: z.number().optional(),
       }),
-    ),
-    totalAvailable: z.number().optional(),
-    error: z.string().optional(),
-  }),
-  execute: async ({ query, maxResults }) => {
+    }),
+    z.object({
+      ok: z.literal(false),
+      error: z.string(),
+      retriable: z.boolean(),
+    }),
+  ]),
+  execute: async ({
+    query,
+    maxResults,
+  }): Promise<
+    ToolResult<{
+      results: Array<{
+        loincCode: string;
+        componentName: string;
+        system?: string;
+        method?: string;
+      }>;
+      totalAvailable?: number;
+    }>
+  > => {
     try {
       const url = `${NLM_BASE}/loinc_items/v3/search?terms=${encodeURIComponent(query)}&maxList=${maxResults}&df=LOINC_NUM,COMPONENT,SYSTEM,METHOD_TYP`;
       const data = (await fetchJSON(url, {
@@ -101,8 +166,9 @@ export const loincTestLookupTool = createTool({
 
       if (!data || !data[3] || data[3].length === 0) {
         return {
-          results: [],
+          ok: false,
           error: "No LOINC tests found matching the query.",
+          retriable: false,
         };
       }
 
@@ -113,9 +179,14 @@ export const loincTestLookupTool = createTool({
         method: item[3] || undefined,
       }));
 
-      return { results, totalAvailable: data[0] };
-    } catch {
-      return { results: [], error: "Failed to search LOINC tests." };
+      return { ok: true as const, data: { results, totalAvailable: data[0] } };
+    } catch (e) {
+      const classified = classifyError(e);
+      return {
+        ok: false as const,
+        error: `LOINC test lookup failed: ${classified.error}`,
+        retriable: classified.retriable,
+      };
     }
   },
 });

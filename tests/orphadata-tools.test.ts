@@ -54,7 +54,10 @@ const MOCK_PHENOTYPES: Record<number, any> = {
 
 function setupMocks() {
   mkdirSync(tmpDir, { recursive: true });
-  process.env.ORPHADATA_DB_PATH = join(tmpDir, `tools-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
+  process.env.ORPHADATA_DB_PATH = join(
+    tmpDir,
+    `tools-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`,
+  );
   globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
     if (url.includes("/rd-cross-referencing/orphacodes?lang=en")) {
       return {
@@ -98,10 +101,10 @@ describe("rareDiseaseSearchTool", () => {
       query: "Alexander",
       maxResults: 10,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].orphacode).toBe(58);
-    expect(result.results[0].name).toBe("Alexander disease");
-    expect(result.error).toBeUndefined();
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].orphacode).toBe(58);
+    expect(result.data.results[0].name).toBe("Alexander disease");
   });
 
   test("returns multiple matches", async () => {
@@ -118,7 +121,8 @@ describe("rareDiseaseSearchTool", () => {
       query: "a",
       maxResults: 10,
     });
-    expect(result.results.length).toBeGreaterThanOrEqual(2);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results.length).toBeGreaterThanOrEqual(2);
   });
 
   test("returns error when no diseases match", async () => {
@@ -135,8 +139,9 @@ describe("rareDiseaseSearchTool", () => {
       query: "zzz-nonexistent",
       maxResults: 10,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toBe("No rare diseases found matching the query.");
+    expect(result.retriable).toBe(false);
   });
 
   test("respects maxResults parameter", async () => {
@@ -153,7 +158,8 @@ describe("rareDiseaseSearchTool", () => {
       query: "a",
       maxResults: 1,
     });
-    expect(result.results.length).toBeLessThanOrEqual(1);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results.length).toBeLessThanOrEqual(1);
   });
 });
 
@@ -169,14 +175,16 @@ describe("rareDiseaseGenesTool", () => {
     await initializeOrphadataCache();
 
     const result = await rareDiseaseGenesTool.execute({ orphacode: 58 });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].geneSymbol).toBe("GFAP");
-    expect(result.results[0].geneName).toBe("glial fibrillary acidic protein");
-    expect(result.results[0].associationType).toBe(
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].geneSymbol).toBe("GFAP");
+    expect(result.data.results[0].geneName).toBe(
+      "glial fibrillary acidic protein",
+    );
+    expect(result.data.results[0].associationType).toBe(
       "Disease-causing germline mutation(s) in",
     );
-    expect(result.results[0].source).toBe("4235");
-    expect(result.error).toBeUndefined();
+    expect(result.data.results[0].source).toBe("4235");
   });
 
   test("returns error for disease with no genes", async () => {
@@ -190,8 +198,9 @@ describe("rareDiseaseGenesTool", () => {
     await initializeOrphadataCache();
 
     const result = await rareDiseaseGenesTool.execute({ orphacode: 99999 });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toContain("99999");
+    expect(result.retriable).toBe(false);
   });
 
   test("returns error for uncached disease when fetch fails", async () => {
@@ -204,13 +213,12 @@ describe("rareDiseaseGenesTool", () => {
     );
     await initializeOrphadataCache();
 
-    globalThis.fetch = vi
-      .fn()
-      .mockRejectedValue(new Error("Network error"));
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
     const result = await rareDiseaseGenesTool.execute({ orphacode: 12345 });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toContain("12345");
+    expect(result.retriable).toBe(false);
   });
 });
 
@@ -226,11 +234,11 @@ describe("rareDiseasePhenotypesTool", () => {
     await initializeOrphadataCache();
 
     const result = await rareDiseasePhenotypesTool.execute({ orphacode: 58 });
-    expect(result.results).toHaveLength(2);
-    expect(result.results[0].hpoId).toBe("HP:0000256");
-    expect(result.results[0].phenotypeName).toBe("Macrocephaly");
-    expect(result.results[0].frequency).toBe("Very frequent (99-80%)");
-    expect(result.error).toBeUndefined();
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(2);
+    expect(result.data.results[0].hpoId).toBe("HP:0000256");
+    expect(result.data.results[0].phenotypeName).toBe("Macrocephaly");
+    expect(result.data.results[0].frequency).toBe("Very frequent (99-80%)");
   });
 
   test("returns error for disease with no phenotypes", async () => {
@@ -246,8 +254,9 @@ describe("rareDiseasePhenotypesTool", () => {
     const result = await rareDiseasePhenotypesTool.execute({
       orphacode: 99999,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toContain("99999");
+    expect(result.retriable).toBe(false);
   });
 
   test("returns error for uncached disease when fetch fails", async () => {
@@ -260,14 +269,13 @@ describe("rareDiseasePhenotypesTool", () => {
     );
     await initializeOrphadataCache();
 
-    globalThis.fetch = vi
-      .fn()
-      .mockRejectedValue(new Error("Network error"));
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
     const result = await rareDiseasePhenotypesTool.execute({
       orphacode: 12345,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toContain("12345");
+    expect(result.retriable).toBe(false);
   });
 });

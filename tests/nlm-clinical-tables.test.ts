@@ -31,11 +31,11 @@ describe("hpoTermSearchTool", () => {
       query: "macrocephaly",
       maxResults: 10,
     });
-    expect(result.results).toHaveLength(3);
-    expect(result.results[0].hpoId).toBe("HP:0000256");
-    expect(result.results[0].name).toBe("Macrocephaly");
-    expect(result.totalAvailable).toBe(6);
-    expect(result.error).toBeUndefined();
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(3);
+    expect(result.data.results[0].hpoId).toBe("HP:0000256");
+    expect(result.data.results[0].name).toBe("Macrocephaly");
+    expect(result.data.totalAvailable).toBe(6);
   });
 
   test("returns error when no terms found", async () => {
@@ -53,8 +53,9 @@ describe("hpoTermSearchTool", () => {
       query: "zzz-nonexistent",
       maxResults: 10,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toBe("No HPO terms found matching the query.");
+    expect(result.retriable).toBe(false);
   });
 
   test("handles 404 response gracefully", async () => {
@@ -72,8 +73,9 @@ describe("hpoTermSearchTool", () => {
       query: "test",
       maxResults: 10,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toBe("No HPO terms found matching the query.");
+    expect(result.retriable).toBe(false);
   });
 
   test("handles network error", async () => {
@@ -87,8 +89,9 @@ describe("hpoTermSearchTool", () => {
       query: "seizure",
       maxResults: 10,
     });
-    expect(result.results).toEqual([]);
-    expect(result.error).toBe("Failed to search HPO terms.");
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("Network error");
+    expect(result.retriable).toBe(true);
   });
 
   test("handles null data in response", async () => {
@@ -106,8 +109,9 @@ describe("hpoTermSearchTool", () => {
       query: "test",
       maxResults: 10,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toBe("No HPO terms found matching the query.");
+    expect(result.retriable).toBe(false);
   });
 });
 
@@ -135,12 +139,12 @@ describe("loincTestLookupTool", () => {
       query: "hemoglobin",
       maxResults: 10,
     });
-    expect(result.results).toHaveLength(2);
-    expect(result.results[0].loincCode).toBe("43113-0");
-    expect(result.results[0].componentName).toBe("Hemoglobin panel");
-    expect(result.results[0].method).toBe("Electrophoresis");
-    expect(result.totalAvailable).toBe(467);
-    expect(result.error).toBeUndefined();
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(2);
+    expect(result.data.results[0].loincCode).toBe("43113-0");
+    expect(result.data.results[0].componentName).toBe("Hemoglobin panel");
+    expect(result.data.results[0].method).toBe("Electrophoresis");
+    expect(result.data.totalAvailable).toBe(467);
   });
 
   test("returns empty system and method when missing", async () => {
@@ -151,23 +155,19 @@ describe("loincTestLookupTool", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => [
-        1,
-        ["723-7"],
-        null,
-        [["723-7", "Hemoglobin", "", ""]],
-      ],
+      json: async () => [1, ["723-7"], null, [["723-7", "Hemoglobin", "", ""]]],
     }) as any;
 
     const result = await loincTestLookupTool.execute({
       query: "hemoglobin",
       maxResults: 10,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].loincCode).toBe("723-7");
-    expect(result.results[0].componentName).toBe("Hemoglobin");
-    expect(result.results[0].system).toBeUndefined();
-    expect(result.results[0].method).toBeUndefined();
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].loincCode).toBe("723-7");
+    expect(result.data.results[0].componentName).toBe("Hemoglobin");
+    expect(result.data.results[0].system).toBeUndefined();
+    expect(result.data.results[0].method).toBeUndefined();
   });
 
   test("returns error when no tests found", async () => {
@@ -185,8 +185,9 @@ describe("loincTestLookupTool", () => {
       query: "zzz-nonexistent",
       maxResults: 10,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toBe("No LOINC tests found matching the query.");
+    expect(result.retriable).toBe(false);
   });
 
   test("handles 404 response", async () => {
@@ -204,8 +205,9 @@ describe("loincTestLookupTool", () => {
       query: "test",
       maxResults: 10,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toBe("No LOINC tests found matching the query.");
+    expect(result.retriable).toBe(false);
   });
 
   test("handles network error", async () => {
@@ -219,8 +221,9 @@ describe("loincTestLookupTool", () => {
       query: "troponin",
       maxResults: 10,
     });
-    expect(result.results).toEqual([]);
-    expect(result.error).toBe("Failed to search LOINC tests.");
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("Network error");
+    expect(result.retriable).toBe(true);
   });
 
   test("handles LOINC records with system info", async () => {
@@ -235,7 +238,7 @@ describe("loincTestLookupTool", () => {
         1,
         ["2345-7"],
         null,
-        [["2345-7", "Glucose", "Serum", ""]]
+        [["2345-7", "Glucose", "Serum", ""]],
       ],
     }) as any;
 
@@ -243,7 +246,8 @@ describe("loincTestLookupTool", () => {
       query: "glucose",
       maxResults: 10,
     });
-    expect(result.results[0].system).toBe("Serum");
-    expect(result.results[0].method).toBeUndefined();
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results[0].system).toBe("Serum");
+    expect(result.data.results[0].method).toBeUndefined();
   });
 });

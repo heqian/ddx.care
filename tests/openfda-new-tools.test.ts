@@ -8,9 +8,7 @@ afterEach(() => {
 
 describe("drugShortagesTool", () => {
   test("returns parsed shortage records", async () => {
-    const { drugShortagesTool } = await import(
-      "../src/backend/tools/open-fda"
-    );
+    const { drugShortagesTool } = await import("../src/backend/tools/open-fda");
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -40,24 +38,24 @@ describe("drugShortagesTool", () => {
       drugName: "furosemide",
       limit: 5,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].genericName).toBe("Furosemide Injection");
-    expect(result.results[0].availability).toBe("Unavailable");
-    expect(result.results[0].reason).toBe("Manufacturing delay");
-    expect(result.results[0].status).toBe("Current");
-    expect(result.results[0].company).toBe("Pharma Inc");
-    expect(result.results[0].presentation).toBe(
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].genericName).toBe("Furosemide Injection");
+    expect(result.data.results[0].availability).toBe("Unavailable");
+    expect(result.data.results[0].reason).toBe("Manufacturing delay");
+    expect(result.data.results[0].status).toBe("Current");
+    expect(result.data.results[0].company).toBe("Pharma Inc");
+    expect(result.data.results[0].presentation).toBe(
       "Furosemide, Injection, 10 mg/1 mL",
     );
-    expect(result.results[0].therapeuticCategory).toEqual(["Cardiovascular"]);
-    expect(result.results[0].updateDate).toBe("04/24/2026");
-    expect(result.error).toBeUndefined();
+    expect(result.data.results[0].therapeuticCategory).toEqual([
+      "Cardiovascular",
+    ]);
+    expect(result.data.results[0].updateDate).toBe("04/24/2026");
   });
 
   test("falls back to openfda fields when top-level missing", async () => {
-    const { drugShortagesTool } = await import(
-      "../src/backend/tools/open-fda"
-    );
+    const { drugShortagesTool } = await import("../src/backend/tools/open-fda");
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -80,15 +78,14 @@ describe("drugShortagesTool", () => {
       drugName: "lipitor",
       limit: 5,
     });
-    expect(result.results[0].brandName).toBe("LIPITOR");
-    expect(result.results[0].genericName).toBe("ATORVASTATIN");
-    expect(result.results[0].company).toBe("Pfizer");
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results[0].brandName).toBe("LIPITOR");
+    expect(result.data.results[0].genericName).toBe("ATORVASTATIN");
+    expect(result.data.results[0].company).toBe("Pfizer");
   });
 
   test("handles 404 (no shortage data)", async () => {
-    const { drugShortagesTool } = await import(
-      "../src/backend/tools/open-fda"
-    );
+    const { drugShortagesTool } = await import("../src/backend/tools/open-fda");
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
@@ -100,14 +97,13 @@ describe("drugShortagesTool", () => {
       drugName: "unknown",
       limit: 5,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toBe("No drug shortage data found.");
+    expect(result.retriable).toBe(false);
   });
 
   test("handles empty results array", async () => {
-    const { drugShortagesTool } = await import(
-      "../src/backend/tools/open-fda"
-    );
+    const { drugShortagesTool } = await import("../src/backend/tools/open-fda");
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -119,7 +115,8 @@ describe("drugShortagesTool", () => {
       drugName: "aspirin",
       limit: 5,
     });
-    expect(result.results).toEqual([]);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toEqual([]);
   });
 });
 
@@ -156,21 +153,21 @@ describe("foodAdverseEventsTool", () => {
       productName: "centrum",
       limit: 5,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].reportNumber).toBe("149779");
-    expect(result.results[0].reactions).toEqual(["CHOKING", "COUGH"]);
-    expect(result.results[0].outcomes).toEqual([
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].reportNumber).toBe("149779");
+    expect(result.data.results[0].reactions).toEqual(["CHOKING", "COUGH"]);
+    expect(result.data.results[0].outcomes).toEqual([
       "Other Serious or Important Medical Event",
     ]);
-    expect(result.results[0].consumerAge).toBe("89 year(s)");
-    expect(result.results[0].consumerGender).toBe("Female");
-    expect(result.results[0].products).toHaveLength(1);
-    expect(result.results[0].products![0].name).toBe("CENTRUM SILVER");
-    expect(result.results[0].products![0].industry).toBe(
+    expect(result.data.results[0].consumerAge).toBe("89 year(s)");
+    expect(result.data.results[0].consumerGender).toBe("Female");
+    expect(result.data.results[0].products).toHaveLength(1);
+    expect(result.data.results[0].products![0].name).toBe("CENTRUM SILVER");
+    expect(result.data.results[0].products![0].industry).toBe(
       "Vit/Min/Prot/Unconv Diet",
     );
-    expect(result.results[0].dateStarted).toBe("20120229");
-    expect(result.error).toBeUndefined();
+    expect(result.data.results[0].dateStarted).toBe("20120229");
   });
 
   test("handles report with missing consumer info", async () => {
@@ -196,9 +193,10 @@ describe("foodAdverseEventsTool", () => {
       productName: "test",
       limit: 5,
     });
-    expect(result.results[0].consumerAge).toBeUndefined();
-    expect(result.results[0].consumerGender).toBeUndefined();
-    expect(result.results[0].products).toEqual([]);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results[0].consumerAge).toBeUndefined();
+    expect(result.data.results[0].consumerGender).toBeUndefined();
+    expect(result.data.results[0].products).toEqual([]);
   });
 
   test("handles 404 (no food events)", async () => {
@@ -216,8 +214,9 @@ describe("foodAdverseEventsTool", () => {
       productName: "unknown",
       limit: 5,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toBe("No food adverse event reports found.");
+    expect(result.retriable).toBe(false);
   });
 
   test("handles empty results", async () => {
@@ -235,7 +234,8 @@ describe("foodAdverseEventsTool", () => {
       productName: "test",
       limit: 5,
     });
-    expect(result.results).toEqual([]);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toEqual([]);
   });
 
   test("handles consumer with age but no age_unit", async () => {
@@ -262,7 +262,8 @@ describe("foodAdverseEventsTool", () => {
       productName: "test",
       limit: 5,
     });
-    expect(result.results[0].consumerAge).toBe("45");
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results[0].consumerAge).toBe("45");
   });
 });
 
@@ -300,16 +301,19 @@ describe("deviceAdverseEventsTool", () => {
       deviceName: "pacemaker",
       limit: 5,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].reportNumber).toBe("10");
-    expect(result.results[0].eventType).toBe("Injury");
-    expect(result.results[0].deviceName).toBe("Pacemaker");
-    expect(result.results[0].medicalSpecialty).toBe("Cardiovascular");
-    expect(result.results[0].patientProblems).toEqual(["Burn", "Infection"]);
-    expect(result.results[0].eventLocation).toBe("HOSPITAL");
-    expect(result.results[0].dateOfEvent).toBe("19920220");
-    expect(result.results[0].dateReceived).toBe("19920310");
-    expect(result.error).toBeUndefined();
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].reportNumber).toBe("10");
+    expect(result.data.results[0].eventType).toBe("Injury");
+    expect(result.data.results[0].deviceName).toBe("Pacemaker");
+    expect(result.data.results[0].medicalSpecialty).toBe("Cardiovascular");
+    expect(result.data.results[0].patientProblems).toEqual([
+      "Burn",
+      "Infection",
+    ]);
+    expect(result.data.results[0].eventLocation).toBe("HOSPITAL");
+    expect(result.data.results[0].dateOfEvent).toBe("19920220");
+    expect(result.data.results[0].dateReceived).toBe("19920310");
   });
 
   test("handles report with missing openfda section", async () => {
@@ -336,9 +340,10 @@ describe("deviceAdverseEventsTool", () => {
       deviceName: "test",
       limit: 5,
     });
-    expect(result.results[0].deviceName).toBeUndefined();
-    expect(result.results[0].medicalSpecialty).toBeUndefined();
-    expect(result.results[0].patientProblems).toEqual([]);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results[0].deviceName).toBeUndefined();
+    expect(result.data.results[0].medicalSpecialty).toBeUndefined();
+    expect(result.data.results[0].patientProblems).toEqual([]);
   });
 
   test("handles 404 (no device events)", async () => {
@@ -356,8 +361,9 @@ describe("deviceAdverseEventsTool", () => {
       deviceName: "unknown",
       limit: 5,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
     expect(result.error).toBe("No device adverse event reports found.");
+    expect(result.retriable).toBe(false);
   });
 
   test("handles empty results", async () => {
@@ -375,7 +381,8 @@ describe("deviceAdverseEventsTool", () => {
       deviceName: "test",
       limit: 5,
     });
-    expect(result.results).toEqual([]);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toEqual([]);
   });
 
   test("handles multiple device names in openfda", async () => {
@@ -408,8 +415,9 @@ describe("deviceAdverseEventsTool", () => {
       deviceName: "ventilator",
       limit: 5,
     });
-    expect(result.results[0].deviceName).toBe("Ventilator, Respirator");
-    expect(result.results[0].medicalSpecialty).toBe(
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results[0].deviceName).toBe("Ventilator, Respirator");
+    expect(result.data.results[0].medicalSpecialty).toBe(
       "Anesthesiology, General Hospital",
     );
   });

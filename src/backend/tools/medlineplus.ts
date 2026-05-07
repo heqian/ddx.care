@@ -1,5 +1,10 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
+import {
+  APITimeoutError,
+  RateLimitError,
+  PermanentAPIError,
+} from "../utils/errors";
 import { fetchJSON } from "./utils/fetch";
 
 const MEDLINE_BASE = "https://connect.medlineplus.gov/service";
@@ -67,7 +72,7 @@ const CONDITION_ICD10: Record<string, string> = {
 export const medlinePlusSearchTool = createTool({
   id: "medlineplus-search",
   description:
-    "Search MedlinePlus for patient-friendly health information on diseases, conditions, and wellness topics. Returns plain-language summaries of causes, symptoms, diagnosis, and treatment.",
+    "Search MedlinePlus for patient-friendly health information on diseases, conditions, and wellness topics. Returns plain-language summaries of causes, symptoms, diagnosis, and treatment. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
   inputSchema: z.object({
     condition: z
       .string()
@@ -75,16 +80,25 @@ export const medlinePlusSearchTool = createTool({
         "Disease or condition name (e.g. 'diabetes', 'heart failure', 'pneumonia')",
       ),
   }),
-  outputSchema: z.object({
-    results: z.array(
-      z.object({
-        title: z.string(),
-        summary: z.string(),
-        url: z.string().optional(),
+  outputSchema: z.union([
+    z.object({
+      ok: z.literal(true),
+      data: z.object({
+        results: z.array(
+          z.object({
+            title: z.string(),
+            summary: z.string(),
+            url: z.string().optional(),
+          }),
+        ),
       }),
-    ),
-    error: z.string().optional(),
-  }),
+    }),
+    z.object({
+      ok: z.literal(false),
+      error: z.string(),
+      retriable: z.boolean(),
+    }),
+  ]),
   execute: async ({ condition }) => {
     // Look up ICD-10-CM code for the condition
     const icd10 = CONDITION_ICD10[condition.toLowerCase().trim()];
@@ -100,6 +114,8 @@ export const medlinePlusSearchTool = createTool({
     attempts.push(
       `${MEDLINE_BASE}?mainSearchCriteria.v.cs=2.16.840.1.113883.6.103&mainSearchCriteria.v.dn=${encodeURIComponent(condition)}&knowledgeResponseType=application/json`,
     );
+
+    let lastError: { message: string; retriable: boolean } | null = null;
 
     for (const url of attempts) {
       try {
@@ -125,13 +141,37 @@ export const medlinePlusSearchTool = createTool({
         }));
 
         if (results.length > 0) {
-          return { results };
+          return { ok: true as const, data: { results } };
         }
-      } catch {
+      } catch (error: unknown) {
+        if (error instanceof APITimeoutError) {
+          lastError = { message: error.message, retriable: true };
+        } else if (error instanceof RateLimitError) {
+          lastError = { message: error.message, retriable: true };
+        } else if (error instanceof PermanentAPIError) {
+          lastError = { message: error.message, retriable: false };
+        } else {
+          lastError = {
+            message: error instanceof Error ? error.message : String(error),
+            retriable: true,
+          };
+        }
         continue;
       }
     }
 
-    return { results: [], error: "No information found for this condition." };
+    if (lastError) {
+      return {
+        ok: false as const,
+        error: lastError.message,
+        retriable: lastError.retriable,
+      };
+    }
+
+    return {
+      ok: false as const,
+      error: "No information found for this condition.",
+      retriable: true,
+    };
   },
 });

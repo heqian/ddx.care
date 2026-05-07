@@ -31,8 +31,10 @@ describe("drug-interaction tool execute", () => {
     }) as any;
 
     const result = await drugLookupTool.execute({ drugName: "aspirin" });
-    expect(result.rxcui).toBe("12345");
-    expect(result.name).toBe("Aspirin");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.rxcui).toBe("12345");
+    expect(result.data.name).toBe("Aspirin");
   });
 
   test("drugLookupTool handles empty response", async () => {
@@ -47,7 +49,9 @@ describe("drug-interaction tool execute", () => {
     }) as any;
 
     const result = await drugLookupTool.execute({ drugName: "unknown" });
-    expect(result.rxcui).toBeUndefined();
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.rxcui).toBeUndefined();
   });
 
   test("drugInteractionTool returns interactions", async () => {
@@ -84,9 +88,11 @@ describe("drug-interaction tool execute", () => {
     const result = await drugInteractionTool.execute({
       rxcuis: ["123", "456"],
     });
-    expect(result.interactions).toHaveLength(1);
-    expect(result.interactions[0].severity).toBe("high");
-    expect(result.noInteractionsFound).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.interactions).toHaveLength(1);
+    expect(result.data.interactions[0].severity).toBe("high");
+    expect(result.data.noInteractionsFound).toBe(false);
   });
 
   test("drugInteractionTool handles API error gracefully", async () => {
@@ -99,8 +105,9 @@ describe("drug-interaction tool execute", () => {
     const result = await drugInteractionTool.execute({
       rxcuis: ["123", "456"],
     });
-    expect(result.interactions).toEqual([]);
-    expect(result.noInteractionsFound).toBe(true);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected error result");
+    expect(result.retriable).toBe(true);
   });
 
   test("drugInteractionTool handles non-200 HTTP response gracefully", async () => {
@@ -117,8 +124,9 @@ describe("drug-interaction tool execute", () => {
     const result = await drugInteractionTool.execute({
       rxcuis: ["123", "456"],
     });
-    expect(result.interactions).toEqual([]);
-    expect(result.noInteractionsFound).toBe(true);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected error result");
+    expect(result.retriable).toBe(true);
   });
 
   test("drugInteractionTool handles empty interaction list", async () => {
@@ -137,8 +145,10 @@ describe("drug-interaction tool execute", () => {
     const result = await drugInteractionTool.execute({
       rxcuis: ["123", "456"],
     });
-    expect(result.interactions).toEqual([]);
-    expect(result.noInteractionsFound).toBe(true);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.interactions).toEqual([]);
+    expect(result.data.noInteractionsFound).toBe(true);
   });
 
   test("drugSpellingTool returns suggestions", async () => {
@@ -157,7 +167,9 @@ describe("drug-interaction tool execute", () => {
     }) as any;
 
     const result = await drugSpellingTool.execute({ drugName: "asprin" });
-    expect(result.suggestions).toEqual(["aspirin", "asprin"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.suggestions).toEqual(["aspirin", "asprin"]);
   });
 });
 
@@ -186,9 +198,11 @@ describe("medlineplus tool execute", () => {
     const result = await medlinePlusSearchTool.execute({
       condition: "diabetes",
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].title).toBe("Diabetes");
-    expect(result.results[0].summary).toBe("Diabetes overview");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].title).toBe("Diabetes");
+    expect(result.data.results[0].summary).toBe("Diabetes overview");
   });
 
   test("medlinePlusSearchTool falls back to condition name search", async () => {
@@ -223,11 +237,13 @@ describe("medlineplus tool execute", () => {
     const result = await medlinePlusSearchTool.execute({
       condition: "hypertension",
     });
-    expect(result.results).toHaveLength(1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
     expect(callCount).toBe(2);
   });
 
-  test("medlinePlusSearchTool returns empty array for unknown condition", async () => {
+  test("medlinePlusSearchTool returns error for unknown condition", async () => {
     const { medlinePlusSearchTool } = await import(
       "../src/backend/tools/medlineplus"
     );
@@ -241,8 +257,10 @@ describe("medlineplus tool execute", () => {
     const result = await medlinePlusSearchTool.execute({
       condition: "xyz-unknown",
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected error result");
     expect(result.error).toBe("No information found for this condition.");
+    expect(result.retriable).toBe(true);
   });
 
   test("medlinePlusSearchTool handles fetch timeout gracefully", async () => {
@@ -257,8 +275,9 @@ describe("medlineplus tool execute", () => {
     const result = await medlinePlusSearchTool.execute({
       condition: "diabetes",
     });
-    expect(result.results).toEqual([]);
-    expect(result.error).toBe("No information found for this condition.");
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected error result");
+    expect(result.retriable).toBe(true);
   });
 });
 
@@ -297,9 +316,11 @@ describe("clinical-trials tool execute", () => {
       status: "RECRUITING",
       pageSize: 5,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].nctId).toBe("NCT001");
-    expect(result.results[0].status).toBe("RECRUITING");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].nctId).toBe("NCT001");
+    expect(result.data.results[0].status).toBe("RECRUITING");
   });
 
   test("clinicalTrialsSearchTool handles empty results", async () => {
@@ -318,8 +339,10 @@ describe("clinical-trials tool execute", () => {
       status: "ALL",
       pageSize: 5,
     });
-    expect(result.results).toEqual([]);
-    expect(result.totalCount).toBe(0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toEqual([]);
+    expect(result.data.totalCount).toBe(0);
   });
 });
 
@@ -355,10 +378,12 @@ describe("open-fda tool execute", () => {
       drugName: "aspirin",
       limit: 3,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].reportId).toBe("SR001");
-    expect(result.results[0].serious).toBe(true);
-    expect(result.meta?.totalResults).toBe(100);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].reportId).toBe("SR001");
+    expect(result.data.results[0].serious).toBe(true);
+    expect(result.data.meta?.totalResults).toBe(100);
   });
 
   test("adverseEventsTool handles 404 with ignore404", async () => {
@@ -376,8 +401,10 @@ describe("open-fda tool execute", () => {
       drugName: "unknown-drug",
       limit: 3,
     });
-    expect(result.results).toEqual([]);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected error result");
     expect(result.error).toBe("No adverse event reports found for this drug.");
+    expect(result.retriable).toBe(false);
   });
 
   test("drugLabelingTool returns parsed labeling", async () => {
@@ -406,8 +433,10 @@ describe("open-fda tool execute", () => {
       drugName: "atorvastatin",
       limit: 1,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].brandName).toBe("Lipitor");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].brandName).toBe("Lipitor");
   });
 
   test("drugRecallTool returns parsed recalls", async () => {
@@ -435,8 +464,10 @@ describe("open-fda tool execute", () => {
       drugName: "drug-a",
       limit: 5,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].recallNumber).toBe("R-123");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].recallNumber).toBe("R-123");
   });
 
   test("substanceToxicologyTool returns parsed substances", async () => {
@@ -462,8 +493,10 @@ describe("open-fda tool execute", () => {
       substanceName: "ethylene glycol",
       limit: 3,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].substanceName).toBe("Ethylene Glycol");
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results).toHaveLength(1);
+    expect(result.data.results[0].substanceName).toBe("Ethylene Glycol");
   });
 });
 
@@ -526,9 +559,12 @@ describe("pubmed-search tool execute", () => {
       query: "test",
       maxResults: 5,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].pmid).toBe("12345");
-    expect(result.totalResults).toBe(1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toHaveLength(1);
+      expect(result.data.results[0].pmid).toBe("12345");
+      expect(result.data.totalResults).toBe(1);
+    }
   });
 
   test("pubmedSearchTool handles empty search", async () => {
@@ -548,8 +584,11 @@ describe("pubmed-search tool execute", () => {
       query: "xyz-nonexistent",
       maxResults: 5,
     });
-    expect(result.results).toEqual([]);
-    expect(result.totalResults).toBe(0);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toEqual([]);
+      expect(result.data.totalResults).toBe(0);
+    }
   });
 
   test("relatedArticlesTool returns related articles", async () => {
@@ -593,8 +632,11 @@ describe("pubmed-search tool execute", () => {
       pmid: "12345",
       maxResults: 5,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].pmid).toBe("67890");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toHaveLength(1);
+      expect(result.data.results[0].pmid).toBe("67890");
+    }
   });
 
   test("omimSearchTool returns genetic conditions", async () => {
@@ -632,7 +674,10 @@ describe("pubmed-search tool execute", () => {
       query: "marfan",
       maxResults: 5,
     });
-    expect(result.results).toHaveLength(1);
-    expect(result.results[0].title).toBe("Marfan Syndrome");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.results).toHaveLength(1);
+      expect(result.data.results[0].title).toBe("Marfan Syndrome");
+    }
   });
 });

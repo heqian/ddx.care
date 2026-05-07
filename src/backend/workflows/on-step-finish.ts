@@ -3,6 +3,7 @@ import { logger } from "../utils/logger";
 import { formatToolArgs } from "./diagnostic-workflow";
 import { formatToolLabel } from "../tools/tool-labels";
 import { summarizeToolResult } from "./tool-result-summary";
+import { getErrorTypeName } from "../utils/errors";
 
 type EmitFn = (
   eventType: ProgressEventType,
@@ -62,16 +63,26 @@ export function createStepEventHandler(
         tr.payload.result,
       );
 
+      const eventExtra: Partial<ProgressEvent> & { errorType?: string } = {
+        agentId,
+        toolName: tr.payload.toolName,
+        success: !isError,
+        durationMs,
+        resultSummary,
+      };
+
+      if (isError) {
+        const errorObj =
+          tr.payload.result instanceof Error ? tr.payload.result : undefined;
+        eventExtra.errorType = errorObj
+          ? getErrorTypeName(errorObj)
+          : "UnknownError";
+      }
+
       emit(
         "tool_result",
         `${agentId}: ${formatToolLabel(tr.payload.toolName)}${isError ? " failed" : " completed"}`,
-        {
-          agentId,
-          toolName: tr.payload.toolName,
-          success: !isError,
-          durationMs,
-          resultSummary,
-        },
+        eventExtra,
       );
       logger.toolResult(
         agentId,
