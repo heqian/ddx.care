@@ -100,6 +100,18 @@ Shared utilities:
 - `ws-token.ts` — `generateToken(jobId)` and `verifyToken(jobId, token)` functions using HMAC-SHA256 with `WS_TOKEN_SECRET`. When `WS_TOKEN_SECRET` is empty (dev mode), tokens are not required for WebSocket connections.
 - `abort-controller-store.ts` — `Map<string, AbortController>` with exported `set`, `get`, `remove` functions. Stores abort controllers for running workflows, enabling cancellation via `DELETE /v1/diagnose/:jobId`.
 
+#### Tool Cache (`src/backend/tools/utils/tool-cache.ts`)
+
+- SQLite-backed URL→response cache for tool API calls. Avoids redundant HTTP requests when multiple specialists query the same endpoint during a diagnosis.
+- `initToolCache()` — Opens DB, creates table, prepares statements. Called on server startup.
+- `getCached(url)` — Returns cached response or `null` on miss/expiry. Increments hit/miss counters.
+- `setCached(url, response)` — Stores successful HTTP 200 response with timestamp.
+- `cleanupExpired()` — Deletes entries older than `TOOL_CACHE_TTL_MS`. Called every 10 minutes.
+- `getCacheStats()` — Returns `{ entries, hits, misses }` for health endpoint.
+- Cache lookup happens in `fetchJSON` before NCBI rate limiting — a cache hit skips both the HTTP call and the rate limit wait.
+- Only HTTP 200 responses are cached. Errors (429, 4xx, 5xx, timeout) and `ignore404` sentinel responses are never cached.
+- Set `TOOL_CACHE_TTL_MS=0` to disable caching entirely.
+
 #### Progress Store (`src/backend/progress-store.ts`)
 
 - `JobStore` class (extends `EventTarget`) — SQLite-backed (`bun:sqlite`) job persistence.
@@ -119,6 +131,7 @@ All constants centralized here, read from environment variables with defaults:
 - `MAX_INPUT_FIELD_LENGTH` (50,000 chars), `MAX_PAYLOAD_BYTES` (1MB)
 - `MOCK_LLM`, `LOG_FORMAT`, `SPECIALIST_CONTEXT_MODE`, `SPECIALIST_CONTEXT_MAX_CHARS`, `CMO_CONTEXT_MAX_CHARS`
 - `WS_TOKEN_SECRET` (empty = dev mode, no token required; set for production)
+- `TOOL_CACHE_TTL_MS` (86400000 / 24h), `TOOL_CACHE_DB_PATH` (`tool-cache.sqlite`), `TOOL_CACHE_CLEANUP_INTERVAL_MS` (10min). Set `TOOL_CACHE_TTL_MS=0` to disable tool API response caching.
 
 ### Frontend (`src/frontend/`)
 
@@ -181,6 +194,7 @@ Entry point. Creates the `Bun.serve()` instance with:
 **Background tasks**:
 - Job cleanup interval (every 5 minutes, removes jobs older than 60 minutes)
 - Rate limiter prune interval (every 10 minutes)
+- Tool cache cleanup interval (every 10 minutes, removes entries older than `TOOL_CACHE_TTL_MS`)
 - `progressStore.markStalePending()` on startup marks all pending jobs as failed
 
 ### Environment Variables
@@ -196,7 +210,7 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `SPECIALIST_MODEL` | `ollama-cloud/gemma4:31b` | Override specialist agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `ORCHESTRATOR_MODEL` | `ollama-cloud/gemma4:31b` | Override CMO agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max CMO consultation rounds |
-| `RATE_LIMIT_MAX_REQUESTS` | `5` | Max diagnosis requests per IP per window |
+| `RATE_LIMIT_MAX_REQUESTS` | `10` | Max diagnosis requests per IP per window |
 | `RATE_LIMIT_WINDOW_MS` | `60000` (1 min) | Rate limit sliding window |
 | `MAX_CONCURRENT_WORKFLOWS` | `3` | Max concurrent diagnostic workflows |
 | `MOCK_LLM` | — | Set to `1` for mock mode (testing) |
@@ -206,7 +220,16 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `CMO_CONTEXT_MAX_CHARS` | `60000` | Max characters of context maintained in CMO history |
 | `AUDIT_LOG_PATH` | — | Path to persistent audit log file (e.g., `./logs/audit.log`). When set, all log events are appended as JSON Lines. |
 | `AUDIT_LOG_MAX_SIZE_MB` | `10` | Max audit log file size in MB before rotation. |
+| `TOOL_CACHE_TTL_MS` | `86400000` (24h) | Tool API response cache TTL. Set to `0` to disable caching. |
+| `TOOL_CACHE_DB_PATH` | `tool-cache.sqlite` | Path to the tool cache SQLite database file |
 | `AUDIT_LOG_MAX_FILES` | `5` | Number of rotated audit log files to retain. |
+| `RATE_LIMIT_MAX_ENTRIES` | `10000` | Max rate limiter entries before evicting oldest |
+| `MAX_SPECIALIST_CONCURRENCY` | `1` | Max concurrent specialist agents per round |
+| `AGENT_GENERATE_MAX_RETRIES` | `3` | Max retries for agent generation calls |
+| `AGENT_GENERATE_RETRY_BASE_DELAY` | `1000` | Base delay in ms between agent generation retries |
+| `DIAGNOSIS_TIMEOUT_MS` | `900000` (15 min) | Diagnosis workflow timeout |
+| `DB_PATH` | `jobs.sqlite` | Path to SQLite job database |
+| `ORPHADATA_DB_PATH` | `orphadata.sqlite` | Path to SQLite Orphadata cache database |
 
 ## Testing
 

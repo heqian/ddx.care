@@ -3,6 +3,8 @@ import {
   RateLimitError,
   PermanentAPIError,
 } from "../../utils/errors";
+import { getCached, setCached } from "./tool-cache";
+import { logger } from "../../utils/logger";
 
 export interface FetchJSONOptions extends RequestInit {
   timeoutMs?: number;
@@ -44,6 +46,13 @@ export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
     ...fetchOptions
   } = options;
 
+  // Check cache first — a hit skips both the HTTP call and rate limiting
+  const cached = getCached(url);
+  if (cached !== null) {
+    logger.info("tool_cache_hit", { url });
+    return cached;
+  }
+
   // Rate limiting for NCBI APIs
   if (url.includes("ncbi.nlm.nih.gov")) {
     await getNcbiToken();
@@ -74,7 +83,10 @@ export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
       throw new Error(`${errorPrefix} error: ${res.status} ${res.statusText}`);
     }
 
-    return await res.json();
+    const data = await res.json();
+    // Only cache successful HTTP 200 responses
+    setCached(url, data);
+    return data;
   } catch (error: unknown) {
     if (
       error instanceof APITimeoutError ||

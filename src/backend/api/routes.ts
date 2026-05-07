@@ -6,6 +6,8 @@ import { RateLimiter } from "../utils/rate-limiter";
 import { logger } from "../utils/logger";
 import { generateToken, verifyToken } from "../utils/ws-token";
 import * as abortStore from "../utils/abort-controller-store";
+import { getCacheStats } from "../tools/utils/tool-cache";
+import { TOOL_CACHE_ENABLED } from "../config";
 import {
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
@@ -360,6 +362,9 @@ export function createRoutes(
         const uptime = process.uptime();
         const activeWorkflows = rateLimiter.activeWorkflows;
         const dbOk = progressStore.healthCheck();
+        const toolCache = TOOL_CACHE_ENABLED
+          ? { enabled: true as const, ...getCacheStats() }
+          : { enabled: false as const };
 
         const status = dbOk ? 200 : 500;
         logger.request("GET", "/v1/health", status, Date.now() - start);
@@ -370,6 +375,7 @@ export function createRoutes(
               status: dbOk ? "ok" : "error",
               uptime,
               activeWorkflows,
+              toolCache,
             },
             { status },
           ),

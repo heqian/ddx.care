@@ -1,9 +1,11 @@
 import { test, expect, describe, afterEach, vi } from "bun:test";
+import { resetToolCache } from "../src/backend/tools/utils/tool-cache";
 
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  resetToolCache();
 });
 
 describe("drugShortagesTool", () => {

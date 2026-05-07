@@ -1,5 +1,5 @@
 import { Window as HappyWindow } from "happy-dom";
-import { test, expect, describe, beforeEach, afterEach, vi } from "bun:test";
+import { test, expect, describe, beforeEach, afterEach, afterAll, vi } from "bun:test";
 
 // Set up happy-dom global environment BEFORE importing React/testing libraries.
 // This must run at the top level before any React import is evaluated.
@@ -1571,12 +1571,6 @@ describe("Accessibility — FileDropZone", () => {
 // ---------------------------------------------------------------------------
 // Accessibility — InputDashboard (age validation)
 // ---------------------------------------------------------------------------
-// vi.mock is hoisted by bun:test — must be defined before importing InputDashboard
-vi.mock("../src/frontend/api/client", () => ({
-  submitDiagnosis: vi.fn().mockRejectedValue(new Error("mocked")),
-  getAgents: vi.fn().mockResolvedValue({ agents: [] }),
-}));
-
 import { InputDashboard } from "../src/frontend/pages/InputDashboard";
 
 describe("Accessibility — InputDashboard", () => {

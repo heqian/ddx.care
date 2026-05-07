@@ -1,5 +1,6 @@
 import { test, expect, describe, beforeEach, afterEach, vi } from "bun:test";
 import { fetchJSON } from "../src/backend/tools/utils/fetch";
+import { resetToolCache } from "../src/backend/tools/utils/tool-cache";
 
 // Save original fetch
 const originalFetch = globalThis.fetch;
@@ -7,6 +8,7 @@ const originalFetch = globalThis.fetch;
 afterEach(() => {
   // Restore fetch after each test
   globalThis.fetch = originalFetch;
+  resetToolCache();
 });
 
 describe("fetchJSON — Success Cases", () => {

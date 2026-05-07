@@ -188,5 +188,4 @@ dist
 test-results/
 
 # Supporting files
-jobs.sqlite*
-orphadata.sqlite*
+*.sqlite*

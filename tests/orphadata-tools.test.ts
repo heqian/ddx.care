@@ -1,6 +1,7 @@
 import { test, expect, describe, afterAll, vi } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { resetToolCache } from "../src/backend/tools/utils/tool-cache";
 
 const originalFetch = globalThis.fetch;
 const tmpDir = "/tmp/ddx-test-orphadata-tools";
@@ -83,6 +84,7 @@ function setupMocks() {
 
 afterAll(() => {
   globalThis.fetch = originalFetch;
+  resetToolCache();
   rmSync(tmpDir, { recursive: true, force: true });
 });
 

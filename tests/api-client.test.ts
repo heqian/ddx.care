@@ -1,4 +1,10 @@
 import { test, expect, describe, vi, afterEach } from "bun:test";
+import {
+  submitDiagnosis,
+  getJobStatus,
+  getAgents,
+  cancelDiagnosis,
+} from "../src/frontend/api/client";
 
 const originalFetch = globalThis.fetch;
 
@@ -13,7 +19,6 @@ describe("submitDiagnosis", () => {
       json: async () => ({ jobId: "abc-123", status: "pending" }),
     }) as any;
 
-    const { submitDiagnosis } = await import("../src/frontend/api/client");
     const result = await submitDiagnosis({
       medicalHistory: "test history",
       conversationTranscript: "test transcript",
@@ -39,7 +44,6 @@ describe("submitDiagnosis", () => {
         JSON.stringify({ error: "Validation failed: bad input" }),
     }) as any;
 
-    const { submitDiagnosis } = await import("../src/frontend/api/client");
     await expect(
       submitDiagnosis({
         medicalHistory: "",
@@ -56,7 +60,6 @@ describe("submitDiagnosis", () => {
       text: async () => "Internal Server Error",
     }) as any;
 
-    const { submitDiagnosis } = await import("../src/frontend/api/client");
     await expect(
       submitDiagnosis({
         medicalHistory: "",
@@ -73,7 +76,6 @@ describe("submitDiagnosis", () => {
       text: async () => "",
     }) as any;
 
-    const { submitDiagnosis } = await import("../src/frontend/api/client");
     await expect(
       submitDiagnosis({
         medicalHistory: "",
@@ -95,7 +97,6 @@ describe("getJobStatus", () => {
       }),
     }) as any;
 
-    const { getJobStatus } = await import("../src/frontend/api/client");
     const result = await getJobStatus("job-1");
 
     expect(result.jobId).toBe("job-1");
@@ -112,7 +113,6 @@ describe("getJobStatus", () => {
       text: async () => JSON.stringify({ error: "Job not found" }),
     }) as any;
 
-    const { getJobStatus } = await import("../src/frontend/api/client");
     await expect(getJobStatus("nonexistent")).rejects.toThrow("Job not found");
   });
 });
@@ -128,7 +128,6 @@ describe("getAgents", () => {
       }),
     }) as any;
 
-    const { getAgents } = await import("../src/frontend/api/client");
     const result = await getAgents();
 
     expect(result.agents).toHaveLength(1);
@@ -142,7 +141,6 @@ describe("getAgents", () => {
       text: async () => "Server error",
     }) as any;
 
-    const { getAgents } = await import("../src/frontend/api/client");
     await expect(getAgents()).rejects.toThrow("Server error");
   });
 });

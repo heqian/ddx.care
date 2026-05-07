@@ -8,6 +8,7 @@ import {
 } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { resetToolCache } from "../src/backend/tools/utils/tool-cache";
 
 const originalFetch = globalThis.fetch;
 const tmpDir = "/tmp/ddx-test-orphadata-cache";
@@ -154,6 +155,7 @@ describe("Orphadata Cache — Full Suite", () => {
 
   afterAll(() => {
     globalThis.fetch = originalFetch;
+    resetToolCache();
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -361,6 +363,7 @@ describe("Orphadata Cache — Full Suite", () => {
 describe("Orphadata Cache — Init Failure Handling", () => {
   afterAll(() => {
     globalThis.fetch = originalFetch;
+    resetToolCache();
     rmSync(tmpDir, { recursive: true, force: true });
   });
 

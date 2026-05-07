@@ -77,6 +77,15 @@ export const CMO_CONTEXT_MAX_CHARS = parseInt(
 
 export const ORPHADATA_ENABLED = process.env.ORPHADATA_ENABLED !== "0";
 
+export const TOOL_CACHE_TTL_MS = parseInt(
+  process.env.TOOL_CACHE_TTL_MS ?? String(24 * 60 * 60 * 1000),
+  10,
+);
+export const TOOL_CACHE_ENABLED = TOOL_CACHE_TTL_MS > 0;
+export const TOOL_CACHE_DB_PATH =
+  process.env.TOOL_CACHE_DB_PATH || "tool-cache.sqlite";
+export const TOOL_CACHE_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
+
 export const AUDIT_LOG_PATH = process.env.AUDIT_LOG_PATH ?? "";
 export const AUDIT_LOG_MAX_SIZE_MB = parseInt(
   process.env.AUDIT_LOG_MAX_SIZE_MB ?? "10",
@@ -165,6 +174,11 @@ export function validateConfig() {
   if (Number.isNaN(JOB_TTL_MS) || JOB_TTL_MS <= 0) {
     throw new Error(
       `Invalid JOB_TTL_MS: ${process.env.JOB_TTL_MS}. Must be a positive number.`,
+    );
+  }
+  if (Number.isNaN(TOOL_CACHE_TTL_MS) || TOOL_CACHE_TTL_MS < 0) {
+    throw new Error(
+      `Invalid TOOL_CACHE_TTL_MS: ${process.env.TOOL_CACHE_TTL_MS}. Must be a non-negative number. Set to 0 to disable tool caching.`,
     );
   }
 }

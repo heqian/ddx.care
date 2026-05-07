@@ -13,10 +13,13 @@ import {
   MAX_DIAGNOSIS_ROUNDS,
   MAX_CONCURRENT_WORKFLOWS,
   ORPHADATA_ENABLED,
+  TOOL_CACHE_ENABLED,
+  TOOL_CACHE_CLEANUP_INTERVAL_MS,
   validateConfig,
 } from "./src/backend/config";
 import { logger } from "./src/backend/utils/logger";
 import { initializeOrphadataCache } from "./src/backend/orphadata-cache";
+import { initToolCache, cleanupExpired as cleanupToolCache } from "./src/backend/tools/utils/tool-cache";
 
 validateConfig();
 
@@ -26,6 +29,10 @@ if (ORPHADATA_ENABLED) {
   initializeOrphadataCache().catch(() => {});
 }
 
+if (TOOL_CACHE_ENABLED) {
+  initToolCache();
+}
+
 const cleanupTimer = setInterval(() => {
   progressStore.cleanupExpired(JOB_TTL_MS);
 }, CLEANUP_INTERVAL_MS);
@@ -33,6 +40,10 @@ const cleanupTimer = setInterval(() => {
 const pruneTimer = setInterval(() => {
   rateLimiter.prune();
 }, RATE_LIMIT_PRUNE_INTERVAL_MS);
+
+const toolCacheCleanupTimer = setInterval(() => {
+  cleanupToolCache();
+}, TOOL_CACHE_CLEANUP_INTERVAL_MS);
 
 let server: ReturnType<typeof Bun.serve>;
 
@@ -78,6 +89,7 @@ async function shutdown(signal: string) {
   // 2. Clear cleanup intervals
   clearInterval(cleanupTimer);
   clearInterval(pruneTimer);
+  clearInterval(toolCacheCleanupTimer);
 
   // 3. Wait for in-flight workflows to finish (with timeout)
   const start = Date.now();
