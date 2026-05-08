@@ -82,11 +82,11 @@ describe("Error class hierarchy", () => {
 
   test("ToolError extends AppError", () => {
     const cause = new Error("underlying");
-    const err = new ToolError("pubmed-search", "tool failed", cause);
+    const err = new ToolError("drug-interaction", "tool failed", cause);
     expect(err instanceof ToolError).toBe(true);
     expect(err instanceof AppError).toBe(true);
     expect(err.name).toBe("ToolError");
-    expect(err.toolName).toBe("pubmed-search");
+    expect(err.toolName).toBe("drug-interaction");
     expect(err.cause).toBe(cause);
   });
 
@@ -156,12 +156,12 @@ describe("isRetriableError", () => {
 
 describe("sanitizeForContext", () => {
   test("passes through short clean messages unchanged", () => {
-    expect(sanitizeForContext("PubMed API timeout")).toBe("PubMed API timeout");
+    expect(sanitizeForContext("Drug API timeout")).toBe("Drug API timeout");
   });
 
   test("strips URLs from messages", () => {
     const msg =
-      "Failed to fetch https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?api_key=SECRET";
+      "Failed to fetch https://api.example.com/v1/data?api_key=SECRET";
     const result = sanitizeForContext(msg);
     expect(result).not.toContain("api_key=SECRET");
     expect(result).toContain("[url removed]");

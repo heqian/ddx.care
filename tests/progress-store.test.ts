@@ -104,11 +104,11 @@ describe("JobStore — Progress Events", () => {
     store.createJob("job-p4");
     const event: ProgressEvent = {
       time: "2026-01-15T10:30:00.000Z",
-      message: "Cardiologist: Searching PubMed → chest pain",
+      message: "Cardiologist: Checking interactions → aspirin + warfarin",
       eventType: "tool_call",
       agentId: "cardiologist",
-      toolName: "pubmed-search",
-      toolArgs: "chest pain",
+      toolName: "drug-interaction",
+      toolArgs: "aspirin + warfarin",
     };
     store.emitMessage("job-p4", event);
 
@@ -116,21 +116,21 @@ describe("JobStore — Progress Events", () => {
     expect(job!.progress).toHaveLength(1);
     const stored = job!.progress[0];
     expect(stored.time).toBe("2026-01-15T10:30:00.000Z");
-    expect(stored.message).toBe("Cardiologist: Searching PubMed → chest pain");
+    expect(stored.message).toBe("Cardiologist: Checking interactions → aspirin + warfarin");
     expect(stored.eventType).toBe("tool_call");
     expect(stored.agentId).toBe("cardiologist");
-    expect(stored.toolName).toBe("pubmed-search");
-    expect(stored.toolArgs).toBe("chest pain");
+    expect(stored.toolName).toBe("drug-interaction");
+    expect(stored.toolArgs).toBe("aspirin + warfarin");
   });
 
   test("ProgressEvent with null toolArgs is stored correctly", () => {
     store.createJob("job-p5");
     store.emitMessage("job-p5", {
       time: "2026-01-15T10:30:00.000Z",
-      message: "Searching PubMed",
+      message: "Checking interactions",
       eventType: "tool_call",
       agentId: "neurologist",
-      toolName: "pubmed-search",
+      toolName: "drug-interaction",
       toolArgs: null,
     });
 
@@ -143,11 +143,11 @@ describe("JobStore — Progress Events", () => {
     store.emitMessage("job-p6", "Starting analysis...");
     store.emitMessage("job-p6", {
       time: "2026-01-15T10:30:01.000Z",
-      message: "Cardiologist: Searching PubMed",
+      message: "Cardiologist: Checking interactions",
       eventType: "tool_call",
       agentId: "cardiologist",
-      toolName: "pubmed-search",
-      toolArgs: "chest pain",
+      toolName: "drug-interaction",
+      toolArgs: "aspirin + warfarin",
     });
     store.emitMessage("job-p6", "Analysis complete");
 

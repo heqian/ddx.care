@@ -50,7 +50,7 @@ The `withRetry` function SHALL accept an optional `shouldRetry?: (error: unknown
 The system SHALL provide a `sanitizeForContext(message: string, maxLength?: number)` function that strips URLs, file paths, and caps message length (default 200 chars) before error messages are injected into agent context history.
 
 #### Scenario: URL in error message is removed
-- **WHEN** an error message contains `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?api_key=SECRET`
+- **WHEN** an error message contains `https://api.example.com/v1/data?api_key=SECRET`
 - **THEN** `sanitizeForContext` returns the message with the URL replaced by `[url removed]`
 
 #### Scenario: Long error message is truncated
@@ -58,5 +58,5 @@ The system SHALL provide a `sanitizeForContext(message: string, maxLength?: numb
 - **THEN** `sanitizeForContext` returns the first 197 characters followed by `...`
 
 #### Scenario: Clean error message passes through
-- **WHEN** an error message is `"PubMed API timeout"` and is under 200 characters
+- **WHEN** an error message is `"Drug API timeout"` and is under 200 characters
 - **THEN** `sanitizeForContext` returns the message unchanged

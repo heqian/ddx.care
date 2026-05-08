@@ -140,13 +140,13 @@ describe("Logger — Specialized Methods", () => {
   });
 
   test("toolCall() logs agent, jobId, toolName, and toolArgs", () => {
-    logger.toolCall("cardiologist", "job-1", "pubmed-search", "chest pain");
+    logger.toolCall("cardiologist", "job-1", "drug-interaction", "aspirin + warfarin");
     const output = logSpy.mock.calls[0][0] as string;
     expect(output).toContain("tool_call");
     expect(output).toContain('"agentId":"cardiologist"');
     expect(output).toContain('"jobId":"job-1"');
-    expect(output).toContain('"toolName":"pubmed-search"');
-    expect(output).toContain('"toolArgs":"chest pain"');
+    expect(output).toContain('"toolName":"drug-interaction"');
+    expect(output).toContain('"toolArgs":"aspirin + warfarin"');
   });
 
   test("toolCall() logs null toolArgs", () => {
@@ -156,14 +156,14 @@ describe("Logger — Specialized Methods", () => {
   });
 
   test("toolResult() logs success result", () => {
-    logger.toolResult("cardiologist", "job-1", "pubmed-search", true, 1200, "15 results for 'chest pain'");
+    logger.toolResult("cardiologist", "job-1", "drug-interaction", true, 1200, "2 interactions found");
     const output = logSpy.mock.calls[0][0] as string;
     expect(output).toContain("tool_result");
     expect(output).toContain('"agentId":"cardiologist"');
-    expect(output).toContain('"toolName":"pubmed-search"');
+    expect(output).toContain('"toolName":"drug-interaction"');
     expect(output).toContain('"success":"true"');
     expect(output).toContain('"durationMs":1200');
-    expect(output).toContain('"resultSummary":"15 results for \'chest pain\'"');
+    expect(output).toContain('"resultSummary":"2 interactions found"');
   });
 
   test("toolResult() logs error result", () => {

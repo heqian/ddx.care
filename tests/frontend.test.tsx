@@ -595,14 +595,14 @@ describe("AgentStatusCard", () => {
         status: "active",
         toolHistory: [
           {
-            toolName: "pubmed-search",
-            toolArgs: "chest pain",
+            toolName: "drug-interaction",
+            toolArgs: "aspirin + warfarin",
             status: "running",
           },
         ],
       }),
     );
-    expect(getByText(container, "Searching PubMed")).toBeTruthy();
+    expect(getByText(container, "Checking interactions")).toBeTruthy();
   });
 
   test("shows tool history with args for latest running entry", () => {
@@ -615,14 +615,14 @@ describe("AgentStatusCard", () => {
         status: "active",
         toolHistory: [
           {
-            toolName: "pubmed-search",
-            toolArgs: "chest pain",
+            toolName: "drug-interaction",
+            toolArgs: "aspirin + warfarin",
             status: "running",
           },
         ],
       }),
     );
-    expect(getByText(container, /chest pain/)).toBeTruthy();
+    expect(getByText(container, /aspirin \+ warfarin/)).toBeTruthy();
   });
 
   test("shows 'Consulting...' when active but no toolHistory", () => {
@@ -648,8 +648,8 @@ describe("AgentStatusCard", () => {
         status: "completed",
         toolHistory: [
           {
-            toolName: "pubmed-search",
-            toolArgs: "chest pain",
+            toolName: "drug-interaction",
+            toolArgs: "aspirin + warfarin",
             status: "success",
             durationMs: 1200,
           },
@@ -676,8 +676,8 @@ describe("AgentStatusCard", () => {
         status: "completed",
         toolHistory: [
           {
-            toolName: "pubmed-search",
-            toolArgs: "chest pain",
+            toolName: "drug-interaction",
+            toolArgs: "aspirin + warfarin",
             status: "success",
             durationMs: 1200,
           },
@@ -1965,10 +1965,10 @@ describe("deriveSpecialistStatuses", () => {
     const map = deriveSpecialistStatuses([
       {
         time: "2026-01-01T00:00:00Z",
-        message: "Cardiologist: Searching PubMed → chest pain",
+        message: "Cardiologist: Checking interactions → aspirin + warfarin",
         eventType: "tool_call",
         agentId: "cardiologist",
-        toolName: "pubmed-search",
+        toolName: "drug-interaction",
       },
     ]);
     expect(map.size).toBe(0);
@@ -2008,18 +2008,18 @@ describe("deriveToolHistory", () => {
     const map = deriveToolHistory([
       {
         time: "2026-01-01T00:00:00Z",
-        message: "Cardiologist: Searching PubMed → chest pain",
+        message: "Cardiologist: Checking interactions → aspirin + warfarin",
         eventType: "tool_call",
         agentId: "cardiologist",
-        toolName: "pubmed-search",
-        toolArgs: "chest pain",
+        toolName: "drug-interaction",
+        toolArgs: "aspirin + warfarin",
       },
     ]);
     const history = map.get("cardiologist");
     expect(history).toBeTruthy();
     expect(history!.length).toBe(1);
-    expect(history![0].toolName).toBe("pubmed-search");
-    expect(history![0].toolArgs).toBe("chest pain");
+    expect(history![0].toolName).toBe("drug-interaction");
+    expect(history![0].toolArgs).toBe("aspirin + warfarin");
     expect(history![0].status).toBe("running");
   });
 
@@ -2027,28 +2027,28 @@ describe("deriveToolHistory", () => {
     const map = deriveToolHistory([
       {
         time: "2026-01-01T00:00:00Z",
-        message: "Cardiologist: Searching PubMed → chest pain",
+        message: "Cardiologist: Checking interactions → aspirin + warfarin",
         eventType: "tool_call",
         agentId: "cardiologist",
-        toolName: "pubmed-search",
-        toolArgs: "chest pain",
+        toolName: "drug-interaction",
+        toolArgs: "aspirin + warfarin",
       },
       {
         time: "2026-01-01T00:00:01Z",
-        message: "Cardiologist: Searching PubMed completed",
+        message: "Cardiologist: Checking interactions completed",
         eventType: "tool_result",
         agentId: "cardiologist",
-        toolName: "pubmed-search",
+        toolName: "drug-interaction",
         success: true,
         durationMs: 1200,
-        resultSummary: "15 results for 'chest pain'",
+        resultSummary: "2 interactions found",
       },
     ]);
     const history = map.get("cardiologist");
     expect(history!.length).toBe(1);
     expect(history![0].status).toBe("success");
     expect(history![0].durationMs).toBe(1200);
-    expect(history![0].resultSummary).toBe("15 results for 'chest pain'");
+    expect(history![0].resultSummary).toBe("2 interactions found");
   });
 
   test("updates running entry to error on failed tool_result", () => {
@@ -2085,33 +2085,33 @@ describe("deriveToolHistory", () => {
         message: "Cardiologist: Search 1",
         eventType: "tool_call",
         agentId: "cardiologist",
-        toolName: "pubmed-search",
-        toolArgs: "chest pain",
+        toolName: "drug-interaction",
+        toolArgs: "aspirin + warfarin",
       },
       {
         time: "2026-01-01T00:00:01Z",
         message: "Cardiologist: Result 1",
         eventType: "tool_result",
         agentId: "cardiologist",
-        toolName: "pubmed-search",
+        toolName: "drug-interaction",
         success: true,
         durationMs: 1000,
-        resultSummary: "10 results",
+        resultSummary: "2 interactions found",
       },
       {
         time: "2026-01-01T00:00:02Z",
         message: "Cardiologist: Search 2",
         eventType: "tool_call",
         agentId: "cardiologist",
-        toolName: "drug-interaction",
-        toolArgs: "aspirin + clopidogrel",
+        toolName: "drug-labeling",
+        toolArgs: "metoprolol",
       },
       {
         time: "2026-01-01T00:00:03Z",
         message: "Cardiologist: Result 2",
         eventType: "tool_result",
         agentId: "cardiologist",
-        toolName: "drug-interaction",
+        toolName: "drug-labeling",
         success: true,
         durationMs: 800,
         resultSummary: "2 interactions found",
@@ -2120,44 +2120,44 @@ describe("deriveToolHistory", () => {
     const history = map.get("cardiologist");
     expect(history!.length).toBe(2);
     expect(history![0].status).toBe("success");
-    expect(history![0].toolName).toBe("pubmed-search");
+    expect(history![0].toolName).toBe("drug-interaction");
     expect(history![1].status).toBe("success");
-    expect(history![1].toolName).toBe("drug-interaction");
+    expect(history![1].toolName).toBe("drug-labeling");
   });
 
   test("tracks multiple specialists independently", () => {
     const map = deriveToolHistory([
       {
         time: "2026-01-01T00:00:00Z",
-        message: "Cardiologist: Searching PubMed",
+        message: "Cardiologist: Checking interactions",
         eventType: "tool_call",
         agentId: "cardiologist",
-        toolName: "pubmed-search",
-        toolArgs: "chest pain",
+        toolName: "drug-interaction",
+        toolArgs: "aspirin + warfarin",
       },
       {
         time: "2026-01-01T00:00:01Z",
-        message: "Neurologist: Searching PubMed",
+        message: "Neurologist: Checking interactions",
         eventType: "tool_call",
         agentId: "neurologist",
-        toolName: "pubmed-search",
-        toolArgs: "migraine",
+        toolName: "drug-interaction",
+        toolArgs: "sumatriptan + sertraline",
       },
     ]);
     expect(map.get("cardiologist")!.length).toBe(1);
     expect(map.get("neurologist")!.length).toBe(1);
-    expect(map.get("cardiologist")![0].toolArgs).toBe("chest pain");
-    expect(map.get("neurologist")![0].toolArgs).toBe("migraine");
+    expect(map.get("cardiologist")![0].toolArgs).toBe("aspirin + warfarin");
+    expect(map.get("neurologist")![0].toolArgs).toBe("sumatriptan + sertraline");
   });
 
   test("toolArgs defaults to null when not provided", () => {
     const map = deriveToolHistory([
       {
         time: "2026-01-01T00:00:00Z",
-        message: "Cardiologist: Searching PubMed",
+        message: "Cardiologist: Checking interactions",
         eventType: "tool_call",
         agentId: "cardiologist",
-        toolName: "pubmed-search",
+        toolName: "drug-interaction",
       },
     ]);
     const history = map.get("cardiologist");
@@ -2168,11 +2168,11 @@ describe("deriveToolHistory", () => {
     const map = deriveToolHistory([
       {
         time: "2026-01-01T00:00:00Z",
-        message: "Cardiologist: Searching PubMed",
+        message: "Cardiologist: Checking interactions",
         eventType: "tool_call",
         agentId: "cardiologist",
-        toolName: "pubmed-search",
-        toolArgs: "chest pain",
+        toolName: "drug-interaction",
+        toolArgs: "aspirin + warfarin",
       },
     ]);
     expect(map.get("cardiologist")![0].status).toBe("running");

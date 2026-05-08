@@ -9,7 +9,6 @@ AI-powered differential diagnosis system that simulates a panel of medical speci
 - **AI Model**: Ollama Cloud (`ollama-cloud/gemma4:31b` by default), configured via `OLLAMA_API_KEY`. Other providers are supported — see [Mastra providers](https://mastra.ai/models/providers) for available API key env var names and supported models.
 - **Agents** — 35 medical specialist agents + Chief Medical Officer (CMO). Created via factory pattern in `factory.ts`
 - **Tools** — Medical API integrations:
-  - PubMed/NCBI literature search
   - OpenFDA drug safety & adverse events
   - ClinicalTrials.gov trial matching
   - RxNav drug interactions

@@ -73,7 +73,6 @@ Key files:
 
 Medical API integrations, assigned per-specialist via `getToolsForSpecialist()` in `tools/index.ts`:
 
-- **PubMed/NCBI** (`pubmed-search.ts`): `pubmedSearchTool`, `relatedArticlesTool`, `omimSearchTool`, `geneReviewsSearchTool`, `clinVarSearchTool`
 - **RxNav drug interactions** (`drug-interaction.ts`): `drugLookupTool`, `drugInteractionTool`, `drugSpellingTool`
 - **OpenFDA** (`open-fda.ts`): `adverseEventsTool`, `drugLabelingTool`, `drugRecallTool`, `substanceToxicologyTool`
 - **ClinicalTrials.gov** (`clinical-trials.ts`): `clinicalTrialsSearchTool`
@@ -82,7 +81,7 @@ Medical API integrations, assigned per-specialist via `getToolsForSpecialist()` 
 Tool categories (universal, prescribing, genetics, oncology, toxicology, education, trials, spelling) are composed declaratively per specialist in `toolAssignments`.
 
 Shared utilities:
-- `tools/utils/fetch.ts` — `fetchJSON()` with timeout, abort controller, NCBI rate limiting (~3 req/s), and 404 handling.
+- `tools/utils/fetch.ts` — `fetchJSON()` with timeout, abort controller, and 404 handling.
 
 #### Workflows (`src/backend/workflows/`)
 
@@ -108,7 +107,7 @@ Shared utilities:
 - `setCached(url, response)` — Stores successful HTTP 200 response with timestamp.
 - `cleanupExpired()` — Deletes entries older than `TOOL_CACHE_TTL_MS`. Called every 10 minutes.
 - `getCacheStats()` — Returns `{ entries, hits, misses }` for health endpoint.
-- Cache lookup happens in `fetchJSON` before NCBI rate limiting — a cache hit skips both the HTTP call and the rate limit wait.
+- Cache lookup happens in `fetchJSON` before the HTTP call — a cache hit skips the HTTP call entirely.
 - Only HTTP 200 responses are cached. Errors (429, 4xx, 5xx, timeout) and `ignore404` sentinel responses are never cached.
 - Set `TOOL_CACHE_TTL_MS=0` to disable caching entirely.
 
@@ -243,7 +242,7 @@ Backend test files in `tests/`:
 - `progress-store.test.ts` — `JobStore` CRUD, pub/sub, cleanup tests
 - `rate-limiter.test.ts` — Rate limiting, concurrent workflow cap, prune tests
 - `logger.test.ts` — Logger output format, JSON mode tests
-- `fetch-utils.test.ts` — `fetchJSON` timeout, NCBI rate limiting, error handling tests
+- `fetch-utils.test.ts` — `fetchJSON` timeout, error handling tests
 - `ws-origin.test.ts` — WebSocket origin validation tests
 - `shutdown.test.ts` — Graceful shutdown signal handling tests
 

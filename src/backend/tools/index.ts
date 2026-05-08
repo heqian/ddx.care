@@ -1,14 +1,5 @@
 import type { ToolsInput } from "@mastra/core/agent";
 
-// PubMed / NCBI E-utilities
-export {
-  pubmedSearchTool,
-  relatedArticlesTool,
-  omimSearchTool,
-  geneReviewsSearchTool,
-  clinVarSearchTool,
-} from "./pubmed-search";
-
 // Drug interactions (RxNav)
 export {
   drugLookupTool,
@@ -46,13 +37,6 @@ export { hpoTermSearchTool, loincTestLookupTool } from "./nlm-clinical-tables";
 // --- All tools available to all specialists ---
 
 import {
-  pubmedSearchTool,
-  relatedArticlesTool,
-  omimSearchTool,
-  geneReviewsSearchTool,
-  clinVarSearchTool,
-} from "./pubmed-search";
-import {
   drugLookupTool,
   drugInteractionTool,
   drugSpellingTool,
@@ -77,8 +61,6 @@ import { hpoTermSearchTool, loincTestLookupTool } from "./nlm-clinical-tables";
 
 export function getAllTools(): ToolsInput {
   return {
-    "pubmed-search": pubmedSearchTool,
-    "related-articles": relatedArticlesTool,
     "drug-lookup": drugLookupTool,
     "drug-interaction": drugInteractionTool,
     "drug-labeling": drugLabelingTool,
@@ -90,9 +72,6 @@ export function getAllTools(): ToolsInput {
     "device-adverse-events": deviceAdverseEventsTool,
     "clinical-trials-search": clinicalTrialsSearchTool,
     "medlineplus-search": medlinePlusSearchTool,
-    "omim-search": omimSearchTool,
-    "gene-reviews-search": geneReviewsSearchTool,
-    "clinvar-search": clinVarSearchTool,
     "drug-spelling-suggestion": drugSpellingTool,
     "rare-disease-search": rareDiseaseSearchTool,
     "rare-disease-genes": rareDiseaseGenesTool,

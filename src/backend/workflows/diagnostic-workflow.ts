@@ -366,20 +366,20 @@ export async function mockDiagnosis(
     await delay(stepDelay);
     emit(
       "tool_call",
-      `${spec.id}: Searching PubMed → hypertensive urgency guidelines`,
+      `${spec.id}: Checking drug labeling → metoprolol tartrate`,
       {
         agentId: spec.id,
-        toolName: "pubmed-search",
-        toolArgs: "hypertensive urgency guidelines",
+        toolName: "drug-labeling",
+        toolArgs: "metoprolol tartrate",
       },
     );
     await delay(stepDelay * 1.5);
-    emit("tool_result", `${spec.id}: Searching PubMed completed`, {
+    emit("tool_result", `${spec.id}: Checking drug labeling completed`, {
       agentId: spec.id,
-      toolName: "pubmed-search",
+      toolName: "drug-labeling",
       success: true,
       durationMs: 1200,
-      resultSummary: "15 results for 'hypertensive urgency guidelines'",
+      resultSummary: "Label found for Lopressor",
     });
     await delay(stepDelay * 0.5);
     emit("specialist_complete", `Received analysis from ${spec.id}`, {

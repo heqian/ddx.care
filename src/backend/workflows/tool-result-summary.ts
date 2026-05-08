@@ -69,17 +69,6 @@ export function summarizeToolResult(
   }
 
   switch (toolName) {
-    case "pubmed-search":
-    case "related-articles": {
-      const count = extractNumberField(obj, "totalResults", "count", "results");
-      const query = extractStringField(obj, "query", "term");
-      if (count !== null) {
-        return truncateSummary(
-          `${count} result${count === 1 ? "" : "s"} for '${query || "query"}'`,
-        );
-      }
-      break;
-    }
     case "drug-interaction": {
       const interactions = obj.interactions;
       if (Array.isArray(interactions)) {
@@ -142,33 +131,6 @@ export function summarizeToolResult(
       if (Array.isArray(topics)) {
         return truncateSummary(
           `${topics.length} topic${topics.length === 1 ? "" : "s"}`,
-        );
-      }
-      break;
-    }
-    case "omim-search": {
-      const results = obj.results;
-      if (Array.isArray(results)) {
-        return truncateSummary(
-          `${results.length} OMIM entr${results.length === 1 ? "y" : "ies"}`,
-        );
-      }
-      break;
-    }
-    case "gene-reviews-search": {
-      const results = obj.results;
-      if (Array.isArray(results)) {
-        return truncateSummary(
-          `${results.length} GeneReviews entr${results.length === 1 ? "y" : "ies"}`,
-        );
-      }
-      break;
-    }
-    case "clinvar-search": {
-      const results = obj.results;
-      if (Array.isArray(results)) {
-        return truncateSummary(
-          `${results.length} ClinVar variant${results.length === 1 ? "" : "s"}`,
         );
       }
       break;

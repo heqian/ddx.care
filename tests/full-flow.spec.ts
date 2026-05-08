@@ -356,9 +356,9 @@ test.describe("Full diagnosis flow", () => {
     });
 
     // Tool-call progress entries should appear in the progress log
-    // The mock emits "cardiologist: Searching PubMed → hypertensive urgency guidelines"
+    // The mock emits "cardiologist: Checking drug labeling → metoprolol tartrate"
     const progressLog = page.locator('[role="log"]');
-    await expect(progressLog.getByText("Searching PubMed").first()).toBeVisible(
+    await expect(progressLog.getByText("Checking drug labeling").first()).toBeVisible(
       {
         timeout: 10_000,
       },
@@ -366,7 +366,7 @@ test.describe("Full diagnosis flow", () => {
 
     // Tool-call entries should have the ⟳ (running) indicator
     await expect(
-      progressLog.getByText(/Searching PubMed.*⟳/).first(),
+      progressLog.getByText(/Checking drug labeling.*⟳/).first(),
     ).toBeVisible({
       timeout: 5_000,
     });

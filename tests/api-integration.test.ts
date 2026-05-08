@@ -1,72 +1,21 @@
 import { describe, test, expect } from "bun:test";
 
-// These tests call live external APIs (PubMed, RxNav, OpenFDA, etc.).
+// These tests call live external APIs (RxNav, OpenFDA, etc.).
 // They are skipped by default. Run with: RUN_INTEGRATION=1 bun test
 const describeIntegration = process.env.RUN_INTEGRATION
   ? describe
   : describe.skip;
 
-const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
 const RXNAV = "https://rxnav.nlm.nih.gov/REST";
 const FDA = "https://api.fda.gov";
 const CT = "https://clinicaltrials.gov/api/v2";
 const MEDLINE = "https://connect.medlineplus.gov/service";
 
 async function fetchJSON(url: string) {
-  // NCBI rate limits to 3 req/sec without API key — add delay between calls
-  if (url.includes("eutils.ncbi")) {
-    await new Promise((r) => setTimeout(r, 350));
-  }
   const res = await fetch(url);
-  if (!res.ok && url.includes("eutils.ncbi")) {
-    await new Promise((r) => setTimeout(r, 1000));
-    const retry = await fetch(url);
-    expect(retry.ok).toBe(true);
-    return retry.json();
-  }
   expect(res.ok).toBe(true);
   return res.json();
 }
-
-describeIntegration("PubMed / NCBI E-utilities", () => {
-  test("esearch returns results for a medical query", async () => {
-    const data = await fetchJSON(
-      `${EUTILS}/esearch.fcgi?db=pubmed&term=sepsis+treatment&retmax=3&retmode=json`,
-    );
-    expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
-    expect(parseInt(data.esearchresult.count)).toBeGreaterThan(0);
-  });
-
-  test("esummary returns article metadata", async () => {
-    const data = await fetchJSON(
-      `${EUTILS}/esummary.fcgi?db=pubmed&id=41934189&retmode=json`,
-    );
-    const article = data.result["41934189"];
-    expect(article.title).toBeTruthy();
-    expect(article.authors).toBeInstanceOf(Array);
-  });
-
-  test("OMIM search returns genetic conditions", async () => {
-    const data = await fetchJSON(
-      `${EUTILS}/esearch.fcgi?db=omim&term=%22cystic+fibrosis%22&retmax=3&retmode=json`,
-    );
-    expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
-  });
-
-  test("ClinVar search returns genetic variants", async () => {
-    const data = await fetchJSON(
-      `${EUTILS}/esearch.fcgi?db=clinvar&term=BRCA1&retmax=3&retmode=json`,
-    );
-    expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
-  });
-
-  test("GeneReviews search returns results", async () => {
-    const data = await fetchJSON(
-      `${EUTILS}/esearch.fcgi?db=books&term=%22Huntington+disease%22+GeneReviews&retmax=3&retmode=json`,
-    );
-    expect(data.esearchresult.idlist.length).toBeGreaterThan(0);
-  });
-});
 
 describeIntegration("RxNav Drug API", () => {
   test("drug lookup returns RxCUI for a known drug", async () => {

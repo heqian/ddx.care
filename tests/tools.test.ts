@@ -43,19 +43,18 @@ describe("Agent Registry", () => {
 });
 
 describe("Tool Assignments", () => {
-  test("getAllTools returns all 22 tools", async () => {
+  test("getAllTools returns all 17 tools", async () => {
     const { getAllTools } = await import("../src/backend/tools/index");
 
     const tools = getAllTools();
     const keys = Object.keys(tools);
-    expect(keys.length).toBe(22);
+    expect(keys.length).toBe(17);
   });
 
   test("every specialist gets all tools via getAllTools", async () => {
     const { getAllTools } = await import("../src/backend/tools/index");
 
     const tools = getAllTools();
-    expect(tools).toHaveProperty("pubmed-search");
     expect(tools).toHaveProperty("drug-lookup");
     expect(tools).toHaveProperty("drug-interaction");
     expect(tools).toHaveProperty("drug-labeling");
@@ -138,19 +137,6 @@ describe("Config", () => {
   });
 });
 
-describe("relatedArticlesTool assignment", () => {
-  test("relatedArticlesTool is included in getAllTools", async () => {
-    const { getAllTools } = await import("../src/backend/tools/index");
-    const { relatedArticlesTool } = await import(
-      "../src/backend/tools/pubmed-search"
-    );
-
-    const tools = getAllTools();
-    expect(tools).toHaveProperty("related-articles");
-    expect(tools["related-articles"]).toBe(relatedArticlesTool);
-  });
-});
-
 describe("Agent factory", () => {
   test("createSpecialistAgent succeeds for valid kebab-case ID", async () => {
     const { createSpecialistAgent } = await import(
@@ -192,11 +178,9 @@ import { TOOL_LABELS, formatToolLabel } from "../src/backend/tools/tool-labels";
 
 describe("formatToolLabel", () => {
   test("returns human-readable label for known tool IDs", () => {
-    expect(formatToolLabel("pubmed-search")).toBe("Searching PubMed");
     expect(formatToolLabel("drug-interaction")).toBe("Checking interactions");
     expect(formatToolLabel("drug-labeling")).toBe("Reviewing FDA label");
     expect(formatToolLabel("adverse-events")).toBe("Checking adverse events");
-    expect(formatToolLabel("omim-search")).toBe("Searching OMIM");
     expect(formatToolLabel("medlineplus-search")).toBe("Searching MedlinePlus");
     expect(formatToolLabel("drug-spelling-suggestion")).toBe("Checking drug spelling");
     expect(formatToolLabel("rare-disease-search")).toBe("Searching rare diseases");
@@ -213,17 +197,12 @@ describe("formatToolLabel", () => {
     expect(formatToolLabel("nonexistent-tool")).toBe("Running nonexistent-tool");
   });
 
-  test("TOOL_LABELS has entries for all 22 known tools", () => {
+  test("TOOL_LABELS has entries for all 17 known tools", () => {
     const expectedKeys = [
-      "pubmed-search",
-      "related-articles",
       "drug-lookup",
       "drug-interaction",
       "drug-labeling",
       "adverse-events",
-      "omim-search",
-      "gene-reviews-search",
-      "clinvar-search",
       "clinical-trials-search",
       "drug-recall",
       "substance-toxicology",

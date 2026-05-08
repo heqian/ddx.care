@@ -4,16 +4,16 @@
 
 When a specialist agent invokes a tool during `agent.generate()`, the system SHALL emit a progress event with `eventType: "tool_call"` containing the specialist's `agentId`, the `toolName`, and a human-readable `toolArgs` string describing the query.
 
-#### Scenario: Specialist calls PubMed search
-- **WHEN** a cardiologist agent calls the `pubmed-search` tool with query "acute chest pain guidelines"
-- **THEN** a progress event is emitted with `eventType: "tool_call"`, `agentId: "cardiologist"`, `toolName: "pubmed-search"`, `toolArgs: "acute chest pain guidelines"`, and `message` containing a human-readable summary like "Cardiologist: Searching PubMed → acute chest pain guidelines"
-
 #### Scenario: Specialist calls drug interaction check
-- **WHEN** a neurologist agent calls the `drug-interaction` tool with `drugName: "sumatriptan"` and `drugName2: "sertraline"`
-- **THEN** a progress event is emitted with `eventType: "tool_call"`, `agentId: "neurologist"`, `toolName: "drug-interaction"`, `toolArgs: "sumatriptan + sertraline"`
+- **WHEN** a cardiologist agent calls the `drug-interaction` tool with `drugName: "aspirin"` and `drugName2: "warfarin"`
+- **THEN** a progress event is emitted with `eventType: "tool_call"`, `agentId: "cardiologist"`, `toolName: "drug-interaction"`, `toolArgs: "aspirin + warfarin"`, and `message` containing a human-readable summary like "Cardiologist: Checking interactions → aspirin + warfarin"
+
+#### Scenario: Specialist calls FDA label lookup
+- **WHEN** a neurologist agent calls the `drug-labeling` tool with `drugName: "metoprolol"`
+- **THEN** a progress event is emitted with `eventType: "tool_call"`, `agentId: "neurologist"`, `toolName: "drug-labeling"`, `toolArgs: "metoprolol"`
 
 #### Scenario: Step has multiple tool calls
-- **WHEN** an agent step results in 3 tool calls (PubMed, RxNav, FDA label)
+- **WHEN** an agent step results in 3 tool calls (drug-interaction, drug-labeling, adverse-events)
 - **THEN** 3 separate progress events are emitted, one per tool call, each with the same `agentId` but different `toolName` and `toolArgs`
 
 #### Scenario: Step has no tool calls (text-only response)
@@ -29,7 +29,7 @@ The `ProgressEvent` interface SHALL include optional fields `eventType`, `agentI
 - **THEN** the frontend renders it as a standard progress log entry with no special differentiation
 
 #### Scenario: Enriched progress event carries tool metadata
-- **WHEN** a progress event has `eventType: "tool_call"`, `agentId: "cardiologist"`, `toolName: "pubmed-search"`, and `toolArgs: "chest pain"`
+- **WHEN** a progress event has `eventType: "tool_call"`, `agentId: "cardiologist"`, `toolName: "drug-interaction"`, and `toolArgs: "aspirin + warfarin"`
 - **THEN** the frontend can access all four fields to attribute and display the tool call
 
 ### Requirement: Agent status card displays the active tool
@@ -37,8 +37,8 @@ The `ProgressEvent` interface SHALL include optional fields `eventType`, `agentI
 When a specialist agent is in the `"active"` state and has a current tool call in progress, the `AgentStatusCard` component SHALL display the tool's human-readable label and query below the agent's name.
 
 #### Scenario: Card shows active tool during consultation
-- **WHEN** the cardiologist is `"active"` and the most recent tool-call event is `toolName: "pubmed-search"`, `toolArgs: "chest pain guidelines"`
-- **THEN** the card displays "Searching PubMed: chest pain guidelines" below the agent name, styled as a subdued informational line
+- **WHEN** the cardiologist is `"active"` and the most recent tool-call event is `toolName: "drug-interaction"`, `toolArgs: "aspirin + warfarin"`
+- **THEN** the card displays "Checking interactions: aspirin + warfarin" below the agent name, styled as a subdued informational line
 
 #### Scenario: Card falls back to "Consulting..." when no tool call yet
 - **WHEN** the cardiologist is `"active"` but no tool-call progress events have been received yet
@@ -62,11 +62,11 @@ Tool-call entries in the progress log SHALL be visually distinct from general pr
 
 ### Requirement: Tool names map to human-readable labels
 
-Each tool ID used in progress events SHALL map to a short, user-facing label via a static lookup table. Labels SHALL use present-tense action phrases suitable for UI display. The lookup table SHALL include labels for all 24 tools (16 existing + 8 new).
+Each tool ID used in progress events SHALL map to a short, user-facing label via a static lookup table. Labels SHALL use present-tense action phrases suitable for UI display. The lookup table SHALL include labels for all 17 tools.
 
 #### Scenario: Known tool maps to label
-- **WHEN** `toolName` is `"pubmed-search"`
-- **THEN** the human-readable label is `"Searching PubMed"`
+- **WHEN** `toolName` is `"drug-interaction"`
+- **THEN** the human-readable label is `"Checking interactions"`
 
 #### Scenario: New Orphadata tool maps to label
 - **WHEN** `toolName` is `"rare-disease-search"`
@@ -102,15 +102,15 @@ Every tool registered in the system SHALL be available to all 36 specialist agen
 
 #### Scenario: Geneticist accesses drug interaction tool
 - **WHEN** the geneticist agent is initialized
-- **THEN** it has access to `drug-interaction` tool alongside `omim-search` and all other tools
+- **THEN** it has access to `drug-interaction` tool alongside `rare-disease-search` and all other tools
 
 #### Scenario: All specialists get new tools
 - **WHEN** any specialist agent is initialized
-- **THEN** it has access to all 8 new tools (rare-disease-search, rare-disease-genes, rare-disease-phenotypes, hpo-term-search, loinc-test-lookup, drug-shortages, food-adverse-events, device-adverse-events) in addition to all 16 existing tools
+- **THEN** it has access to all 17 tools including drug interactions, FDA data, clinical trials, MedlinePlus, Orphadata, NLM clinical tables, and more
 
 #### Scenario: CMO has all tools
 - **WHEN** the CMO agent is initialized
-- **THEN** it has access to all 24 tools for orchestrating specialist consultations
+- **THEN** it has access to all 17 tools for orchestrating specialist consultations
 
 ### Requirement: WebSocket reconnection with status check
 

@@ -1432,14 +1432,7 @@ describe("formatReport — malformed input handling", () => {
 // formatToolArgs
 // ---------------------------------------------------------------------------
 describe("formatToolArgs", () => {
-  test("extracts query from pubmed-search args", () => {
-    const result = formatToolArgs("pubmed-search", {
-      query: "chest pain acute coronary syndrome",
-    });
-    expect(result).toBe("chest pain acute coronary syndrome");
-  });
-
-  test("formats drug-interaction with two drug names", () => {
+  test("extracts query from drug-interaction args", () => {
     const result = formatToolArgs("drug-interaction", {
       drugName: "sumatriptan",
       drugName2: "sertraline",
@@ -1463,7 +1456,7 @@ describe("formatToolArgs", () => {
 
   test("truncates long args to 80 characters", () => {
     const longQuery = "a".repeat(100);
-    const result = formatToolArgs("pubmed-search", { query: longQuery });
+    const result = formatToolArgs("drug-labeling", { drugName: longQuery });
     expect(result.length).toBe(81); // 80 chars + "…"
     expect(result.endsWith("…")).toBe(true);
   });
@@ -1530,8 +1523,8 @@ describe("mockDiagnosis", () => {
     const toolCalls = events.filter((e) => e.eventType === "tool_call");
     expect(toolCalls.length).toBe(3);
     for (const tc of toolCalls) {
-      expect(tc.toolName).toBe("pubmed-search");
-      expect(tc.toolArgs).toBe("hypertensive urgency guidelines");
+      expect(tc.toolName).toBe("drug-labeling");
+      expect(tc.toolArgs).toBe("metoprolol tartrate");
       expect(typeof tc.agentId).toBe("string");
     }
   });
@@ -1616,7 +1609,7 @@ describe("mockDiagnosis", () => {
       expect(typeof tr.durationMs).toBe("number");
       expect(tr.resultSummary).not.toBeNull();
       expect(typeof tr.agentId).toBe("string");
-      expect(tr.toolName).toBe("pubmed-search");
+      expect(tr.toolName).toBe("drug-labeling");
     }
   });
 
@@ -1961,42 +1954,42 @@ describe("runDiagnosis - abort store integration", () => {
 
 describe("summarizeToolResult", () => {
   test("returns null for undefined result", () => {
-    expect(summarizeToolResult("pubmed-search", undefined)).toBeNull();
+    expect(summarizeToolResult("drug-interaction", undefined)).toBeNull();
   });
 
   test("returns null for null result", () => {
-    expect(summarizeToolResult("pubmed-search", null)).toBeNull();
+    expect(summarizeToolResult("drug-interaction", null)).toBeNull();
   });
 
   test("returns null for empty array", () => {
-    expect(summarizeToolResult("pubmed-search", [])).toBeNull();
+    expect(summarizeToolResult("drug-interaction", [])).toBeNull();
   });
 
   test("returns count for non-empty array", () => {
-    expect(summarizeToolResult("pubmed-search", [1, 2, 3])).toBe("3 results");
+    expect(summarizeToolResult("drug-interaction", [1, 2, 3])).toBe("3 results");
   });
 
   test("returns string truncated to 200 chars", () => {
     const long = "a".repeat(300);
-    const result = summarizeToolResult("pubmed-search", long);
+    const result = summarizeToolResult("drug-interaction", long);
     expect(result).not.toBeNull();
     expect(result!.length).toBeLessThanOrEqual(201);
     expect(result!.endsWith("…")).toBe(true);
   });
 
   test("returns short string as-is", () => {
-    expect(summarizeToolResult("pubmed-search", "short result")).toBe(
+    expect(summarizeToolResult("drug-interaction", "short result")).toBe(
       "short result",
     );
   });
 
   test("extracts error message from Error objects", () => {
-    const result = summarizeToolResult("pubmed-search", new Error("timeout"));
+    const result = summarizeToolResult("drug-interaction", new Error("timeout"));
     expect(result).toBe("timeout");
   });
 
   test("extracts error message from isError objects", () => {
-    const result = summarizeToolResult("pubmed-search", {
+    const result = summarizeToolResult("drug-interaction", {
       isError: true,
       message: "API rate limited",
     });
@@ -2015,14 +2008,6 @@ describe("summarizeToolResult", () => {
       interactions: [],
     });
     expect(result).toBe("No interactions found");
-  });
-
-  test("summarizes pubmed-search with totalResults", () => {
-    const result = summarizeToolResult("pubmed-search", {
-      totalResults: 42,
-      query: "chest pain",
-    });
-    expect(result).toBe("42 results for 'chest pain'");
   });
 
   test("summarizes drug-labeling with brandName", () => {
@@ -2095,14 +2080,14 @@ describe("createStepEventHandler", () => {
     handler({
       toolCalls: [
         {
-          payload: { toolName: "pubmed-search", args: { query: "chest pain" } },
+          payload: { toolName: "drug-interaction", args: { drugName: "aspirin", drugName2: "clopidogrel" } },
         },
       ],
       toolResults: [
         {
           payload: {
-            toolName: "pubmed-search",
-            result: { totalResults: 5 },
+            toolName: "drug-interaction",
+            result: { interactions: [{}, {}] },
             isError: false,
           },
         },
@@ -2112,8 +2097,8 @@ describe("createStepEventHandler", () => {
     const toolCalls = events.filter((e) => e.eventType === "tool_call");
     expect(toolCalls.length).toBe(1);
     expect(toolCalls[0].agentId).toBe("cardiologist");
-    expect(toolCalls[0].toolName).toBe("pubmed-search");
-    expect(toolCalls[0].toolArgs).toBe("chest pain");
+    expect(toolCalls[0].toolName).toBe("drug-interaction");
+    expect(toolCalls[0].toolArgs).toBe("aspirin + clopidogrel");
   });
 
   test("emits tool_result events with success status", () => {
@@ -2124,16 +2109,16 @@ describe("createStepEventHandler", () => {
       toolCalls: [
         {
           payload: {
-            toolName: "pubmed-search",
-            args: { query: "hypertension" },
+            toolName: "drug-interaction",
+            args: { drugName: "aspirin", drugName2: "warfarin" },
           },
         },
       ],
       toolResults: [
         {
           payload: {
-            toolName: "pubmed-search",
-            result: { totalResults: 10 },
+            toolName: "drug-interaction",
+            result: { interactions: [{}] },
             isError: false,
           },
         },
@@ -2143,7 +2128,7 @@ describe("createStepEventHandler", () => {
     const toolResults = events.filter((e) => e.eventType === "tool_result");
     expect(toolResults.length).toBe(1);
     expect(toolResults[0].success).toBe(true);
-    expect(toolResults[0].toolName).toBe("pubmed-search");
+    expect(toolResults[0].toolName).toBe("drug-interaction");
     expect(typeof toolResults[0].durationMs).toBe("number");
     expect(toolResults[0].resultSummary).not.toBeNull();
   });
@@ -2181,16 +2166,16 @@ describe("createStepEventHandler", () => {
   test("errorType is set for classified AppError errors", () => {
     const { events, emit } = createMockEmit();
     const handler = createStepEventHandler("neurologist", "job-3", emit);
-    const timeoutError = new APITimeoutError("PubMed API timeout after 10000ms");
+    const timeoutError = new APITimeoutError("Drug API timeout after 10000ms");
 
     handler({
       toolCalls: [
-        { payload: { toolName: "pubmed-search", args: { query: "chest pain" } } },
+        { payload: { toolName: "drug-interaction", args: { drugName: "aspirin", drugName2: "clopidogrel" } } },
       ],
       toolResults: [
         {
           payload: {
-            toolName: "pubmed-search",
+            toolName: "drug-interaction",
             result: timeoutError,
             isError: true,
           },
@@ -2210,12 +2195,12 @@ describe("createStepEventHandler", () => {
 
     handler({
       toolCalls: [
-        { payload: { toolName: "pubmed-search", args: { query: "test" } } },
+        { payload: { toolName: "drug-interaction", args: { drugName: "aspirin", drugName2: "ibuprofen" } } },
       ],
       toolResults: [
         {
           payload: {
-            toolName: "pubmed-search",
+            toolName: "drug-interaction",
             result: {},
             isError: false,
           },
@@ -2236,26 +2221,26 @@ describe("createStepEventHandler", () => {
     handler({
       toolCalls: [
         {
-          payload: { toolName: "pubmed-search", args: { query: "chest pain" } },
+          payload: { toolName: "drug-interaction", args: { drugName: "aspirin", drugName2: "warfarin" } },
         },
         {
           payload: {
-            toolName: "drug-interaction",
-            args: { drugName: "aspirin", drugName2: "clopidogrel" },
+            toolName: "drug-labeling",
+            args: { drugName: "metoprolol" },
           },
         },
       ],
       toolResults: [
         {
           payload: {
-            toolName: "pubmed-search",
-            result: { totalResults: 5 },
+            toolName: "drug-interaction",
+            result: { interactions: [{}] },
             isError: false,
           },
         },
         {
           payload: {
-            toolName: "drug-interaction",
+            toolName: "drug-labeling",
             result: { interactions: [{}] },
             isError: false,
           },
@@ -2273,10 +2258,10 @@ describe("createStepEventHandler", () => {
 
     handler({
       toolCalls: [
-        { payload: { toolName: "pubmed-search", args: { query: "test" } } },
+        { payload: { toolName: "drug-interaction", args: { drugName: "aspirin", drugName2: "warfarin" } } },
       ],
       toolResults: [
-        { payload: { toolName: "pubmed-search", result: {}, isError: false } },
+        { payload: { toolName: "drug-interaction", result: {}, isError: false } },
       ],
     });
 

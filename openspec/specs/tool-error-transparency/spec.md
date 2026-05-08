@@ -8,13 +8,13 @@ All medical API tools SHALL return a `ToolResult<T>` discriminated union where `
 
 The `ok: false` result SHALL include a human-readable `error` string explaining why the tool failed and a `retriable` boolean indicating whether the failure might resolve on retry.
 
-#### Scenario: PubMed search succeeds
-- **WHEN** `pubmedSearchTool` queries "chest pain" and the API returns valid results
-- **THEN** the tool returns `{ ok: true, data: { results: [...], totalResults: 5 } }`
+#### Scenario: Drug interaction search succeeds
+- **WHEN** `drugInteractionTool` queries "aspirin + warfarin" and the API returns valid results
+- **THEN** the tool returns `{ ok: true, data: { interactions: [...], totalResults: 3 } }`
 
-#### Scenario: PubMed search API times out
-- **WHEN** `pubmedSearchTool` queries "chest pain" and the API call times out after 10 seconds
-- **THEN** the tool returns `{ ok: false, error: "PubMed search timed out after 10000ms", retriable: true }`
+#### Scenario: Drug interaction API times out
+- **WHEN** `drugInteractionTool` queries "aspirin + clopidogrel" and the API call times out after 10 seconds
+- **THEN** the tool returns `{ ok: false, error: "Drug interaction check timed out after 10000ms", retriable: true }`
 
 #### Scenario: Drug interaction API returns 404
 - **WHEN** `drugInteractionTool` queries a drug that doesn't exist and the API returns 404
@@ -25,8 +25,8 @@ The `ok: false` result SHALL include a human-readable `error` string explaining 
 When a tool returns `{ ok: false }`, the tool's output text to the agent SHALL include the error reason so the agent can reason about incomplete information. The tool description SHALL document the `{ ok: false }` result shape so the LLM knows how to interpret it.
 
 #### Scenario: Agent sees tool error in output
-- **WHEN** a specialist agent calls `pubmedSearchTool` and it returns `{ ok: false, error: "PubMed unavailable" }`
-- **THEN** the agent receives the error message as part of the tool result and can note in its analysis that PubMed data was unavailable
+- **WHEN** a specialist agent calls `drugInteractionTool` and it returns `{ ok: false, error: "RxNav unavailable" }`
+- **THEN** the agent receives the error message as part of the tool result and can note in its analysis that drug interaction data was unavailable
 
 #### Scenario: Agent distinguishes no results from API failure
 - **WHEN** a specialist calls a tool that returns `{ ok: true, data: { results: [], totalResults: 0 } }`

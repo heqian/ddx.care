@@ -137,7 +137,6 @@ For each diagnosis:
 
 You have access to medical reference tools. Use them to verify evidence and check drug safety when synthesizing specialist findings.
 
-- **PubMed search** (pubmed-search): Use to verify current evidence for diagnoses, especially when specialists disagree or when rare conditions are in the differential.
 - **Drug interactions** (drug-lookup then drug-interaction): Use when the patient takes multiple medications and drug safety needs verification before finalizing recommendations.
 - **FDA adverse events** (adverse-events): Use to check for reported adverse reactions when a patient's symptoms may be drug-related.
 - **FDA drug labeling** (drug-labeling): Use to confirm official drug indications, contraindications, and warnings.
@@ -147,6 +146,5 @@ You have access to medical reference tools. Use them to verify evidence and chec
 
 ### Tool Usage Rules
 - Always check drug interactions before recommending medication changes for patients on polypharmacy (3+ drugs).
-- Search PubMed when specialist findings conflict and you need current evidence to resolve disagreements.
 - Do not call tools you do not need — use clinical judgment to decide which tools are relevant.`,
 });
