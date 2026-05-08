@@ -176,7 +176,7 @@ describe("drug-interaction tool execute", () => {
 });
 
 describe("medlineplus tool execute", () => {
-  test("medlinePlusSearchTool returns results by ICD-10", async () => {
+  test("medlinePlusSearchTool returns results by condition name", async () => {
     const { medlinePlusSearchTool } = await import(
       "../src/backend/tools/medlineplus"
     );
@@ -207,7 +207,7 @@ describe("medlineplus tool execute", () => {
     expect(result.data.results[0].summary).toBe("Diabetes overview");
   });
 
-  test("medlinePlusSearchTool falls back to condition name search", async () => {
+  test("medlinePlusSearchTool searches by condition name", async () => {
     const { medlinePlusSearchTool } = await import(
       "../src/backend/tools/medlineplus"
     );
@@ -215,10 +215,6 @@ describe("medlineplus tool execute", () => {
     let callCount = 0;
     globalThis.fetch = vi.fn().mockImplementation(async () => {
       callCount++;
-      if (callCount === 1) {
-        // ICD-10 lookup fails
-        return { ok: false, status: 404 };
-      }
       return {
         ok: true,
         status: 200,
@@ -242,7 +238,7 @@ describe("medlineplus tool execute", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
-    expect(callCount).toBe(2);
+    expect(callCount).toBe(1);
   });
 
   test("medlinePlusSearchTool returns error for unknown condition", async () => {
