@@ -59,7 +59,7 @@
       "source": "mastra-ai/mastra",
       "sourceType": "github",
       "skillPath": ".claude/skills/mastra-docs/SKILL.md",
-      "computedHash": "aee3ceef47cce1e083feb8f229e25fe417356242fe369e535ead2fb4eb825a55"
+      "computedHash": "a37ad890fc815ca8008ef2361c108ff0bf1628419a90cf8b4d14f5f2384cb3d2"
     },
     "memory-management": {
       "source": "anthropics/knowledge-work-plugins",
