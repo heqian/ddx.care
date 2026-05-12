@@ -50,7 +50,7 @@ Tools are assigned per specialist via `getToolsForSpecialist()` in `src/backend/
 
 ### 4. Tool args extraction: show the meaningful query, not full args
 
-Each tool has different input schemas. `pubmed-search` has `query`, `drug-interaction` has `drugName` + `drugName2`, `drug-labeling` has `drugName`, etc. We extract the most relevant field(s) and truncate to 80 characters. This avoids showing raw JSON blobs in the UI.
+Each tool has different input schemas. `drug-interaction` has `drugNames` (array), `drug-labeling` has `drugName`, etc. We extract the most relevant field(s) and truncate to 80 characters. This avoids showing raw JSON blobs in the UI.
 
 ### 5. Frontend: derive tool state from progress events (not a separate data structure)
 

@@ -254,7 +254,7 @@ export function createRoutes(
           })
           .finally(() => {
             abortStore.remove(jobId);
-            rateLimiter.finishWorkflow();
+            rateLimiter.finishWorkflow(jobId);
           });
 
         return withCors(
@@ -311,7 +311,7 @@ export function createRoutes(
           abortStore.remove(jobId);
         }
         progressStore.fail(jobId, "Cancelled by user");
-        rateLimiter.finishWorkflow();
+        rateLimiter.finishWorkflow(jobId);
 
         logger.request(
           "DELETE",

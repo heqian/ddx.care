@@ -5,7 +5,7 @@
 When a specialist agent invokes a tool during `agent.generate()`, the system SHALL emit a progress event with `eventType: "tool_call"` containing the specialist's `agentId`, the `toolName`, and a human-readable `toolArgs` string describing the query.
 
 #### Scenario: Specialist calls drug interaction check
-- **WHEN** a cardiologist agent calls the `drug-interaction` tool with `drugName: "aspirin"` and `drugName2: "warfarin"`
+- **WHEN** a cardiologist agent calls the `drug-interaction` tool with `drugNames: ["aspirin", "warfarin"]`
 - **THEN** a progress event is emitted with `eventType: "tool_call"`, `agentId: "cardiologist"`, `toolName: "drug-interaction"`, `toolArgs: "aspirin + warfarin"`, and `message` containing a human-readable summary like "Cardiologist: Checking interactions → aspirin + warfarin"
 
 #### Scenario: Specialist calls FDA label lookup
@@ -98,19 +98,27 @@ Each tool ID used in progress events SHALL map to a short, user-facing label via
 
 ### Requirement: All tools are available to all specialist agents and the CMO
 
-Every tool registered in the system SHALL be available to all 36 specialist agents and the Chief Medical Officer agent without per-specialist restrictions. The `getToolsForSpecialist(id)` function SHALL return the same set of tools regardless of the specialist ID passed.
+The system SHALL assign tools to specialist agents by category. Each specialist SHALL receive only the tools relevant to their domain. The CMO agent SHALL receive a minimal tool set limited to `drug-interaction` and `medlineplus-search` for evidence verification during synthesis.
 
-#### Scenario: Geneticist accesses drug interaction tool
+#### Scenario: Geneticist receives rare disease tools but not drug interaction
 - **WHEN** the geneticist agent is initialized
-- **THEN** it has access to `drug-interaction` tool alongside `rare-disease-search` and all other tools
+- **THEN** it has access to `rare-disease-search`, `rare-disease-genes`, `rare-disease-phenotypes`, `hpo-term-search`, `loinc-test-lookup`, and universal tools, but NOT `drug-interaction` or `drug-spelling-suggestion`
 
-#### Scenario: All specialists get new tools
-- **WHEN** any specialist agent is initialized
-- **THEN** it has access to all 17 tools including drug interactions, FDA data, clinical trials, MedlinePlus, Orphadata, NLM clinical tables, and more
+#### Scenario: Toxicologist receives toxicology tools
+- **WHEN** the toxicologist agent is initialized
+- **THEN** it has access to `substance-toxicology`, universal tools, and prescribing tools (`drug-interaction`, `drug-lookup`, `drug-spelling-suggestion`, `drug-shortages`), but NOT `rare-disease-search`
 
-#### Scenario: CMO has all tools
+#### Scenario: CMO has minimal tool set
 - **WHEN** the CMO agent is initialized
-- **THEN** it has access to all 17 tools for orchestrating specialist consultations
+- **THEN** it has access to only `drug-interaction` and `medlineplus-search`, not `clinical-trials-search`, `rare-disease-search`, or other specialist tools
+
+#### Scenario: Universal tools available to all specialists
+- **WHEN** any specialist agent is initialized
+- **THEN** it has access to universal tools: `medlineplus-search`, `drug-labeling`, `adverse-events`, `food-adverse-events`, and `device-adverse-events`
+
+#### Scenario: Oncologist receives trial search tools
+- **WHEN** the oncologist agent is initialized
+- **THEN** it has access to `clinical-trials-search` in addition to universal and prescribing tools
 
 ### Requirement: WebSocket reconnection with status check
 

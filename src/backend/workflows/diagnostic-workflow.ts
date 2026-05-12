@@ -19,7 +19,7 @@ import {
 } from "../progress-store";
 import { logger } from "../utils/logger";
 import * as abortStore from "../utils/abort-controller-store";
-import { agentList } from "../agents";
+import { agentList, specialists } from "../agents";
 import { formatToolLabel } from "../tools/tool-labels";
 import { createStepEventHandler } from "./on-step-finish";
 import {
@@ -46,7 +46,6 @@ export function formatToolArgs(
 ): string {
   const raw = args as Record<string, unknown>;
   const drug1 = typeof raw.drugName === "string" ? raw.drugName : "";
-  const drug2 = typeof raw.drugName2 === "string" ? raw.drugName2 : "";
   const query =
     typeof raw.query === "string"
       ? raw.query
@@ -56,8 +55,11 @@ export function formatToolArgs(
           ? raw.condition
           : "";
 
-  if (toolName === "drug-interaction" && drug1 && drug2) {
-    return `${drug1} + ${drug2}`;
+  if (toolName === "drug-interaction") {
+    const drugNames = raw.drugNames;
+    if (Array.isArray(drugNames) && drugNames.length >= 2) {
+      return drugNames.join(" + ");
+    }
   }
   const fallback = drug1 || query || "";
   const maxLen = 80;
@@ -700,6 +702,14 @@ export const runDiagnosis = createStep({
 
     const cmo = mastra.getAgent("chiefMedicalOfficer");
 
+    const availableSpecialistIds = Object.keys(specialists);
+    if (availableSpecialistIds.length === 0) {
+      throw new Error("No specialist agents registered — cannot run diagnosis");
+    }
+    const specialistIdEnum = z.enum(
+      availableSpecialistIds as [string, ...string[]],
+    );
+
     const MAX_ROUNDS = MAX_DIAGNOSIS_ROUNDS;
     let round = 1;
     let parseFailureCount = 0;
@@ -740,6 +750,8 @@ Based on the above, please decide which specialists you need to consult in this 
 
 ${contextModeInstructions[SPECIALIST_CONTEXT_MODE] || contextModeInstructions.none}
 
+Available specialist IDs: ${availableSpecialistIds.join(", ")}
+
 Only return specialists that have NOT been consulted yet.
 Specialists consulted so far: ${Array.from(allConsultedSpecialists).join(", ") || "None"}
 
@@ -765,11 +777,9 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
                     specialistsToConsult: z
                       .array(
                         z.object({
-                          id: z
-                            .string()
-                            .describe(
-                              "Specialist ID (e.g. 'generalist', 'cardiologist')",
-                            ),
+                          id: specialistIdEnum.describe(
+                            "Specialist ID (e.g. 'generalist', 'cardiologist')",
+                          ),
                           contextDirective: z
                             .string()
                             .optional()
@@ -883,9 +893,15 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
           break;
         }
 
-        // Filter to new specialists only
+        // Filter to new specialists only, deduplicate by id within round
+        const seenIds = new Set<string>();
         const newSpecialistRequests = (specialistsToConsult || []).filter(
-          (s) => !allConsultedSpecialists.has(s.id),
+          (s) => {
+            if (allConsultedSpecialists.has(s.id)) return false;
+            if (seenIds.has(s.id)) return false;
+            seenIds.add(s.id);
+            return true;
+          },
         );
 
         if (newSpecialistRequests.length === 0) {
@@ -1039,6 +1055,19 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
     try {
       await runLoop();
     } catch (error) {
+      // Redundant safety net: the DIAGNOSIS_TIMEOUT_MS setTimeout above
+      // aborts the controller, but some Mastra internals may swallow the
+      // AbortError. Re-surfacing it here ensures the caller always gets a
+      // clear timeout/cancel message.
+      if (abortController.signal.aborted) {
+        const reason = abortController.signal.reason;
+        if (reason instanceof Error && /timed out/i.test(reason.message)) {
+          throw new Error(
+            `Diagnosis timed out after ${DIAGNOSIS_TIMEOUT_MS}ms`,
+          );
+        }
+        throw new Error("Diagnosis cancelled by user");
+      }
       const message = error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Diagnosis generation failed: ${message}`);
     } finally {

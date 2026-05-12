@@ -38,6 +38,8 @@ interface FdaDrugLabelRecord {
   dosage_and_administration?: string[];
   mechanism_of_action?: string[];
   pregnancy?: string | string[];
+  drug_interactions?: string[];
+  boxed_warning?: string[];
 }
 
 interface FdaRecallRecord {
@@ -297,6 +299,8 @@ export const drugLabelingTool = createTool({
             dosage: z.string().optional(),
             mechanismOfAction: z.string().optional(),
             pregnancyCategory: z.string().optional(),
+            drugInteractions: z.string().optional(),
+            boxedWarning: z.string().optional(),
           }),
         ),
       }),
@@ -323,6 +327,8 @@ export const drugLabelingTool = createTool({
         dosage?: string;
         mechanismOfAction?: string;
         pregnancyCategory?: string;
+        drugInteractions?: string;
+        boxedWarning?: string;
       }>;
     }>
   > => {
@@ -352,6 +358,8 @@ export const drugLabelingTool = createTool({
           (Array.isArray(r.pregnancy) ? r.pregnancy.join(" ") : r.pregnancy) ??
           r.openfda?.pregnancy_category?.join(", ") ??
           undefined,
+        drugInteractions: r.drug_interactions?.join(" ") ?? undefined,
+        boxedWarning: r.boxed_warning?.join(" ") ?? undefined,
       }));
 
       return { ok: true as const, data: { results } };

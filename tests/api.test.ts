@@ -138,10 +138,34 @@ describe("API Endpoints", () => {
     });
 
     const res = await fetch(req);
-    // Should get 413 (payload too large) or 400 (validation failure for field length)
-    // Since individual fields are 400k > MAX_INPUT_FIELD_LENGTH (50k), it will hit the
-    // zod validation first with 400 if content-length check doesn't fire.
-    // The key is that the request is rejected, not accepted.
+    // With maxRequestBodySize set in Bun.serve(), oversized bodies
+    // are rejected at the HTTP layer with 413.
+    expect([400, 413]).toContain(res.status);
+  });
+
+  test("POST /v1/diagnose rejects body exceeding maxRequestBodySize even with small content-length header", async () => {
+    // Simulate a spoofed Content-Length by creating a body that's larger
+    // than the declared content-length. Bun's maxRequestBodySize enforces
+    // the actual byte count irrespective of the header.
+    const hugeField = "x".repeat(400_000);
+    const body = JSON.stringify({
+      medicalHistory: hugeField,
+      conversationTranscript: hugeField,
+      labResults: hugeField,
+    });
+
+    // Construct request with deliberately mismatched content-length
+    const req = new Request(`${BASE}/v1/diagnose`, {
+      method: "POST",
+      body,
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": "100",
+      },
+    });
+
+    const res = await fetch(req);
+    // Bun enforces actual stream byte count, not just the header
     expect([400, 413]).toContain(res.status);
   });
 

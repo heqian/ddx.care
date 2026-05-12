@@ -144,6 +144,87 @@ describe("RateLimiter — Concurrent Workflow Limiting", () => {
     limiter.startWorkflow();
     expect(limiter.canStartWorkflow()).toBe(true);
   });
+
+  test("second finishWorkflow with same jobId is a no-op", () => {
+    const limiter = new RateLimiter({
+      maxRequests: 100,
+      windowMs: 60_000,
+      maxConcurrent: 2,
+    });
+
+    limiter.startWorkflow();
+    limiter.startWorkflow();
+    expect(limiter.activeWorkflows).toBe(2);
+
+    limiter.finishWorkflow("job-1");
+    expect(limiter.activeWorkflows).toBe(1);
+
+    // Second call with same jobId — should be no-op
+    limiter.finishWorkflow("job-1");
+    expect(limiter.activeWorkflows).toBe(1);
+
+    // Different jobId still works
+    limiter.finishWorkflow("job-2");
+    expect(limiter.activeWorkflows).toBe(0);
+  });
+
+  test("finishWorkflow without jobId guards against underflow", () => {
+    const limiter = new RateLimiter({
+      maxRequests: 100,
+      windowMs: 60_000,
+      maxConcurrent: 2,
+    });
+
+    limiter.startWorkflow();
+    expect(limiter.activeWorkflows).toBe(1);
+
+    limiter.finishWorkflow();
+    expect(limiter.activeWorkflows).toBe(0);
+
+    // Second call without jobId should not go below zero
+    limiter.finishWorkflow();
+    expect(limiter.activeWorkflows).toBe(0);
+  });
+
+  test("prune clears releasedJobIds set", () => {
+    const limiter = new RateLimiter({
+      maxRequests: 100,
+      windowMs: 60_000,
+      maxConcurrent: 2,
+    });
+
+    limiter.startWorkflow();
+    limiter.finishWorkflow("job-1");
+    expect(limiter.activeWorkflows).toBe(0);
+
+    // After prune, the set should be cleared so the jobId can be reused
+    limiter.prune();
+
+    limiter.startWorkflow();
+    limiter.finishWorkflow("job-1");
+    expect(limiter.activeWorkflows).toBe(0); // Should decrement again
+  });
+
+  test("releasedJobIds is capped at maxConcurrent * 10", () => {
+    const limiter = new RateLimiter({
+      maxRequests: 100,
+      windowMs: 60_000,
+      maxConcurrent: 1,
+    });
+
+    for (let i = 0; i < 15; i++) {
+      limiter.startWorkflow();
+      limiter.finishWorkflow(`job-${i}`);
+    }
+
+    expect(limiter.activeWorkflows).toBe(0);
+
+    // After exceeding the cap, old entries are evicted.
+    // Releasing job-0 again should succeed (it was evicted from the set).
+    limiter.startWorkflow();
+    limiter.finishWorkflow("job-0");
+    expect(limiter.activeWorkflows).toBe(0);
+  });
 });
 
 describe("RateLimiter — Prune", () => {

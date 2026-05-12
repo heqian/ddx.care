@@ -13,6 +13,8 @@ export class RateLimiter {
   private maxConcurrent: number;
   private maxEntries: number;
   private hasLoggedReset = false;
+  private releasedJobIds = new Set<string>();
+  private maxReleasedIds: number;
 
   constructor(opts: {
     maxRequests: number;
@@ -24,6 +26,7 @@ export class RateLimiter {
     this.windowMs = opts.windowMs;
     this.maxConcurrent = opts.maxConcurrent;
     this.maxEntries = opts.maxEntries ?? Infinity;
+    this.maxReleasedIds = opts.maxConcurrent * 10;
   }
 
   private evictOldest(): void {
@@ -92,8 +95,21 @@ export class RateLimiter {
     this.activeCount++;
   }
 
-  finishWorkflow(): void {
-    this.activeCount = Math.max(0, this.activeCount - 1);
+  finishWorkflow(jobId?: string): void {
+    if (jobId && this.releasedJobIds.has(jobId)) {
+      return;
+    }
+    if (this.activeCount <= 0) {
+      return;
+    }
+    if (jobId) {
+      this.releasedJobIds.add(jobId);
+      if (this.releasedJobIds.size > this.maxReleasedIds) {
+        const oldest = this.releasedJobIds.values().next().value;
+        if (oldest) this.releasedJobIds.delete(oldest);
+      }
+    }
+    this.activeCount--;
   }
 
   prune(): void {
@@ -111,5 +127,6 @@ export class RateLimiter {
       }
     }
     this.insertionOrder = remaining;
+    this.releasedJobIds.clear();
   }
 }

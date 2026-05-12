@@ -9,7 +9,7 @@ When a specialist agent invokes a tool during `agent.generate()`, the system SHA
 - **THEN** a progress event is emitted with `eventType: "tool_call"`, `agentId: "cardiologist"`, `toolName: "pubmed-search"`, `toolArgs: "acute chest pain guidelines"`, and `message` containing a human-readable summary like "Cardiologist: Searching PubMed → acute chest pain guidelines"
 
 #### Scenario: Specialist calls drug interaction check
-- **WHEN** a neurologist agent calls the `drug-interaction` tool with `drugName: "sumatriptan"` and `drugName2: "sertraline"`
+- **WHEN** a neurologist agent calls the `drug-interaction` tool with `drugNames: ["sumatriptan", "sertraline"]`
 - **THEN** a progress event is emitted with `eventType: "tool_call"`, `agentId: "neurologist"`, `toolName: "drug-interaction"`, `toolArgs: "sumatriptan + sertraline"`
 
 #### Scenario: Step has multiple tool calls

@@ -1,4 +1,5 @@
 import { Database, type Statement } from "bun:sqlite";
+import { logger } from "./utils/logger";
 
 export type ProgressEventType =
   | "round_start"
@@ -118,6 +119,14 @@ export class JobStore extends EventTarget {
   }
 
   complete(jobId: string, result: unknown): void {
+    const current = this.getStmt.get(jobId) as JobRow | null;
+    if (current?.status === "failed") {
+      logger.warn("complete_skipped_already_failed", {
+        jobId,
+        message: `Job ${jobId} was already failed — not overwriting with completed status`,
+      });
+      return;
+    }
     this.completeStmt.run("completed", JSON.stringify(result), jobId);
 
     this.dispatchEvent(

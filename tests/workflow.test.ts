@@ -1434,8 +1434,7 @@ describe("formatReport — malformed input handling", () => {
 describe("formatToolArgs", () => {
   test("extracts query from drug-interaction args", () => {
     const result = formatToolArgs("drug-interaction", {
-      drugName: "sumatriptan",
-      drugName2: "sertraline",
+      drugNames: ["sumatriptan", "sertraline"],
     });
     expect(result).toBe("sumatriptan + sertraline");
   });
@@ -2080,7 +2079,7 @@ describe("createStepEventHandler", () => {
     handler({
       toolCalls: [
         {
-          payload: { toolName: "drug-interaction", args: { drugName: "aspirin", drugName2: "clopidogrel" } },
+          payload: { toolName: "drug-interaction", args: { drugNames: ["aspirin", "clopidogrel"] } },
         },
       ],
       toolResults: [
@@ -2110,7 +2109,7 @@ describe("createStepEventHandler", () => {
         {
           payload: {
             toolName: "drug-interaction",
-            args: { drugName: "aspirin", drugName2: "warfarin" },
+            args: { drugNames: ["aspirin", "warfarin"] },
           },
         },
       ],
@@ -2142,7 +2141,7 @@ describe("createStepEventHandler", () => {
         {
           payload: {
             toolName: "drug-interaction",
-            args: { drugName: "aspirin", drugName2: "warfarin" },
+            args: { drugNames: ["aspirin", "warfarin"] },
           },
         },
       ],
@@ -2170,7 +2169,7 @@ describe("createStepEventHandler", () => {
 
     handler({
       toolCalls: [
-        { payload: { toolName: "drug-interaction", args: { drugName: "aspirin", drugName2: "clopidogrel" } } },
+        { payload: { toolName: "drug-interaction", args: { drugNames: ["aspirin", "clopidogrel"] } } },
       ],
       toolResults: [
         {
@@ -2195,7 +2194,7 @@ describe("createStepEventHandler", () => {
 
     handler({
       toolCalls: [
-        { payload: { toolName: "drug-interaction", args: { drugName: "aspirin", drugName2: "ibuprofen" } } },
+        { payload: { toolName: "drug-interaction", args: { drugNames: ["aspirin", "ibuprofen"] } } },
       ],
       toolResults: [
         {
@@ -2221,7 +2220,7 @@ describe("createStepEventHandler", () => {
     handler({
       toolCalls: [
         {
-          payload: { toolName: "drug-interaction", args: { drugName: "aspirin", drugName2: "warfarin" } },
+          payload: { toolName: "drug-interaction", args: { drugNames: ["aspirin", "warfarin"] } },
         },
         {
           payload: {
@@ -2258,7 +2257,7 @@ describe("createStepEventHandler", () => {
 
     handler({
       toolCalls: [
-        { payload: { toolName: "drug-interaction", args: { drugName: "aspirin", drugName2: "warfarin" } } },
+        { payload: { toolName: "drug-interaction", args: { drugNames: ["aspirin", "warfarin"] } } },
       ],
       toolResults: [
         { payload: { toolName: "drug-interaction", result: {}, isError: false } },

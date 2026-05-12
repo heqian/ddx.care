@@ -77,6 +77,7 @@ export function summarizeToolResult(
           `${interactions.length} interaction${interactions.length === 1 ? "" : "s"} found`,
         );
       }
+      if (obj.noInteractionsFound) return "No interactions found";
       break;
     }
     case "drug-lookup": {

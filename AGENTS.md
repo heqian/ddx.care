@@ -73,7 +73,7 @@ Key files:
 
 Medical API integrations, assigned per-specialist via `getToolsForSpecialist()` in `tools/index.ts`:
 
-- **RxNav drug interactions** (`drug-interaction.ts`): `drugLookupTool`, `drugInteractionTool`, `drugSpellingTool`
+- **Drug interactions via FDA labels** (`drug-interaction.ts`): `drugLookupTool`, `drugInteractionTool`, `drugSpellingTool`
 - **OpenFDA** (`open-fda.ts`): `adverseEventsTool`, `drugLabelingTool`, `drugRecallTool`, `substanceToxicologyTool`
 - **ClinicalTrials.gov** (`clinical-trials.ts`): `clinicalTrialsSearchTool`
 - **MedlinePlus** (`medlineplus.ts`): `medlinePlusSearchTool`

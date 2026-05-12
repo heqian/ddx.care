@@ -43,7 +43,7 @@ describe("Agent Registry", () => {
 });
 
 describe("Tool Assignments", () => {
-  test("getAllTools returns all 17 tools", async () => {
+  test("getAllTools returns all 17 tools for backward compatibility", async () => {
     const { getAllTools } = await import("../src/backend/tools/index");
 
     const tools = getAllTools();
@@ -51,7 +51,7 @@ describe("Tool Assignments", () => {
     expect(keys.length).toBe(17);
   });
 
-  test("every specialist gets all tools via getAllTools", async () => {
+  test("getAllTools includes all tool categories", async () => {
     const { getAllTools } = await import("../src/backend/tools/index");
 
     const tools = getAllTools();
@@ -94,6 +94,77 @@ describe("Tool Assignments", () => {
     ];
     for (const id of newTools) {
       expect(tools).toHaveProperty(id);
+    }
+  });
+
+  test("getToolsForSpecialist returns universal tools for any specialist", async () => {
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const tools = getToolsForSpecialist("cardiologist");
+    expect(tools).toHaveProperty("medlineplus-search");
+    expect(tools).toHaveProperty("drug-labeling");
+    expect(tools).toHaveProperty("adverse-events");
+  });
+
+  test("geneticist gets rareDisease and labPhenotype tools", async () => {
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const tools = getToolsForSpecialist("geneticist");
+    expect(tools).toHaveProperty("rare-disease-search");
+    expect(tools).toHaveProperty("rare-disease-genes");
+    expect(tools).toHaveProperty("rare-disease-phenotypes");
+    expect(tools).toHaveProperty("hpo-term-search");
+    expect(tools).toHaveProperty("loinc-test-lookup");
+    expect(tools).toHaveProperty("medlineplus-search");
+  });
+
+  test("geneticist does not get prescribing tools", async () => {
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const tools = getToolsForSpecialist("geneticist");
+    expect(tools).not.toHaveProperty("drug-interaction");
+    expect(tools).not.toHaveProperty("drug-spelling-suggestion");
+  });
+
+  test("toxicologist gets substance-toxicology and prescribing", async () => {
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const tools = getToolsForSpecialist("toxicologist");
+    expect(tools).toHaveProperty("substance-toxicology");
+    expect(tools).toHaveProperty("drug-interaction");
+    expect(tools).toHaveProperty("drug-lookup");
+  });
+
+  test("toxicologist does not get rare disease tools", async () => {
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const tools = getToolsForSpecialist("toxicologist");
+    expect(tools).not.toHaveProperty("rare-disease-search");
+  });
+
+  test("oncologist gets clinical-trials-search", async () => {
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const tools = getToolsForSpecialist("oncologist");
+    expect(tools).toHaveProperty("clinical-trials-search");
+  });
+
+  test("unknown specialist ID gets fallback universal tools only", async () => {
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const tools = getToolsForSpecialist("nonexistent-spec");
+    // Universal tools should be present
+    expect(tools).toHaveProperty("medlineplus-search");
+    expect(tools).toHaveProperty("drug-labeling");
+    expect(tools).toHaveProperty("adverse-events");
+    // But not prescribing or specialized
+    expect(tools).not.toHaveProperty("drug-interaction");
+    expect(tools).not.toHaveProperty("rare-disease-search");
+  });
+
+  test("TOOL_ASSIGNMENTS keys match registered specialist agent IDs", async () => {
+    const { getToolsForSpecialist } = await import("../src/backend/tools/index");
+    const { specialists } = await import("../src/backend/agents/index");
+
+    const specialistIds = Object.keys(specialists);
+    expect(specialistIds.length).toBeGreaterThan(0);
+
+    for (const id of specialistIds) {
+      const tools = getToolsForSpecialist(id);
+      expect(Object.keys(tools).length).toBeGreaterThan(0);
     }
   });
 });
@@ -154,20 +225,20 @@ describe("Agent factory", () => {
     expect(agent.id).toBe("general-surgeon");
   });
 
-  test("createSpecialistAgent assigns all tools to any specialist", async () => {
+  test("createSpecialistAgent assigns per-specialist tools", async () => {
     const { createSpecialistAgent } = await import(
       "../src/backend/agents/factory"
     );
 
     const agent = createSpecialistAgent({
-      id: "test-specialist",
-      name: "Test Specialist",
+      id: "cardiologist",
+      name: "Cardiologist",
       description: "Test",
       instructions: "Test",
     });
 
     expect(agent).toBeDefined();
-    expect(agent.id).toBe("test-specialist");
+    expect(agent.id).toBe("cardiologist");
   });
 });
 

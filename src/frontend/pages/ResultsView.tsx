@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import {
   ArrowPathIcon,
   DocumentChartBarIcon,
@@ -7,6 +7,8 @@ import {
 import { Button } from "../components/ui/Button";
 import { DiagnosisCard } from "../components/diagnosis/DiagnosisCard";
 import { ConsultNotes } from "../components/diagnosis/ConsultNotes";
+import { marked } from "marked";
+import DOMPurify from "isomorphic-dompurify";
 import type { StatusResponse } from "../api/types";
 
 interface ResultsViewProps {
@@ -27,6 +29,28 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
 
   const report = result.result?.result?.report;
   const generatedAt = result.result?.result?.generatedAt;
+
+  const renderMarkdown = useCallback(
+    (text: string) =>
+      DOMPurify.sanitize(marked.parse(text, { async: false }) as string),
+    [],
+  );
+
+  const crossSpecialtyHtml = useMemo(
+    () =>
+      report?.crossSpecialtyObservations
+        ? renderMarkdown(report.crossSpecialtyObservations)
+        : null,
+    [report?.crossSpecialtyObservations, renderMarkdown],
+  );
+
+  const immediateActionsHtml = useMemo(
+    () =>
+      report?.recommendedImmediateActions
+        ? renderMarkdown(report.recommendedImmediateActions)
+        : null,
+    [report?.recommendedImmediateActions, renderMarkdown],
+  );
 
   const selectTab = useCallback((key: Tab) => {
     setTab(key);
@@ -214,26 +238,28 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
           )}
 
           {/* Cross-Specialty Observations */}
-          {report.crossSpecialtyObservations && (
+          {crossSpecialtyHtml && (
             <div className="mt-8">
               <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
                 Cross-Specialty Observations
               </h2>
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-200 rounded-lg border border-blue-200 dark:border-blue-800/50 text-sm">
-                {report.crossSpecialtyObservations}
-              </div>
+              <div
+                className="p-4 bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-200 rounded-lg border border-blue-200 dark:border-blue-800/50 text-sm"
+                dangerouslySetInnerHTML={{ __html: crossSpecialtyHtml }}
+              />
             </div>
           )}
 
           {/* Immediate Actions */}
-          {report.recommendedImmediateActions && (
+          {immediateActionsHtml && (
             <div className="mt-4">
               <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
                 Recommended Immediate Actions
               </h2>
-              <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-200 rounded-lg border border-red-200 dark:border-red-800/50 text-sm font-semibold">
-                {report.recommendedImmediateActions}
-              </div>
+              <div
+                className="p-4 bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-200 rounded-lg border border-red-200 dark:border-red-800/50 text-sm font-semibold"
+                dangerouslySetInnerHTML={{ __html: immediateActionsHtml }}
+              />
             </div>
           )}
         </div>

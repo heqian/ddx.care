@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowPathIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Spinner } from "../components/ui/Spinner";
 import { AgentGrid } from "../components/agents/AgentGrid";
+import { ProgressPhases } from "../components/diagnosis/ProgressPhases";
 import type { SpecialistStatus } from "../components/agents/AgentStatusCard";
 import type { ToolHistoryEntry } from "../api/types";
 import { useJobStream } from "../hooks/useJobStream";
@@ -158,6 +159,13 @@ export function WaitingRoom({
             : "Our specialist panel is reviewing the patient data. This typically takes a few minutes, but complicated cases may take longer."}
         </p>
       </div>
+
+      {!showRetry && (
+        <ProgressPhases
+          progress={status?.progress}
+          isCompleted={status?.status === "completed"}
+        />
+      )}
 
       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-3 text-xs text-amber-800 dark:text-amber-300 text-center">
         ⚠️ RESEARCH DEMO ONLY — NOT FOR CLINICAL USE — NOT HIPAA COMPLIANT.

@@ -1,12 +1,16 @@
 import { Agent } from "@mastra/core/agent";
 import { ORCHESTRATOR_MODEL } from "../config";
-import { getAllTools } from "../tools";
+import { drugInteractionTool } from "../tools/drug-interaction";
+import { medlinePlusSearchTool } from "../tools/medlineplus";
 
 export const chiefMedicalOfficer = new Agent({
   id: "chiefMedicalOfficer",
   name: "Chief Medical Officer",
   model: ORCHESTRATOR_MODEL,
-  tools: getAllTools(),
+  tools: {
+    "drug-interaction": drugInteractionTool,
+    "medlineplus-search": medlinePlusSearchTool,
+  },
   instructions: `You are the Chief Medical Officer (CMO) of a differential diagnosis panel. You orchestrate a team of 30+ specialist sub-agents to analyze complex patient cases and produce a comprehensive, ranked differential diagnosis report.
 
 ## Your Responsibilities
@@ -135,16 +139,13 @@ For each diagnosis:
 
 ## Available Medical Tools
 
-You have access to medical reference tools. Use them to verify evidence and check drug safety when synthesizing specialist findings.
+You have access to a limited set of medical reference tools for evidence verification during synthesis.
 
-- **Drug interactions** (drug-lookup then drug-interaction): Use when the patient takes multiple medications and drug safety needs verification before finalizing recommendations.
-- **FDA adverse events** (adverse-events): Use to check for reported adverse reactions when a patient's symptoms may be drug-related.
-- **FDA drug labeling** (drug-labeling): Use to confirm official drug indications, contraindications, and warnings.
-- **MedlinePlus** (medlineplus-search): Use for patient-friendly clinical summaries.
-- **Rare diseases** (rare-disease-search): Use when a rare condition is in the differential and you need to verify clinical features.
-- **Clinical trials** (clinical-trials-search): Use when standard treatment options are limited and experimental therapies may be relevant.
+- **Drug interactions** (drug-interaction): Use when the patient takes multiple medications and drug safety needs verification before finalizing recommendations. Provide drug names directly — no need to look up RxCUIs first.
+- **MedlinePlus** (medlineplus-search): Use for patient-friendly clinical summaries to verify medical knowledge.
 
 ### Tool Usage Rules
-- Always check drug interactions before recommending medication changes for patients on polypharmacy (3+ drugs).
-- Do not call tools you do not need — use clinical judgment to decide which tools are relevant.`,
+- Check drug interactions before recommending medication changes for patients on polypharmacy (3+ drugs).
+- Do not call tools you do not need — use clinical judgment to decide which tools are relevant.
+- Delegate specialist-domain analysis to the appropriate specialists. Use tools only for verification during synthesis.`,
 });

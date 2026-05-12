@@ -72,12 +72,12 @@ export const rareDiseaseSearchTool = createTool({
 export const rareDiseaseGenesTool = createTool({
   id: "rare-disease-genes",
   description:
-    "Look up genes associated with a specific rare disease by its ORPHAcode. Returns gene symbols, full names, and association types. Useful for genetic counseling and identifying hereditary patterns. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
+    "Look up genes associated with a specific rare disease by its ORPHAcode. You MUST use rare-disease-search first to obtain the ORPHAcode — do not guess or hardcode ORPHAcodes. Returns gene symbols, full names, and association types. Useful for genetic counseling and identifying hereditary patterns. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
   inputSchema: z.object({
     orphacode: z
       .number()
       .describe(
-        "The ORPHAcode of the rare disease (e.g. 58 for Alexander disease)",
+        "The ORPHAcode of the rare disease. Obtain this from rare-disease-search first — do not guess.",
       ),
   }),
   outputSchema: z.union([
@@ -136,12 +136,12 @@ export const rareDiseaseGenesTool = createTool({
 export const rareDiseasePhenotypesTool = createTool({
   id: "rare-disease-phenotypes",
   description:
-    "Look up HPO phenotypes (clinical signs and symptoms) associated with a specific rare disease by its ORPHAcode. Returns HPO IDs, phenotype names, and frequency information. Useful for matching patient symptoms to rare diseases. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
+    "Look up HPO phenotypes (clinical signs and symptoms) associated with a specific rare disease by its ORPHAcode. You MUST use rare-disease-search first to obtain the ORPHAcode — do not guess or hardcode ORPHAcodes. Returns HPO IDs, phenotype names, and frequency information. Useful for matching patient symptoms to rare diseases. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
   inputSchema: z.object({
     orphacode: z
       .number()
       .describe(
-        "The ORPHAcode of the rare disease (e.g. 58 for Alexander disease)",
+        "The ORPHAcode of the rare disease. Obtain this from rare-disease-search first — do not guess.",
       ),
   }),
   outputSchema: z.union([

@@ -1,4 +1,5 @@
-FROM oven/bun:latest AS builder
+# Pin Bun version for reproducible builds — update when upgrading Bun
+FROM oven/bun:1.3.13 AS builder
 
 WORKDIR /app
 
@@ -8,9 +9,8 @@ RUN bun install --frozen-lockfile --production
 COPY src/ src/
 COPY index.ts index.html tsconfig.json ./
 
-FROM oven/bun:latest
-
-WORKDIR /app
+# Pin Bun version for reproducible builds — update when upgrading Bun
+FROM oven/bun:1.3.13
 
 COPY --from=builder /app ./
 

@@ -1,6 +1,6 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
-import { getAllTools } from "../tools";
+import { getToolsForSpecialist } from "../tools";
 
 export interface SpecialistConfig {
   id: string;
@@ -16,7 +16,7 @@ const TOOL_INSTRUCTIONS = `
 You have access to medical reference tools. Use them to ground your analysis in current evidence rather than relying solely on training data.
 
 ### When to Use Tools
-- **Drug interactions** (drug-lookup then drug-interaction): Use when the patient takes multiple medications. Always check interactions before recommending drug combinations.
+- **Drug interactions** (drug-interaction): Use when the patient takes multiple medications. Provide drug names directly to check for interactions. Always check interactions before recommending drug combinations.
 - **FDA adverse events** (adverse-events): Use when evaluating drug safety or when a patient reports a possible adverse reaction to a medication.
 - **FDA drug labeling** (drug-labeling): Use to confirm official indications, contraindications, warnings, and dosing for medications the patient is taking.
 - **MedlinePlus** (medlineplus-search): Use for patient-friendly clinical summaries and general medical reference.
@@ -26,7 +26,7 @@ You have access to medical reference tools. Use them to ground your analysis in 
 - **Lab test lookup** (loinc-test-lookup): Use to find standardized codes and reference information for laboratory tests.
 
 ### Tool Usage Rules
-- Always use drug-interaction before recommending medication combinations or when the patient is on polypharmacy (3+ drugs).
+- Always use drug-interaction before recommending medication combinations or when the patient is on polypharmacy (3+ drugs). Provide drug names directly — no need to look up RxCUIs first.
 - Do not call tools you do not need — use clinical judgment to decide which tools are relevant for this case.
 - Tool results supplement your expertise; always interpret them in clinical context.`;
 
@@ -35,7 +35,7 @@ export function createSpecialistAgent(config: SpecialistConfig): Agent {
     id: config.id,
     name: config.name,
     model: SPECIALIST_MODEL,
-    tools: getAllTools(),
+    tools: getToolsForSpecialist(config.id),
     description: config.description,
     instructions: config.instructions + TOOL_INSTRUCTIONS,
   });

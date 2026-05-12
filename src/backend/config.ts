@@ -54,15 +54,15 @@ const VALID_CONTEXT_MODES = [
 type ContextMode = (typeof VALID_CONTEXT_MODES)[number];
 
 export const SPECIALIST_CONTEXT_MODE: ContextMode = (() => {
-  const raw = process.env.SPECIALIST_CONTEXT_MODE ?? "none";
+  const raw = process.env.SPECIALIST_CONTEXT_MODE ?? "prior_rounds";
   if (VALID_CONTEXT_MODES.includes(raw as ContextMode))
     return raw as ContextMode;
   if (process.env.NODE_ENV !== "production") {
     console.warn(
-      `Invalid SPECIALIST_CONTEXT_MODE "${raw}". Defaulting to "none". Valid: ${VALID_CONTEXT_MODES.join(", ")}`,
+      `Invalid SPECIALIST_CONTEXT_MODE "${raw}". Defaulting to "prior_rounds". Valid: ${VALID_CONTEXT_MODES.join(", ")}`,
     );
   }
-  return "none";
+  return "prior_rounds";
 })();
 
 export const SPECIALIST_CONTEXT_MAX_CHARS = parseInt(

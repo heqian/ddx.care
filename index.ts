@@ -15,6 +15,7 @@ import {
   ORPHADATA_ENABLED,
   TOOL_CACHE_ENABLED,
   TOOL_CACHE_CLEANUP_INTERVAL_MS,
+  MAX_PAYLOAD_BYTES,
   validateConfig,
 } from "./src/backend/config";
 import { logger } from "./src/backend/utils/logger";
@@ -49,6 +50,7 @@ let server: ReturnType<typeof Bun.serve>;
 
 server = Bun.serve<WsData>({
   port: PORT,
+  maxRequestBodySize: MAX_PAYLOAD_BYTES,
   routes: createRoutes(
     { 
       upgrade: (req, opts) => server.upgrade(req, opts!),

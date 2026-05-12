@@ -61,6 +61,26 @@ describe("JobStore — Job Lifecycle", () => {
     const job = store.getJob("job-4");
     expect(job!.result).toEqual(result);
   });
+
+  test("complete does not overwrite failed status", () => {
+    store.createJob("job-cancel-1");
+    store.fail("job-cancel-1", "Cancelled by user");
+    store.complete("job-cancel-1", { result: "should not write" });
+
+    const job = store.getJob("job-cancel-1");
+    expect(job!.status).toBe("failed");
+    expect(job!.error).toBe("Cancelled by user");
+    expect(job!.result).toBeUndefined();
+  });
+
+  test("complete works normally after fail+prune cycle (fresh job)", () => {
+    store.createJob("job-fresh");
+    store.complete("job-fresh", { result: "done" });
+
+    const job = store.getJob("job-fresh");
+    expect(job!.status).toBe("completed");
+    expect(job!.result).toEqual({ result: "done" });
+  });
 });
 
 describe("JobStore — Progress Events", () => {
