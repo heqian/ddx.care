@@ -22,6 +22,7 @@ export interface ProgressEvent {
   durationMs?: number;
   resultSummary?: string | null;
   errorType?: string;
+  cached?: boolean;
 }
 
 interface JobRow {

@@ -36,6 +36,7 @@ export interface ToolHistoryEntry {
   status: ToolStatus;
   durationMs?: number;
   resultSummary?: string | null;
+  cached?: boolean;
 }
 
 export interface ProgressEvent {
@@ -49,6 +50,7 @@ export interface ProgressEvent {
   durationMs?: number;
   resultSummary?: string | null;
   errorType?: string;
+  cached?: boolean;
 }
 
 export interface StatusResponse {

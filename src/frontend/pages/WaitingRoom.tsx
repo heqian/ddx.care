@@ -84,6 +84,7 @@ export function deriveToolHistory(
             status: p.success === false ? "error" : "success",
             durationMs: p.durationMs,
             resultSummary: p.resultSummary,
+            ...(p.cached && { cached: true }),
           };
         }
       }
@@ -196,10 +197,14 @@ export function WaitingRoom({
 
             let statusIcon = "";
             let durationText = "";
+            let cachedText = "";
             if (isToolResult) {
               statusIcon = p.success ? " ✓" : " ✗";
               if (p.durationMs !== undefined) {
                 durationText = ` (${(p.durationMs / 1000).toFixed(1)}s)`;
+              }
+              if (p.cached) {
+                cachedText = " (cached)";
               }
             } else if (isToolCall) {
               statusIcon = " ⟳";
@@ -216,6 +221,7 @@ export function WaitingRoom({
                 {p.message}
                 {statusIcon}
                 {durationText}
+                {cachedText}
               </div>
             );
           })}

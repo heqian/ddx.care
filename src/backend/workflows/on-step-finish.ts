@@ -4,6 +4,7 @@ import { formatToolArgs } from "./diagnostic-workflow";
 import { formatToolLabel } from "../tools/tool-labels";
 import { summarizeToolResult } from "./tool-result-summary";
 import { getErrorTypeName } from "../utils/errors";
+import { consumeCacheHits } from "./cache-context";
 
 type EmitFn = (
   eventType: ProgressEventType,
@@ -63,12 +64,15 @@ export function createStepEventHandler(
         tr.payload.result,
       );
 
+      const cached = consumeCacheHits();
+
       const eventExtra: Partial<ProgressEvent> & { errorType?: string } = {
         agentId,
         toolName: tr.payload.toolName,
         success: !isError,
         durationMs,
         resultSummary,
+        ...(cached && { cached: true }),
       };
 
       if (isError) {

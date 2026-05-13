@@ -51,6 +51,11 @@ function ToolHistoryItem({
           ({(entry.durationMs / 1000).toFixed(1)}s)
         </span>
       )}
+      {entry.cached && (
+        <span className="text-amber-500 dark:text-amber-400 text-[10px]">
+          cached
+        </span>
+      )}
     </div>
   );
 }
@@ -98,6 +103,7 @@ export function AgentStatusCard({
   const visibleHistory = toolHistory?.slice(-MAX_VISIBLE_TOOLS) ?? [];
   const hasMore = (toolHistory?.length ?? 0) > MAX_VISIBLE_TOOLS;
   const errorCount = visibleHistory.filter((e) => e.status === "error").length;
+  const cachedCount = visibleHistory.filter((e) => e.cached).length;
 
   return (
     <div
@@ -145,6 +151,11 @@ export function AgentStatusCard({
             {visibleHistory.length} tool{visibleHistory.length === 1 ? "" : "s"}{" "}
             used
             {errorCount > 0 ? ` — ${errorCount} failed` : " — all successful"}
+            {cachedCount > 0 && (
+              <span className="text-amber-500 dark:text-amber-400 ml-1">
+                ({cachedCount} cached)
+              </span>
+            )}
           </p>
         ) : (
           <p className={`text-xs truncate ${styles.text}`}>
