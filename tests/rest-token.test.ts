@@ -32,7 +32,9 @@ function makeToken(jobId: string): string {
 
 const UNKNOWN_UUID = "00000000-0000-4000-a000-000000000000";
 
-async function createJob(history: string): Promise<{ jobId: string; token: string }> {
+async function createJob(
+  history: string,
+): Promise<{ jobId: string; token: string }> {
   const res = await fetch(`${BASE}/v1/diagnose`, {
     method: "POST",
     body: JSON.stringify({
@@ -92,9 +94,7 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
     test("token from different job is rejected", async () => {
       const { jobId } = await createJob("cross-job token test");
       const crossToken = makeToken(UNKNOWN_UUID);
-      const res = await fetch(
-        `${BASE}/v1/status/${jobId}?token=${crossToken}`,
-      );
+      const res = await fetch(`${BASE}/v1/status/${jobId}?token=${crossToken}`);
       expect(res.status).toBe(403);
     });
 
@@ -107,9 +107,12 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
   describe("DELETE /v1/diagnose/:jobId", () => {
     test("valid token cancels the job", async () => {
       const { jobId, token } = await createJob("delete valid token test");
-      const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}?token=${token}`, {
-        method: "DELETE",
-      });
+      const delRes = await fetch(
+        `${BASE}/v1/diagnose/${jobId}?token=${token}`,
+        {
+          method: "DELETE",
+        },
+      );
       expect(delRes.status).toBe(200);
       const body = (await delRes.json()) as { status: string };
       expect(body.status).toBe("cancelled");
@@ -123,7 +126,9 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
       expect(delRes.status).toBe(403);
 
       // Verify the job was NOT cancelled — it should still be accessible
-      const statusRes = await fetch(`${BASE}/v1/status/${jobId}?token=${token}`);
+      const statusRes = await fetch(
+        `${BASE}/v1/status/${jobId}?token=${token}`,
+      );
       expect(statusRes.status).toBe(200);
       const statusBody = (await statusRes.json()) as { status: string };
       expect(statusBody.status).not.toBe("failed");
@@ -131,10 +136,9 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
 
     test("invalid token returns 403", async () => {
       const { jobId } = await createJob("delete invalid token test");
-      const delRes = await fetch(
-        `${BASE}/v1/diagnose/${jobId}?token=invalid`,
-        { method: "DELETE" },
-      );
+      const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}?token=invalid`, {
+        method: "DELETE",
+      });
       expect(delRes.status).toBe(403);
     });
   });

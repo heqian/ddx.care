@@ -19,7 +19,7 @@ Default to using Bun instead of Node.js. You should NEVER use Python or any Pyth
 - `bun run dev` — Start dev server with HMR on port 3000 (or `PORT` env var). Uses `bun --hot index.ts`.
 - `bun run build` — Bundle frontend to `./dist` via `bun build ./index.html --outdir ./dist`
 - `bun run typecheck` — Run TypeScript type checking (`tsc --noEmit`)
-- `bun run lint` — Run Biome linter on `src/`
+- `bun run lint` — Run Biome linter on all files
 - `bun run test` — Run backend unit tests (api, tools, api-integration, workflow, progress-store, rate-limiter, logger, fetch-utils)
 - `bun run test:frontend` — Run frontend component/hook tests (`tests/frontend.test.tsx`)
 - `bun run test:e2e` — Run Playwright E2E tests (`bunx playwright test`)
@@ -41,7 +41,7 @@ Default to using Bun instead of Node.js. You should NEVER use Python or any Pyth
 - `noExplicitAny` is relaxed to `off` for test files (`tests/**/*.ts`, `tests/**/*.tsx`)
 - CSS parser: Tailwind directives enabled, CSS modules enabled
 - Formatter: 2-space indent, double quotes for JS/TS
-- Run: `bun run lint` (checks `src/` only)
+- Run: `bun run lint`
 
 ## Architecture
 

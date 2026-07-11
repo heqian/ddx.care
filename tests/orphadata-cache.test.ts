@@ -1,11 +1,4 @@
-import {
-  test,
-  expect,
-  describe,
-  beforeAll,
-  afterAll,
-  vi,
-} from "bun:test";
+import { test, expect, describe, beforeAll, afterAll, vi } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { resetToolCache } from "../src/backend/tools/utils/tool-cache";
@@ -143,11 +136,13 @@ function createFetchMock() {
 
 describe("Orphadata Cache — Full Suite", () => {
   let cache: typeof import("../src/backend/orphadata-cache");
-  let dbCounter = 0;
 
   beforeAll(async () => {
     mkdirSync(tmpDir, { recursive: true });
-    process.env.ORPHADATA_DB_PATH = join(tmpDir, `full-suite-${Date.now()}.sqlite`);
+    process.env.ORPHADATA_DB_PATH = join(
+      tmpDir,
+      `full-suite-${Date.now()}.sqlite`,
+    );
     globalThis.fetch = createFetchMock();
     cache = await import("../src/backend/orphadata-cache");
     await cache.initializeOrphadataCache();
@@ -309,9 +304,7 @@ describe("Orphadata Cache — Full Suite", () => {
 
     test("getDiseasePhenotypes returns empty on fetch failure", async () => {
       const savedFetch = globalThis.fetch;
-      globalThis.fetch = vi
-        .fn()
-        .mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
       const phenotypes = await cache.getDiseasePhenotypes(12345);
       expect(phenotypes).toEqual([]);
       globalThis.fetch = savedFetch;
@@ -344,9 +337,9 @@ describe("Orphadata Cache — Full Suite", () => {
         expect(typeof p.hpoId).toBe("string");
         expect(typeof p.phenotypeName).toBe("string");
         expect(p.hpoId).toMatch(/^HP:\d+$/);
-        expect(
-          p.frequency === null || typeof p.frequency === "string",
-        ).toBe(true);
+        expect(p.frequency === null || typeof p.frequency === "string").toBe(
+          true,
+        );
       }
     });
 
@@ -369,7 +362,10 @@ describe("Orphadata Cache — Init Failure Handling", () => {
 
   test("initializeOrphadataCache handles fetch failure gracefully", async () => {
     mkdirSync(tmpDir, { recursive: true });
-    process.env.ORPHADATA_DB_PATH = join(tmpDir, `fail-net-${Date.now()}.sqlite`);
+    process.env.ORPHADATA_DB_PATH = join(
+      tmpDir,
+      `fail-net-${Date.now()}.sqlite`,
+    );
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
     const cache = await import("../src/backend/orphadata-cache");
@@ -381,7 +377,10 @@ describe("Orphadata Cache — Init Failure Handling", () => {
 
   test("initializeOrphadataCache handles non-200 response", async () => {
     mkdirSync(tmpDir, { recursive: true });
-    process.env.ORPHADATA_DB_PATH = join(tmpDir, `fail-500-${Date.now()}.sqlite`);
+    process.env.ORPHADATA_DB_PATH = join(
+      tmpDir,
+      `fail-500-${Date.now()}.sqlite`,
+    );
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 500,

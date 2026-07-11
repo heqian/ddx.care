@@ -43,7 +43,7 @@ The app runs on `http://localhost:3000` by default.
 | `bun run dev` | Start dev server with HMR |
 | `bun run build` | Bundle frontend to `./dist` |
 | `bun run typecheck` | TypeScript type checking (`tsc --noEmit`) |
-| `bun run lint` | Run Biome linter on `src/` |
+| `bun run lint` | Run Biome linter on all files |
 | `bun run test` | Run backend unit tests |
 | `bun run test:frontend` | Run frontend component tests |
 | `bun run test:e2e` | Run Playwright E2E tests |

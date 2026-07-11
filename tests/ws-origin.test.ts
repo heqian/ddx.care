@@ -140,11 +140,7 @@ describe("WebSocket token authentication logic", () => {
     return createHmac("sha256", secret).update(jobId).digest("hex");
   }
 
-  function verifyToken(
-    jobId: string,
-    token: string,
-    secret: string,
-  ): boolean {
+  function verifyToken(jobId: string, token: string, secret: string): boolean {
     if (!secret) return true;
     const expected = generateToken(jobId, secret);
     if (!expected || !token) return false;
@@ -166,9 +162,9 @@ describe("WebSocket token authentication logic", () => {
   });
 
   test("verifyToken returns false for wrong token", () => {
-    expect(
-      verifyToken("job-456", "invalid-token", "test-secret-key"),
-    ).toBe(false);
+    expect(verifyToken("job-456", "invalid-token", "test-secret-key")).toBe(
+      false,
+    );
   });
 
   test("verifyToken returns false for token from different jobId", () => {
@@ -198,27 +194,23 @@ describe("WebSocket token authentication logic", () => {
     ): boolean => {
       if (!requestOrigin) return false;
       const originsList = trustedOrigins
-        ? trustedOrigins
-            .split(",")
-            .map((o) => o.trim())
+        ? trustedOrigins.split(",").map((o) => o.trim())
         : allowedOrigins === "*"
           ? null
-          : allowedOrigins
-              .split(",")
-              .map((o) => o.trim());
+          : allowedOrigins.split(",").map((o) => o.trim());
       if (!originsList) return true;
       return originsList.includes(requestOrigin);
     };
 
-    expect(
-      isOriginAllowed("https://ddx.care", "*", "https://ddx.care"),
-    ).toBe(true);
-    expect(
-      isOriginAllowed("https://ddx.care", "*", "https://evil.com"),
-    ).toBe(false);
-    expect(
-      isOriginAllowed("", "https://other.com", "https://other.com"),
-    ).toBe(true);
+    expect(isOriginAllowed("https://ddx.care", "*", "https://ddx.care")).toBe(
+      true,
+    );
+    expect(isOriginAllowed("https://ddx.care", "*", "https://evil.com")).toBe(
+      false,
+    );
+    expect(isOriginAllowed("", "https://other.com", "https://other.com")).toBe(
+      true,
+    );
     expect(isOriginAllowed("", "*", "https://anything.com")).toBe(true);
   });
 });

@@ -1,5 +1,9 @@
 import { test, expect, describe, beforeEach } from "bun:test";
-import { JobStore, type JobEntry, type ProgressEvent } from "../src/backend/progress-store";
+import {
+  JobStore,
+  type JobEntry,
+  type ProgressEvent,
+} from "../src/backend/progress-store";
 
 let store: JobStore;
 
@@ -136,7 +140,9 @@ describe("JobStore — Progress Events", () => {
     expect(job!.progress).toHaveLength(1);
     const stored = job!.progress[0];
     expect(stored.time).toBe("2026-01-15T10:30:00.000Z");
-    expect(stored.message).toBe("Cardiologist: Checking interactions → aspirin + warfarin");
+    expect(stored.message).toBe(
+      "Cardiologist: Checking interactions → aspirin + warfarin",
+    );
     expect(stored.eventType).toBe("tool_call");
     expect(stored.agentId).toBe("cardiologist");
     expect(stored.toolName).toBe("drug-interaction");
@@ -287,7 +293,9 @@ describe("JobStore — Pub/Sub", () => {
 describe("JobStore — WAL Mode", () => {
   test("enables WAL journal mode on construction", () => {
     const db = (store as any).db;
-    const result = db.query("PRAGMA journal_mode").get() as { journal_mode: string };
+    const result = db.query("PRAGMA journal_mode").get() as {
+      journal_mode: string;
+    };
     // In-memory databases may report "memory" or "wal" depending on Bun version
     // but file-backed databases should always be WAL
     expect(["wal", "memory"]).toContain(result.journal_mode);
@@ -383,7 +391,9 @@ describe("JobStore — SQLite indexes", () => {
   test("creates index on createdAt column for efficient cleanup queries", () => {
     const db = (store as any).db;
     const indexes = db
-      .query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'jobs'")
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'jobs'",
+      )
       .all() as { name: string }[];
     const indexNames = indexes.map((i) => i.name);
     expect(indexNames).toContain("idx_jobs_createdAt");
@@ -392,7 +402,9 @@ describe("JobStore — SQLite indexes", () => {
   test("creates index on status column for efficient markStalePending queries", () => {
     const db = (store as any).db;
     const indexes = db
-      .query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'jobs'")
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'jobs'",
+      )
       .all() as { name: string }[];
     const indexNames = indexes.map((i) => i.name);
     expect(indexNames).toContain("idx_jobs_status");

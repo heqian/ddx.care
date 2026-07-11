@@ -12,9 +12,7 @@ import { AuditLogger } from "../src/backend/utils/audit-logger";
 
 function getRotatedFiles(dir: string, baseName: string): string[] {
   return readdirSync(dir)
-    .filter(
-      (f) => f.startsWith(`${baseName}.`) && f !== `${baseName}.log`,
-    )
+    .filter((f) => f.startsWith(`${baseName}.`) && f !== `${baseName}.log`)
     .sort();
 }
 
@@ -75,9 +73,14 @@ describe("AuditLogger", () => {
     // Rotated file should have timestamped name
     const rotated = getRotatedFiles(tmpDir, "audit");
     expect(rotated.length).toBe(1);
-    expect(rotated[0]).toMatch(/^audit\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.log$/);
+    expect(rotated[0]).toMatch(
+      /^audit\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.log$/,
+    );
 
-    const rotatedContent = readFileSync(join(tmpDir, rotated[0]), "utf-8").trim();
+    const rotatedContent = readFileSync(
+      join(tmpDir, rotated[0]),
+      "utf-8",
+    ).trim();
     expect(JSON.parse(rotatedContent).event).toBe("old");
   });
 

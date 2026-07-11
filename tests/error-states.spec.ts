@@ -48,9 +48,7 @@ test.describe("Error states & edge paths", () => {
       page.getByText("Could not load results for this case."),
     ).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "New Case" }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "New Case" })).toBeVisible();
   });
 
   test("specialist panel warning banner when /v1/agents fails", async ({
@@ -120,19 +118,21 @@ test.describe("Error states & edge paths", () => {
     await page.getByRole("button", { name: "Cancel" }).click();
 
     // UI returns to the input screen.
-    await expect(
-      page.getByRole("heading", { name: "New Case" }),
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible({
+      timeout: 5_000,
+    });
 
     // The job is marked failed with the cancellation message. Poll because
     // the DELETE from the browser may still be in flight when we check.
-    await expect.poll(
-      async () => {
-        const res = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
-        return (await res.json()).status;
-      },
-      { timeout: 5_000 },
-    ).toBe("failed");
+    await expect
+      .poll(
+        async () => {
+          const res = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+          return (await res.json()).status;
+        },
+        { timeout: 5_000 },
+      )
+      .toBe("failed");
 
     const finalRes = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
     const finalData = await finalRes.json();
@@ -162,10 +162,9 @@ test.describe("Error states & edge paths", () => {
 
     // Retry must submit a brand-new job (new jobId in the waiting URL).
     await page.getByRole("button", { name: "Retry Diagnosis" }).click();
-    await expect.poll(
-      () => jobIdFromUrl(page.url()),
-      { timeout: 10_000 },
-    ).not.toBe(failedJobId);
+    await expect
+      .poll(() => jobIdFromUrl(page.url()), { timeout: 10_000 })
+      .not.toBe(failedJobId);
   });
 
   test("deep-link to a cancelled job shows the failed-result screen", async ({
@@ -183,26 +182,26 @@ test.describe("Error states & edge paths", () => {
     // "failed" job status, since workflow-internal failures resolve as
     // "completed" (see the no-report test above).
     await page.getByRole("button", { name: "Cancel" }).click();
-    await expect(
-      page.getByRole("heading", { name: "New Case" }),
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible({
+      timeout: 5_000,
+    });
 
     // Wait for the cancel to land on the server before deep-linking.
-    await expect.poll(
-      async () => {
-        const res = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
-        return (await res.json()).status;
-      },
-      { timeout: 5_000 },
-    ).toBe("failed");
+    await expect
+      .poll(
+        async () => {
+          const res = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+          return (await res.json()).status;
+        },
+        { timeout: 5_000 },
+      )
+      .toBe("failed");
 
     // Deep-link to the cancelled job's results URL.
     await page.goto(`/results/${jobId}`);
     await expect(page.getByText("Cancelled by user")).toBeVisible({
       timeout: 10_000,
     });
-    await expect(
-      page.getByRole("button", { name: "New Case" }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "New Case" })).toBeVisible();
   });
 });

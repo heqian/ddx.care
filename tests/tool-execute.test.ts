@@ -67,7 +67,9 @@ describe("drug-interaction tool execute", () => {
     globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
       if (url.includes("/drugs.json")) {
         // Extract drug name from URL
-        const name = new URL(url, "https://rxnav.nlm.nih.gov").searchParams.get("name") ?? "";
+        const name =
+          new URL(url, "https://rxnav.nlm.nih.gov").searchParams.get("name") ??
+          "";
         const rxcui = name.toLowerCase() === "warfarin" ? "456" : "123";
         return {
           ok: true,
@@ -122,7 +124,9 @@ describe("drug-interaction tool execute", () => {
 
     // When all API calls fail, the tool gracefully returns empty interactions
     // (RxCUI lookup and FDA label fetch both catch errors internally)
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error")) as any;
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(new Error("Network error")) as any;
 
     const result = await drugInteractionTool.execute({
       drugNames: ["aspirin", "warfarin"],
@@ -163,7 +167,9 @@ describe("drug-interaction tool execute", () => {
     // Mock fetch to return RxCUI + FDA label without any interaction mentions
     globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
       if (url.includes("/drugs.json")) {
-        const name = new URL(url, "https://rxnav.nlm.nih.gov").searchParams.get("name") ?? "";
+        const name =
+          new URL(url, "https://rxnav.nlm.nih.gov").searchParams.get("name") ??
+          "";
         return {
           ok: true,
           status: 200,
@@ -401,9 +407,7 @@ describe("clinical-trials tool execute", () => {
 
 describe("open-fda tool execute", () => {
   test("adverseEventsTool returns parsed events", async () => {
-    const { adverseEventsTool } = await import(
-      "../src/backend/tools/open-fda"
-    );
+    const { adverseEventsTool } = await import("../src/backend/tools/open-fda");
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -440,9 +444,7 @@ describe("open-fda tool execute", () => {
   });
 
   test("adverseEventsTool handles 404 with ignore404", async () => {
-    const { adverseEventsTool } = await import(
-      "../src/backend/tools/open-fda"
-    );
+    const { adverseEventsTool } = await import("../src/backend/tools/open-fda");
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
@@ -461,9 +463,7 @@ describe("open-fda tool execute", () => {
   });
 
   test("drugLabelingTool returns parsed labeling", async () => {
-    const { drugLabelingTool } = await import(
-      "../src/backend/tools/open-fda"
-    );
+    const { drugLabelingTool } = await import("../src/backend/tools/open-fda");
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,

@@ -102,7 +102,7 @@ export function ProgressPhases({ progress, isCompleted }: ProgressPhasesProps) {
 
           let label = p.label;
           if (p.key === "consulting" && isCurrent && state.totalCount > 0) {
-            label = `${state.completedCount}/${state.totalCount} consulted`;
+            label = `${state.completedCount}/${state.totalCount} ${state.totalCount === 1 ? "Specialist" : "Specialists"} Consulted`;
           }
 
           return (

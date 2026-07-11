@@ -835,9 +835,7 @@ describe("withRetry - abort signal", () => {
 
   test("rejects during retry delay when signal is aborted", async () => {
     const controller = new AbortController();
-    let calls = 0;
     const fn = () => {
-      calls++;
       throw new Error("fail");
     };
     setTimeout(() => controller.abort(), 50);
@@ -1054,7 +1052,9 @@ describe("runDiagnosis - CMO parsing logic", () => {
     expect(result.diagnosisReport.chiefComplaint).toBe(
       "Unable to generate complete diagnosis",
     );
-    expect(result.diagnosisReport.rankedDiagnoses[0].confidencePercentage).toBe(0);
+    expect(result.diagnosisReport.rankedDiagnoses[0].confidencePercentage).toBe(
+      0,
+    );
   });
 
   test("passes abort signal to CMO generate and withRetry", async () => {
@@ -1478,7 +1478,9 @@ describe("mockDiagnosis", () => {
       events.push(typeof e === "string" ? { time: "", message: e } : e);
     };
 
-    const result = await mockDiagnosis("patient summary", emitProgress, { stepDelayMs: 0 });
+    const result = await mockDiagnosis("patient summary", emitProgress, {
+      stepDelayMs: 0,
+    });
 
     expect(result.diagnosisReport).toBeDefined();
     expect(result.diagnosisReport.chiefComplaint).toBeTruthy();
@@ -1745,7 +1747,11 @@ describe("generateFinalReport", () => {
     // Should get a minimal report since raw output doesn't validate
     expect(result.chiefComplaint).toBe("Unable to generate complete diagnosis");
     expect(result.rankedDiagnoses[0].confidencePercentage).toBe(0);
-    expect(emitted.some((m) => m.includes("minimal report") || m.includes("Minimal"))).toBe(true);
+    expect(
+      emitted.some(
+        (m) => m.includes("minimal report") || m.includes("Minimal"),
+      ),
+    ).toBe(true);
   });
 
   test("respects abort signal", async () => {
@@ -1965,7 +1971,9 @@ describe("summarizeToolResult", () => {
   });
 
   test("returns count for non-empty array", () => {
-    expect(summarizeToolResult("drug-interaction", [1, 2, 3])).toBe("3 results");
+    expect(summarizeToolResult("drug-interaction", [1, 2, 3])).toBe(
+      "3 results",
+    );
   });
 
   test("returns string truncated to 200 chars", () => {
@@ -1983,7 +1991,10 @@ describe("summarizeToolResult", () => {
   });
 
   test("extracts error message from Error objects", () => {
-    const result = summarizeToolResult("drug-interaction", new Error("timeout"));
+    const result = summarizeToolResult(
+      "drug-interaction",
+      new Error("timeout"),
+    );
     expect(result).toBe("timeout");
   });
 
@@ -2079,7 +2090,10 @@ describe("createStepEventHandler", () => {
     handler({
       toolCalls: [
         {
-          payload: { toolName: "drug-interaction", args: { drugNames: ["aspirin", "clopidogrel"] } },
+          payload: {
+            toolName: "drug-interaction",
+            args: { drugNames: ["aspirin", "clopidogrel"] },
+          },
         },
       ],
       toolResults: [
@@ -2169,7 +2183,12 @@ describe("createStepEventHandler", () => {
 
     handler({
       toolCalls: [
-        { payload: { toolName: "drug-interaction", args: { drugNames: ["aspirin", "clopidogrel"] } } },
+        {
+          payload: {
+            toolName: "drug-interaction",
+            args: { drugNames: ["aspirin", "clopidogrel"] },
+          },
+        },
       ],
       toolResults: [
         {
@@ -2194,7 +2213,12 @@ describe("createStepEventHandler", () => {
 
     handler({
       toolCalls: [
-        { payload: { toolName: "drug-interaction", args: { drugNames: ["aspirin", "ibuprofen"] } } },
+        {
+          payload: {
+            toolName: "drug-interaction",
+            args: { drugNames: ["aspirin", "ibuprofen"] },
+          },
+        },
       ],
       toolResults: [
         {
@@ -2220,7 +2244,10 @@ describe("createStepEventHandler", () => {
     handler({
       toolCalls: [
         {
-          payload: { toolName: "drug-interaction", args: { drugNames: ["aspirin", "warfarin"] } },
+          payload: {
+            toolName: "drug-interaction",
+            args: { drugNames: ["aspirin", "warfarin"] },
+          },
         },
         {
           payload: {
@@ -2257,10 +2284,17 @@ describe("createStepEventHandler", () => {
 
     handler({
       toolCalls: [
-        { payload: { toolName: "drug-interaction", args: { drugNames: ["aspirin", "warfarin"] } } },
+        {
+          payload: {
+            toolName: "drug-interaction",
+            args: { drugNames: ["aspirin", "warfarin"] },
+          },
+        },
       ],
       toolResults: [
-        { payload: { toolName: "drug-interaction", result: {}, isError: false } },
+        {
+          payload: { toolName: "drug-interaction", result: {}, isError: false },
+        },
       ],
     });
 

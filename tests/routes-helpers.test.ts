@@ -1,7 +1,10 @@
 import { test, expect, describe } from "bun:test";
 
 describe("getClientIp", () => {
-  function getClientIp(headers: Record<string, string | null>, socketIp?: string): string {
+  function getClientIp(
+    headers: Record<string, string | null>,
+    socketIp?: string,
+  ): string {
     const forwarded = headers["x-forwarded-for"];
     if (forwarded) {
       const parts = forwarded.split(",");

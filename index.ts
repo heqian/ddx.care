@@ -20,7 +20,10 @@ import {
 } from "./src/backend/config";
 import { logger } from "./src/backend/utils/logger";
 import { initializeOrphadataCache } from "./src/backend/orphadata-cache";
-import { initToolCache, cleanupExpired as cleanupToolCache } from "./src/backend/tools/utils/tool-cache";
+import {
+  initToolCache,
+  cleanupExpired as cleanupToolCache,
+} from "./src/backend/tools/utils/tool-cache";
 
 validateConfig();
 
@@ -52,19 +55,21 @@ server = Bun.serve<WsData>({
   port: PORT,
   maxRequestBodySize: MAX_PAYLOAD_BYTES,
   routes: createRoutes(
-    { 
+    {
       upgrade: (req, opts) => server.upgrade(req, opts!),
-      requestIP: (req: Request) => server.requestIP(req)
+      requestIP: (req: Request) => server.requestIP(req),
     },
     appHtml,
   ),
   websocket: websocketHandlers,
-  ...(process.env.NODE_ENV !== "production" ? {
-    development: {
-      hmr: true,
-      console: true,
-    },
-  } : {}),
+  ...(process.env.NODE_ENV !== "production"
+    ? {
+        development: {
+          hmr: true,
+          console: true,
+        },
+      }
+    : {}),
 });
 
 export { server };

@@ -7,7 +7,7 @@
     "build": "bun build ./index.html --outdir ./dist",
     "typecheck": "tsc --noEmit",
     "pretest": "bun run typecheck",
-    "lint": "biome check src/",
+    "lint": "biome check",
     "test": "bun test tests/api.test.ts tests/tools.test.ts tests/workflow.test.ts tests/progress-store.test.ts tests/rate-limiter.test.ts tests/logger.test.ts tests/fetch-utils.test.ts tests/websocket.test.ts tests/config.test.ts tests/tool-execute.test.ts tests/routes-helpers.test.ts tests/router.test.ts tests/ws-origin.test.ts tests/shutdown.test.ts tests/api-client.test.ts tests/audit-logger.test.ts tests/prompt-injection.test.ts tests/orphadata-cache.test.ts tests/orphadata-tools.test.ts tests/nlm-clinical-tables.test.ts tests/openfda-new-tools.test.ts tests/tool-cache.test.ts",
     "test:rest-token": "bun test tests/rest-token.test.ts",
     "test:frontend": "bun test tests/frontend.test.tsx",

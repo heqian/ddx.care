@@ -736,9 +736,9 @@ describe("API Endpoints", () => {
       });
 
       test("allows access with any token", () => {
-        expect(
-          getResponseStatus(true, "", VALID_UUID, "anything", true),
-        ).toBe(200);
+        expect(getResponseStatus(true, "", VALID_UUID, "anything", true)).toBe(
+          200,
+        );
       });
 
       test("unknown job returns 404 not 403", () => {
@@ -751,9 +751,9 @@ describe("API Endpoints", () => {
         expect(getResponseStatus(false, TEST_SECRET, "bad", null, false)).toBe(
           400,
         );
-        expect(getResponseStatus(false, TEST_SECRET, "bad", "valid", false)).toBe(
-          400,
-        );
+        expect(
+          getResponseStatus(false, TEST_SECRET, "bad", "valid", false),
+        ).toBe(400);
         expect(getResponseStatus(false, "", "bad", null, false)).toBe(400);
       });
     });

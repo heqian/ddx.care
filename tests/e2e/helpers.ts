@@ -43,9 +43,7 @@ export async function fillValidForm(
   await page.getByRole("combobox").selectOption(overrides.sex ?? "Male");
   await page
     .getByPlaceholder(/Chest pain, shortness of breath/)
-    .fill(
-      overrides.chiefComplaint ?? "Severe headache with blurred vision",
-    );
+    .fill(overrides.chiefComplaint ?? "Severe headache with blurred vision");
   await page
     .getByPlaceholder(/Past diagnoses, medications/)
     .fill(

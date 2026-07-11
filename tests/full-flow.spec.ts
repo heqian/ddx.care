@@ -292,11 +292,11 @@ test.describe("Full diagnosis flow", () => {
     // Tool-call progress entries should appear in the progress log
     // The mock emits "cardiologist: Checking drug labeling → metoprolol tartrate"
     const progressLog = page.locator('[role="log"]');
-    await expect(progressLog.getByText("Checking drug labeling").first()).toBeVisible(
-      {
-        timeout: 10_000,
-      },
-    );
+    await expect(
+      progressLog.getByText("Checking drug labeling").first(),
+    ).toBeVisible({
+      timeout: 10_000,
+    });
 
     // Tool-call entries should have the ⟳ (running) indicator
     await expect(
@@ -409,7 +409,7 @@ test.describe("Full diagnosis flow", () => {
   test("cmo_decision progress event carries specialistIds for progress-bar total", async ({
     page,
   }) => {
-    // Regression: the Waiting Room progress bar used to show "0/1 consulted"
+    // Regression: the Waiting Room progress bar used to show "0/1 Specialist Consulted"
     // when the CMO had selected 3 specialists but only 1 had started (sequential
     // concurrency). The fix populates specialistIds on cmo_decision events so
     // the frontend can compute the full planned panel size up front.

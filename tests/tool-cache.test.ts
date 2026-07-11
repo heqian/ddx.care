@@ -25,10 +25,7 @@ const tmpDir = join(tmpdir(), `tool-cache-test-${Date.now()}`);
 const originalFetch = globalThis.fetch;
 
 describe("Tool Cache — unit", () => {
-  const dbPath = join(
-    tmpDir,
-    `unit-test-${process.pid}-${Date.now()}.sqlite`,
-  );
+  const dbPath = join(tmpDir, `unit-test-${process.pid}-${Date.now()}.sqlite`);
 
   beforeAll(() => {
     mkdirSync(tmpDir, { recursive: true });
@@ -132,10 +129,7 @@ describe("Tool Cache — unit", () => {
 });
 
 describe("fetchJSON — cache integration", () => {
-  const dbPath = join(
-    tmpDir,
-    `fetch-test-${process.pid}-${Date.now()}.sqlite`,
-  );
+  const dbPath = join(tmpDir, `fetch-test-${process.pid}-${Date.now()}.sqlite`);
 
   beforeAll(() => {
     mkdirSync(tmpDir, { recursive: true });
@@ -162,8 +156,7 @@ describe("fetchJSON — cache integration", () => {
       return { ok: true, status: 200, json: async () => mockData };
     }) as any;
 
-    const url =
-      "https://example.com/api/cache-hit-test?q=test";
+    const url = "https://example.com/api/cache-hit-test?q=test";
 
     // First call — cache miss, hits network
     const result1 = await fetchJSON(url);
@@ -264,9 +257,9 @@ describe("fetchJSON — cache integration", () => {
         };
       }) as any;
 
-    await expect(
-      fetchJSON("https://example.com/api/429-test"),
-    ).rejects.toThrow("API rate limit exceeded");
+    await expect(fetchJSON("https://example.com/api/429-test")).rejects.toThrow(
+      "API rate limit exceeded",
+    );
 
     const result = await fetchJSON("https://example.com/api/429-test");
     expect(result).toEqual({ data: "ok" });

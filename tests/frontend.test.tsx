@@ -1,5 +1,13 @@
 import { Window as HappyWindow } from "happy-dom";
-import { test, expect, describe, beforeEach, afterEach, afterAll, vi } from "bun:test";
+import {
+  test,
+  expect,
+  describe,
+  beforeEach,
+  afterEach,
+  afterAll,
+  vi,
+} from "bun:test";
 
 // Set up happy-dom global environment BEFORE importing React/testing libraries.
 // This must run at the top level before any React import is evaluated.
@@ -497,7 +505,7 @@ describe("useAutoLogout", () => {
 
   test("timer starts when paused transitions from true to false", () => {
     const onTimeout = vi.fn();
-    const { result, rerender } = renderHook(
+    const { rerender } = renderHook(
       ({ paused }: { paused: boolean }) => useAutoLogout(onTimeout, paused),
       { initialProps: { paused: true } },
     );
@@ -2147,7 +2155,9 @@ describe("deriveToolHistory", () => {
     expect(map.get("cardiologist")!.length).toBe(1);
     expect(map.get("neurologist")!.length).toBe(1);
     expect(map.get("cardiologist")![0].toolArgs).toBe("aspirin + warfarin");
-    expect(map.get("neurologist")![0].toolArgs).toBe("sumatriptan + sertraline");
+    expect(map.get("neurologist")![0].toolArgs).toBe(
+      "sumatriptan + sertraline",
+    );
   });
 
   test("toolArgs defaults to null when not provided", () => {
