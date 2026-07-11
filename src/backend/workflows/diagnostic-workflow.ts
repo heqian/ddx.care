@@ -694,8 +694,13 @@ export async function generateFinalReport(opts: {
     );
   }
 
-  throw new Error(
-    "Failed to generate a valid diagnosis report after all retries and fallbacks",
+  logger.warn("report_all_fallbacks_exhausted", logContext);
+  emit(
+    "general",
+    `All report generation strategies exhausted. Generating minimal report.`,
+  );
+  return createMinimalReport(
+    "Report generation failed after all retries and fallbacks. No structured output was produced.",
   );
 }
 

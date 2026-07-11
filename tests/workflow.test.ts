@@ -20,7 +20,10 @@ import { summarizeToolResult } from "../src/backend/workflows/tool-result-summar
 import { createStepEventHandler } from "../src/backend/workflows/on-step-finish";
 import type { ProgressEvent } from "../src/backend/progress-store";
 import * as abortStore from "../src/backend/utils/abort-controller-store";
-import { APITimeoutError } from "../src/backend/utils/errors";
+import {
+  APITimeoutError,
+  SchemaValidationError,
+} from "../src/backend/utils/errors";
 
 describe("splitToList", () => {
   test("returns empty array for undefined", () => {
@@ -918,7 +921,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
     );
   });
 
-  test("throws an error if CMO completely fails to parse even for the final report", async () => {
+  test("returns a minimal report if CMO completely fails to parse even for the final report", async () => {
     let callCount = 0;
     const mockCmoGenerate = mock(async () => {
       callCount++;
@@ -931,7 +934,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       }),
     };
 
-    const runDiagnosisPromise = runDiagnosis.execute({
+    const result = await runDiagnosis.execute({
       context: {} as any,
       stepId: "run-diagnosis",
       workflowId: "test-wf",
@@ -944,8 +947,11 @@ describe("runDiagnosis - CMO parsing logic", () => {
       runId: "mock-run-id",
     });
 
-    await expect(runDiagnosisPromise).rejects.toThrow(
-      "Failed to generate a valid diagnosis report",
+    expect(result.diagnosisReport.chiefComplaint).toBe(
+      "Unable to generate complete diagnosis",
+    );
+    expect(result.diagnosisReport.rankedDiagnoses[0].confidencePercentage).toBe(
+      0,
     );
     expect(callCount).toBeGreaterThanOrEqual(6);
   });
@@ -1773,6 +1779,64 @@ describe("generateFinalReport", () => {
         jobId: "abort-test",
       }),
     ).rejects.toThrow("Aborted");
+  });
+
+  test("returns minimal report when structured output throws and fallback yields nothing", async () => {
+    let callCount = 0;
+    const mockCmo = {
+      generate: mock(async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new SchemaValidationError(
+            "Structured output schema validation failed",
+          );
+        }
+        return { text: undefined, object: undefined };
+      }),
+    };
+    const emitted: string[] = [];
+    const emit = (_type: string, msg: string) => emitted.push(msg);
+    const ac = new AbortController();
+
+    const result = await generateFinalReport({
+      cmo: mockCmo as any,
+      prompt: "Generate final report",
+      builtContextHistory: "context",
+      abortSignal: ac.signal,
+      emit: emit as any,
+      logContext: { jobId: "terminal-fallback-test" },
+      jobId: "terminal-fallback-test",
+    });
+
+    expect(result.chiefComplaint).toBe("Unable to generate complete diagnosis");
+    expect(result.rankedDiagnoses[0].confidencePercentage).toBe(0);
+    expect(callCount).toBe(2);
+  });
+
+  test("terminal fallback minimal report message mentions fallback exhaustion", async () => {
+    const mockCmo = {
+      generate: mock(async () => ({ text: undefined, object: undefined })),
+    };
+    const emitted: string[] = [];
+    const emit = (_type: string, msg: string) => emitted.push(msg);
+    const ac = new AbortController();
+
+    const result = await generateFinalReport({
+      cmo: mockCmo as any,
+      prompt: "Generate final report",
+      builtContextHistory: "context",
+      abortSignal: ac.signal,
+      emit: emit as any,
+      logContext: { jobId: "message-test" },
+      jobId: "message-test",
+    });
+
+    expect(result.rankedDiagnoses[0].rationale).toContain("fallback");
+    expect(
+      emitted.some((m) =>
+        m.toLowerCase().includes("all report generation strategies exhausted"),
+      ),
+    ).toBe(true);
   });
 });
 
