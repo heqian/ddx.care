@@ -92,7 +92,7 @@ export function useJobStream(jobId: string | null, token?: string) {
             setTimeout(async () => {
               if (cancelled) return;
               try {
-                const statusResult = await getJobStatus(jobId!);
+                const statusResult = await getJobStatus(jobId!, token);
                 if (
                   statusResult.status === "completed" ||
                   statusResult.status === "failed"
@@ -120,7 +120,7 @@ export function useJobStream(jobId: string | null, token?: string) {
 
       const poll = async () => {
         try {
-          const result = await getJobStatus(jobId);
+          const result = await getJobStatus(jobId, token);
           if (cancelled) return;
           setStatus(result);
           if (result.status !== "pending" && fallbackInterval) {

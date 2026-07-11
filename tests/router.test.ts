@@ -28,6 +28,14 @@ describe("parsePath", () => {
     });
   });
 
+  test("parses results route with jobId and token", () => {
+    expect(parsePath("/results/xyz-456/abc-token")).toEqual({
+      screen: "results",
+      jobId: "xyz-456",
+      token: "abc-token",
+    });
+  });
+
   test("returns input for /waiting/ without jobId", () => {
     expect(parsePath("/waiting/")).toEqual({ screen: "input" });
   });
@@ -61,6 +69,12 @@ describe("routeToPath", () => {
       "/results/xyz-456",
     );
   });
+
+  test("converts results route with token to results path", () => {
+    expect(
+      routeToPath({ screen: "results", jobId: "xyz-456", token: "abc" }),
+    ).toBe("/results/xyz-456/abc");
+  });
 });
 
 describe("parsePath ↔ routeToPath round-trip", () => {
@@ -76,6 +90,15 @@ describe("parsePath ↔ routeToPath round-trip", () => {
 
   test("round-trips for results route", () => {
     const route = { screen: "results" as const, jobId: "test-job-id" };
+    expect(parsePath(routeToPath(route))).toEqual(route);
+  });
+
+  test("round-trips for results route with token", () => {
+    const route = {
+      screen: "results" as const,
+      jobId: "test-job-id",
+      token: "test-token",
+    };
     expect(parsePath(routeToPath(route))).toEqual(route);
   });
 });

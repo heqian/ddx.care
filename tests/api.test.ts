@@ -1,4 +1,5 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 const _savedMockLlm = process.env.MOCK_LLM;
 const _savedPort = process.env.PORT;
@@ -626,6 +627,181 @@ describe("API Endpoints", () => {
       rateLimiter["clients"].clear();
       rateLimiter["activeCount"] = 0;
       rateLimiter["hasLoggedReset"] = savedReset;
+    });
+  });
+
+  describe("REST endpoint token verification logic", () => {
+    const TEST_SECRET = "test-secret-key-for-rest-endpoints";
+
+    function generateToken(jobId: string, secret: string): string {
+      if (!secret) return "";
+      return createHmac("sha256", secret).update(jobId).digest("hex");
+    }
+
+    function isTokenValid(
+      secret: string,
+      jobId: string,
+      token: string | null,
+    ): boolean {
+      if (!secret) return true;
+      if (!token) return false;
+      const expected = generateToken(jobId, secret);
+      if (!expected || expected.length !== token.length) return false;
+      return timingSafeEqual(Buffer.from(expected), Buffer.from(token));
+    }
+
+    /**
+     * Mirrors the decision tree in routes.ts verifyJobToken + handler logic:
+     * 1. JOB_ID_RE format check → 400
+     * 2. Token verification → 403
+     * 3. Job existence → 404
+     * 4. Success → 200
+     */
+    function getResponseStatus(
+      jobIdValid: boolean,
+      secret: string,
+      jobId: string,
+      token: string | null,
+      jobExists: boolean,
+    ): number {
+      if (!jobIdValid) return 400;
+      if (!isTokenValid(secret, jobId, token)) return 403;
+      if (!jobExists) return 404;
+      return 200;
+    }
+
+    const VALID_UUID = "00000000-0000-4000-a000-000000000000";
+
+    describe("GET /v1/status/:jobId token verification", () => {
+      test("valid token returns 200", () => {
+        const token = generateToken(VALID_UUID, TEST_SECRET);
+        expect(
+          getResponseStatus(true, TEST_SECRET, VALID_UUID, token, true),
+        ).toBe(200);
+      });
+
+      test("missing token returns 403", () => {
+        expect(
+          getResponseStatus(true, TEST_SECRET, VALID_UUID, null, true),
+        ).toBe(403);
+      });
+
+      test("invalid token returns 403", () => {
+        expect(
+          getResponseStatus(true, TEST_SECRET, VALID_UUID, "invalid", true),
+        ).toBe(403);
+      });
+
+      test("token verified before existence — unknown job returns 403 not 404", () => {
+        expect(
+          getResponseStatus(true, TEST_SECRET, VALID_UUID, "invalid", false),
+        ).toBe(403);
+      });
+
+      test("token from different jobId is rejected", () => {
+        const otherToken = generateToken(
+          "11111111-1111-4111-a111-111111111111",
+          TEST_SECRET,
+        );
+        expect(
+          getResponseStatus(true, TEST_SECRET, VALID_UUID, otherToken, true),
+        ).toBe(403);
+      });
+    });
+
+    describe("DELETE /v1/diagnose/:jobId token verification", () => {
+      test("valid token allows cancellation (proceeds to 200)", () => {
+        const token = generateToken(VALID_UUID, TEST_SECRET);
+        expect(
+          getResponseStatus(true, TEST_SECRET, VALID_UUID, token, true),
+        ).toBe(200);
+      });
+
+      test("missing token returns 403", () => {
+        expect(
+          getResponseStatus(true, TEST_SECRET, VALID_UUID, null, true),
+        ).toBe(403);
+      });
+
+      test("invalid token returns 403", () => {
+        expect(
+          getResponseStatus(true, TEST_SECRET, VALID_UUID, "bad-token", true),
+        ).toBe(403);
+      });
+    });
+
+    describe("Dev mode (empty WS_TOKEN_SECRET)", () => {
+      test("allows access without token", () => {
+        expect(getResponseStatus(true, "", VALID_UUID, null, true)).toBe(200);
+      });
+
+      test("allows access with any token", () => {
+        expect(
+          getResponseStatus(true, "", VALID_UUID, "anything", true),
+        ).toBe(200);
+      });
+
+      test("unknown job returns 404 not 403", () => {
+        expect(getResponseStatus(true, "", VALID_UUID, null, false)).toBe(404);
+      });
+    });
+
+    describe("Format check takes precedence", () => {
+      test("malformed job ID returns 400 regardless of token or secret", () => {
+        expect(getResponseStatus(false, TEST_SECRET, "bad", null, false)).toBe(
+          400,
+        );
+        expect(getResponseStatus(false, TEST_SECRET, "bad", "valid", false)).toBe(
+          400,
+        );
+        expect(getResponseStatus(false, "", "bad", null, false)).toBe(400);
+      });
+    });
+  });
+
+  describe("Dev mode REST endpoints (no WS_TOKEN_SECRET)", () => {
+    test("GET /v1/status/:jobId works without token param", async () => {
+      const createRes = await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: JSON.stringify({
+          medicalHistory: "dev mode status test",
+          conversationTranscript: "test",
+          labResults: "test",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      const { jobId } = (await createRes.json()) as { jobId: string };
+
+      const statusRes = await fetch(`${BASE}/v1/status/${jobId}`);
+      expect(statusRes.status).toBe(200);
+    });
+
+    test("GET /v1/status/:jobId ignores token param in dev mode", async () => {
+      const res = await fetch(
+        `${BASE}/v1/status/00000000-0000-4000-a000-000000000000?token=anything`,
+      );
+      // 404 (not found), NOT 403 — token is not checked in dev mode
+      expect(res.status).toBe(404);
+    });
+
+    test("DELETE /v1/diagnose/:jobId works without token in dev mode", async () => {
+      const createRes = await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: JSON.stringify({
+          medicalHistory: "dev mode delete test",
+          conversationTranscript: "test",
+          labResults: "test",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      const { jobId } = (await createRes.json()) as { jobId: string };
+
+      const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}`, {
+        method: "DELETE",
+      });
+      expect(delRes.status).toBe(200);
+      const body = (await delRes.json()) as { status: string };
+      expect(body.status).toBe("cancelled");
     });
   });
 

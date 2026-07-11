@@ -9,7 +9,7 @@ import { ResultsView } from "./pages/ResultsView";
 import { useAutoLogout } from "./hooks/useAutoLogout";
 import { useRouter, type Route } from "./hooks/useRouter";
 import { Spinner } from "./components/ui/Spinner";
-import { submitDiagnosis, getJobStatus } from "./api/client";
+import { submitDiagnosis, getJobStatus, type ApiError } from "./api/client";
 import type { StatusResponse, DiagnoseRequest } from "./api/types";
 
 function App() {
@@ -18,7 +18,7 @@ function App() {
   const [jobResult, setJobResult] = useState<StatusResponse | null>(null);
   const lastPayload = useRef<DiagnoseRequest | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const [deepLinkError, setDeepLinkError] = useState(false);
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
   const [wsToken, setWsToken] = useState<string>("");
 
   // When navigating to results via router (deep link / back button), fetch the result
@@ -29,14 +29,22 @@ function App() {
 
   const fetchDeepLink = useCallback(() => {
     if (route.screen === "results" && route.jobId && !jobResult) {
-      setDeepLinkError(false);
-      getJobStatus(route.jobId)
+      setDeepLinkError(null);
+      getJobStatus(route.jobId, route.token)
         .then((res) => {
           if (res.status === "completed" || res.status === "failed") {
             setJobResult(res);
           }
         })
-        .catch(() => setDeepLinkError(true));
+        .catch((err: ApiError) => {
+          if (err.status === 403) {
+            setDeepLinkError(
+              "This link has expired or you are not authorized to view these results.",
+            );
+          } else {
+            setDeepLinkError("Could not load results for this case.");
+          }
+        });
     }
   }, [route, jobResult]);
 
@@ -79,9 +87,9 @@ function App() {
     (result: StatusResponse) => {
       setJobResult(result);
       const jid = route.screen === "waiting" ? route.jobId : result.jobId;
-      navigate({ screen: "results", jobId: jid });
+      navigate({ screen: "results", jobId: jid, token: wsToken || undefined });
     },
-    [navigate, route],
+    [navigate, route, wsToken],
   );
 
   const handleCancel = useCallback(() => {
@@ -166,7 +174,7 @@ function App() {
       {route.screen === "results" && !jobResult && deepLinkError && (
         <div className="max-w-md mx-auto text-center py-16 space-y-4">
           <p className="text-slate-700 dark:text-slate-300 text-sm">
-            Could not load results for this case.
+            {deepLinkError}
           </p>
           <div className="flex justify-center gap-3">
             <button

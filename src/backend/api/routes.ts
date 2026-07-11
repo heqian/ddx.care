@@ -69,6 +69,25 @@ function corsPreflightResponse(req?: Request): Response {
   return new Response(null, { status: 204, headers: corsHeaders(req) });
 }
 
+/**
+ * Verify the HMAC job token on REST endpoints (GET /v1/status, DELETE /v1/diagnose).
+ * Returns a 403 Response if the token is missing/invalid, or null if access is allowed.
+ * Skipped in dev mode (empty WS_TOKEN_SECRET), mirroring the /ws WebSocket handler.
+ */
+function verifyJobToken(req: Request, jobId: string): Response | null {
+  if (!WS_TOKEN_SECRET) return null;
+  const url = new URL(req.url);
+  const token = url.searchParams.get("token");
+  if (!token || !verifyToken(jobId, token)) {
+    logger.warn("rest_token_rejected", { jobId });
+    return withCors(
+      Response.json({ error: "Invalid or missing token" }, { status: 403 }),
+      req,
+    );
+  }
+  return null;
+}
+
 export const rateLimiter = new RateLimiter({
   maxRequests: RATE_LIMIT_MAX_REQUESTS,
   windowMs: RATE_LIMIT_WINDOW_MS,
@@ -294,6 +313,8 @@ export function createRoutes(
             req,
           );
         }
+        const tokenError = verifyJobToken(req, jobId);
+        if (tokenError) return tokenError;
         const entry = progressStore.getJob(jobId);
 
         if (!entry) {
@@ -351,6 +372,8 @@ export function createRoutes(
             req,
           );
         }
+        const tokenError = verifyJobToken(req, jobId);
+        if (tokenError) return tokenError;
         const entry = progressStore.getJob(jobId);
 
         if (!entry) {

@@ -142,10 +142,10 @@ export function WaitingRoom({
 
   const handleCancelClick = useCallback(() => {
     if (jobId) {
-      cancelDiagnosis(jobId).catch(() => {});
+      cancelDiagnosis(jobId, token).catch(() => {});
     }
     onCancel();
-  }, [jobId, onCancel]);
+  }, [jobId, token, onCancel]);
 
   return (
     <div className="space-y-8">

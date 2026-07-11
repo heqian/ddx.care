@@ -3,12 +3,19 @@ import { useState, useCallback, useEffect } from "react";
 export type Route =
   | { screen: "input" }
   | { screen: "waiting"; jobId: string }
-  | { screen: "results"; jobId: string };
+  | { screen: "results"; jobId: string; token?: string };
 
 export function parsePath(path: string): Route {
   if (path.startsWith("/results/")) {
-    const jobId = path.slice("/results/".length);
-    if (jobId) return { screen: "results", jobId };
+    const rest = path.slice("/results/".length);
+    if (rest) {
+      const [jobId, token] = rest.split("/");
+      if (jobId) {
+        return token
+          ? { screen: "results", jobId, token }
+          : { screen: "results", jobId };
+      }
+    }
   }
   if (path.startsWith("/waiting/")) {
     const jobId = path.slice("/waiting/".length);
@@ -22,7 +29,9 @@ export function routeToPath(route: Route): string {
     case "waiting":
       return `/waiting/${route.jobId}`;
     case "results":
-      return `/results/${route.jobId}`;
+      return route.token
+        ? `/results/${route.jobId}/${route.token}`
+        : `/results/${route.jobId}`;
     default:
       return "/";
   }

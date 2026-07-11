@@ -5,6 +5,10 @@ import type {
   AgentsResponse,
 } from "./types";
 
+export interface ApiError extends Error {
+  status: number;
+}
+
 async function handleResponseText(res: Response): Promise<never> {
   const errText = await res.text();
   let parsedError: string | null = null;
@@ -17,11 +21,11 @@ async function handleResponseText(res: Response): Promise<never> {
     // Ignore JSON parse error
   }
 
-  if (parsedError) {
-    throw new Error(parsedError);
-  }
-
-  throw new Error(errText || `Request failed with status ${res.status}`);
+  const message =
+    parsedError ?? (errText || `Request failed with status ${res.status}`);
+  const error = new Error(message) as ApiError;
+  error.status = res.status;
+  throw error;
 }
 
 export async function submitDiagnosis(
@@ -38,8 +42,14 @@ export async function submitDiagnosis(
   return res.json();
 }
 
-export async function getJobStatus(jobId: string): Promise<StatusResponse> {
-  const res = await fetch(`/v1/status/${jobId}`);
+export async function getJobStatus(
+  jobId: string,
+  token?: string,
+): Promise<StatusResponse> {
+  const url = token
+    ? `/v1/status/${jobId}?token=${encodeURIComponent(token)}`
+    : `/v1/status/${jobId}`;
+  const res = await fetch(url);
   if (!res.ok) {
     await handleResponseText(res);
   }
@@ -56,8 +66,12 @@ export async function getAgents(): Promise<AgentsResponse> {
 
 export async function cancelDiagnosis(
   jobId: string,
+  token?: string,
 ): Promise<{ status: string }> {
-  const res = await fetch(`/v1/diagnose/${jobId}`, { method: "DELETE" });
+  const url = token
+    ? `/v1/diagnose/${jobId}?token=${encodeURIComponent(token)}`
+    : `/v1/diagnose/${jobId}`;
+  const res = await fetch(url, { method: "DELETE" });
   if (!res.ok) {
     await handleResponseText(res);
   }

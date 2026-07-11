@@ -106,6 +106,56 @@ describe("getJobStatus", () => {
     expect(fetchCall[0]).toBe("/v1/status/job-1");
   });
 
+  test("appends token query parameter when provided", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobId: "job-1",
+        status: "completed",
+        progress: [],
+      }),
+    }) as any;
+
+    await getJobStatus("job-1", "abc123token");
+
+    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    expect(fetchCall[0]).toBe("/v1/status/job-1?token=abc123token");
+  });
+
+  test("URL-encodes the token parameter", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobId: "job-1",
+        status: "completed",
+        progress: [],
+      }),
+    }) as any;
+
+    await getJobStatus("job-1", "token with spaces&special");
+
+    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    expect(fetchCall[0]).toBe(
+      "/v1/status/job-1?token=token%20with%20spaces%26special",
+    );
+  });
+
+  test("does not append token when not provided", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobId: "job-1",
+        status: "pending",
+        progress: [],
+      }),
+    }) as any;
+
+    await getJobStatus("job-1");
+
+    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    expect(fetchCall[0]).toBe("/v1/status/job-1");
+  });
+
   test("throws on non-OK response", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
@@ -142,5 +192,73 @@ describe("getAgents", () => {
     }) as any;
 
     await expect(getAgents()).rejects.toThrow("Server error");
+  });
+});
+
+describe("cancelDiagnosis", () => {
+  test("sends DELETE to /v1/diagnose/:jobId", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: "cancelled" }),
+    }) as any;
+
+    const result = await cancelDiagnosis("job-1");
+
+    expect(result.status).toBe("cancelled");
+
+    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    expect(fetchCall[0]).toBe("/v1/diagnose/job-1");
+    expect(fetchCall[1].method).toBe("DELETE");
+  });
+
+  test("appends token query parameter when provided", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: "cancelled" }),
+    }) as any;
+
+    await cancelDiagnosis("job-1", "secret-token-123");
+
+    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    expect(fetchCall[0]).toBe("/v1/diagnose/job-1?token=secret-token-123");
+    expect(fetchCall[1].method).toBe("DELETE");
+  });
+
+  test("URL-encodes the token parameter", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: "cancelled" }),
+    }) as any;
+
+    await cancelDiagnosis("job-1", "token/special+chars");
+
+    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    expect(fetchCall[0]).toBe(
+      "/v1/diagnose/job-1?token=token%2Fspecial%2Bchars",
+    );
+  });
+
+  test("does not append token when not provided", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: "cancelled" }),
+    }) as any;
+
+    await cancelDiagnosis("job-1");
+
+    const fetchCall = (globalThis.fetch as any).mock.calls[0];
+    expect(fetchCall[0]).toBe("/v1/diagnose/job-1");
+  });
+
+  test("throws on non-OK response", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: async () => JSON.stringify({ error: "Invalid or missing token" }),
+    }) as any;
+
+    await expect(cancelDiagnosis("job-1", "bad")).rejects.toThrow(
+      "Invalid or missing token",
+    );
   });
 });

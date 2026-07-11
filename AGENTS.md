@@ -96,7 +96,7 @@ Shared utilities:
 
 - `rate-limiter.ts` — `RateLimiter` class: per-IP sliding window rate limiting + global concurrent workflow cap. In-memory (resets on restart, logs a warning on first request post-restart). Configurable via `RATE_LIMIT_MAX_REQUESTS`, `RATE_LIMIT_WINDOW_MS`, `MAX_CONCURRENT_WORKFLOWS`.
 - `logger.ts` — Structured logger with `info`, `warn`, `error`, `request`, `workflowStart`, `workflowComplete`, `workflowFail`, `specialistCall` methods. Supports `LOG_FORMAT=json` env var for JSON-line output (for log aggregation). Default: human-readable text.
-- `ws-token.ts` — `generateToken(jobId)` and `verifyToken(jobId, token)` functions using HMAC-SHA256 with `WS_TOKEN_SECRET`. When `WS_TOKEN_SECRET` is empty (dev mode), tokens are not required for WebSocket connections.
+- `ws-token.ts` — `generateToken(jobId)` and `verifyToken(jobId, token)` functions using HMAC-SHA256 with `WS_TOKEN_SECRET`. When `WS_TOKEN_SECRET` is empty (dev mode), tokens are not required for WebSocket connections, REST endpoints (`GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId`), or the HTTP polling fallback.
 - `abort-controller-store.ts` — `Map<string, AbortController>` with exported `set`, `get`, `remove` functions. Stores abort controllers for running workflows, enabling cancellation via `DELETE /v1/diagnose/:jobId`.
 
 #### Tool Cache (`src/backend/tools/utils/tool-cache.ts`)
@@ -129,7 +129,7 @@ All constants centralized here, read from environment variables with defaults:
 - `RATE_LIMIT_MAX_REQUESTS` (5), `RATE_LIMIT_WINDOW_MS` (60s / 1 min), `MAX_CONCURRENT_WORKFLOWS` (3)
 - `MAX_INPUT_FIELD_LENGTH` (50,000 chars), `MAX_PAYLOAD_BYTES` (1MB)
 - `MOCK_LLM`, `LOG_FORMAT`, `SPECIALIST_CONTEXT_MODE`, `SPECIALIST_CONTEXT_MAX_CHARS`, `CMO_CONTEXT_MAX_CHARS`
-- `WS_TOKEN_SECRET` (empty = dev mode, no token required; set for production)
+- `WS_TOKEN_SECRET` (empty = dev mode, no token required; set for production — secures WebSocket, REST status/cancel endpoints, and HTTP polling fallback)
 - `TOOL_CACHE_TTL_MS` (86400000 / 24h), `TOOL_CACHE_DB_PATH` (`tool-cache.sqlite`), `TOOL_CACHE_CLEANUP_INTERVAL_MS` (10min). Set `TOOL_CACHE_TTL_MS=0` to disable tool API response caching.
 
 ### Frontend (`src/frontend/`)
@@ -154,7 +154,7 @@ All constants centralized here, read from environment variables with defaults:
 
 #### Hooks (`src/frontend/hooks/`)
 
-- `useJobStream` — WebSocket connection with exponential backoff reconnection (5 attempts: 1s → 2s → 4s → 8s → 16s) and pre-reconnect status check via `getJobStatus()`, before HTTP polling fallback. Includes HMAC token for authentication when `WS_TOKEN_SECRET` is set.
+- `useJobStream` — WebSocket connection with exponential backoff reconnection (5 attempts: 1s → 2s → 4s → 8s → 16s) and pre-reconnect status check via `getJobStatus()`, before HTTP polling fallback. Includes HMAC token for WebSocket authentication and REST polling fallback when `WS_TOKEN_SECRET` is set.
 - `usePolling` — Interval-based status polling
 - `useAutoLogout` — Inactivity timeout with `paused` prop support (pauses timer during active diagnosis)
 - `useRouter` — Simple hash-based client-side routing
@@ -172,8 +172,8 @@ Entry point. Creates the `Bun.serve()` instance with:
 
 **Routes** (defined in `src/backend/api/routes.ts`):
 - `POST /v1/diagnose` — Submit a diagnostic case. Validates input (Zod schema, payload size limit), checks rate limit (per-IP + concurrent workflow cap), starts async workflow, returns `202 Accepted` with `jobId` and `token`.
-- `GET /v1/status/:jobId` — Poll job status and progress events.
-- `DELETE /v1/diagnose/:jobId` — Cancel a running diagnostic workflow. Aborts the workflow's `AbortController`, marks the job as `failed("Cancelled by user")`, and frees the concurrent workflow slot.
+- `GET /v1/status/:jobId` — Poll job status and progress events. Requires `?token=<hmac>` query parameter when `WS_TOKEN_SECRET` is set (403 on missing/invalid token). Token is verified before job existence lookup to prevent enumeration (ordering: format check 400 → token check 403 → existence 404).
+- `DELETE /v1/diagnose/:jobId` — Cancel a running diagnostic workflow. Requires `?token=<hmac>` query parameter when `WS_TOKEN_SECRET` is set (403 on missing/invalid token). Aborts the workflow's `AbortController`, marks the job as `failed("Cancelled by user")`, and frees the concurrent workflow slot.
 - `GET /v1/health` — Health check endpoint (uptime, active workflows, SQLite connectivity).
 - `GET /v1/agents` — List available specialist agents (id, name, description).
 - `GET /ws?jobId=...&token=...` — WebSocket for real-time progress streaming. Validates `Origin` header against `TRUSTED_ORIGINS` (or `ALLOWED_ORIGINS` when not set). Validates HMAC token when `WS_TOKEN_SECRET` is set. Replays history on connect, subscribes to live updates.
@@ -204,7 +204,7 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `PORT` | `3000` | Server port |
 | `ALLOWED_ORIGINS` | `*` | CORS + WebSocket origin whitelist (comma-separated, used when `TRUSTED_ORIGINS` is not set) |
 | `TRUSTED_ORIGNS` | (empty) | Production CORS + WebSocket origin whitelist (comma-separated). When set, `ALLOWED_ORIGINS` is ignored |
-| `WS_TOKEN_SECRET` | (empty) | HMAC secret for WebSocket authentication. When empty, tokens are not required (dev mode) |
+| `WS_TOKEN_SECRET` | (empty) | HMAC secret for WebSocket + REST endpoint authentication. When empty, tokens are not required (dev mode). Set for production — secures WebSocket, `GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId`, and HTTP polling fallback. |
 | `JOB_TTL_MS` | `3600000` (60 min) | Job TTL before cleanup |
 | `SPECIALIST_MODEL` | `ollama-cloud/gemma4:31b` | Override specialist agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `ORCHESTRATOR_MODEL` | `ollama-cloud/gemma4:31b` | Override CMO agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
