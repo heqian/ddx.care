@@ -23,6 +23,7 @@ export interface ProgressEvent {
   resultSummary?: string | null;
   errorType?: string;
   cached?: boolean;
+  specialistIds?: string[];
 }
 
 interface JobRow {

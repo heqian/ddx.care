@@ -383,6 +383,11 @@ export async function mockDiagnosis(
     { id: "neurologist", hasContext: false },
     { id: "nephrologist", hasContext: false },
   ];
+  emit(
+    "cmo_decision",
+    `CMO requested consultations from: ${specialists.map((s) => s.id).join(", ")}`,
+    { specialistIds: specialists.map((s) => s.id) },
+  );
   for (const spec of specialists) {
     emit(
       "specialist_start",
@@ -957,6 +962,7 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
         emit(
           "cmo_decision",
           `CMO requested consultations from: ${newSpecialistRequests.map((s) => s.id).join(", ")}`,
+          { specialistIds: newSpecialistRequests.map((s) => s.id) },
         );
 
         const results = await limitConcurrency(

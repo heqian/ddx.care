@@ -3,6 +3,8 @@ import {
   acceptConsent,
   fillValidForm,
   submitCase,
+  baseUrl,
+  jobIdFromUrl,
 } from "./e2e/helpers";
 
 test.describe("Consent gate", () => {
@@ -402,6 +404,60 @@ test.describe("Full diagnosis flow", () => {
       );
       expect(results.length).toBeGreaterThanOrEqual(calls.length * 0.5);
     }
+  });
+
+  test("cmo_decision progress event carries specialistIds for progress-bar total", async ({
+    page,
+  }) => {
+    // Regression: the Waiting Room progress bar used to show "0/1 consulted"
+    // when the CMO had selected 3 specialists but only 1 had started (sequential
+    // concurrency). The fix populates specialistIds on cmo_decision events so
+    // the frontend can compute the full planned panel size up front.
+    await fillValidForm(page);
+    await submitCase(page);
+
+    await expect(
+      page.getByRole("heading", { name: "Differential Diagnosis" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const jobId = jobIdFromUrl(page.url());
+    expect(jobId).toBeTruthy();
+
+    const statusRes = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+    expect(statusRes.ok()).toBe(true);
+    const statusData = await statusRes.json();
+    expect(statusData.status).toBe("completed");
+
+    const progress = statusData.progress;
+    expect(progress).toBeTruthy();
+
+    // The cmo_decision event must carry specialistIds listing the full panel.
+    const cmoDecisions = progress.filter(
+      (e: { eventType: string }) => e.eventType === "cmo_decision",
+    );
+    expect(cmoDecisions.length).toBeGreaterThan(0);
+
+    const firstDecision = cmoDecisions[0];
+    expect(firstDecision.specialistIds).toBeTruthy();
+    expect(Array.isArray(firstDecision.specialistIds)).toBe(true);
+
+    // The mock consults cardiologist, neurologist, nephrologist.
+    expect(firstDecision.specialistIds.length).toBe(3);
+    expect(firstDecision.specialistIds).toEqual(
+      expect.arrayContaining(["cardiologist", "neurologist", "nephrologist"]),
+    );
+
+    // The union of specialistIds across all cmo_decision events should equal
+    // the number of distinct specialists that completed — this is what the
+    // progress bar denominator should be.
+    const allPlanned = new Set<string>();
+    for (const d of cmoDecisions) {
+      for (const id of d.specialistIds ?? []) allPlanned.add(id);
+    }
+    const completed = progress.filter(
+      (e: { eventType: string }) => e.eventType === "specialist_complete",
+    );
+    expect(completed.length).toBe(allPlanned.size);
   });
 
   test("SPA fallback serves the app for unknown routes", async ({ page }) => {

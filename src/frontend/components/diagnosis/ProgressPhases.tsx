@@ -40,37 +40,47 @@ export function derivePhase(
   let started = 0;
   let completed = 0;
   let hasCmoFinal = false;
+  const plannedSpecialists = new Set<string>();
 
   for (const p of progress) {
     if (p.eventType === "specialist_start") started++;
     if (p.eventType === "specialist_complete") completed++;
     if (p.eventType === "cmo_final") hasCmoFinal = true;
+    if (p.eventType === "cmo_decision" && p.specialistIds) {
+      for (const id of p.specialistIds) plannedSpecialists.add(id);
+    }
   }
+
+  // Prefer the CMO-declared specialist panel for the total count so the
+  // denominator reflects the full plan, not just specialists that have
+  // started (which is sequential with low concurrency).
+  const totalCount =
+    plannedSpecialists.size > 0 ? plannedSpecialists.size : started;
 
   if (hasCmoFinal) {
     return {
       phase: "reporting",
       completedCount: completed,
-      totalCount: started,
+      totalCount,
     };
   }
 
-  if (started === 0) {
+  if (totalCount === 0) {
     return { phase: "triaging", completedCount: 0, totalCount: 0 };
   }
 
-  if (started === completed) {
+  if (completed === totalCount) {
     return {
       phase: "synthesizing",
       completedCount: completed,
-      totalCount: started,
+      totalCount,
     };
   }
 
   return {
     phase: "consulting",
     completedCount: completed,
-    totalCount: started,
+    totalCount,
   };
 }
 

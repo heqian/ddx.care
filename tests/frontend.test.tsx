@@ -2181,8 +2181,146 @@ describe("deriveToolHistory", () => {
 });
 
 // ---------------------------------------------------------------------------
-// WaitingRoom — progress log styling logic
+// derivePhase
 // ---------------------------------------------------------------------------
+import { derivePhase } from "../src/frontend/components/diagnosis/ProgressPhases";
+import type { ProgressEvent } from "../src/frontend/api/types";
+
+describe("derivePhase", () => {
+  function ev(
+    eventType: ProgressEvent["eventType"],
+    extra: Partial<ProgressEvent> = {},
+  ): ProgressEvent {
+    return { time: "2026-01-01T00:00:00Z", message: "m", eventType, ...extra };
+  }
+
+  test("returns triaging when progress is undefined", () => {
+    expect(derivePhase(undefined, false)).toEqual({
+      phase: "triaging",
+      completedCount: 0,
+      totalCount: 0,
+    });
+  });
+
+  test("returns triaging when progress is empty", () => {
+    expect(derivePhase([], false)).toEqual({
+      phase: "triaging",
+      completedCount: 0,
+      totalCount: 0,
+    });
+  });
+
+  test("returns reporting when isCompleted is true", () => {
+    expect(derivePhase(undefined, true)).toEqual({
+      phase: "reporting",
+      completedCount: 0,
+      totalCount: 0,
+    });
+  });
+
+  test("uses cmo_decision specialistIds for totalCount, not specialist_start count", () => {
+    // CMO selected 3 specialists but only 1 has started (sequential concurrency).
+    const progress = [
+      ev("cmo_decision", {
+        specialistIds: ["cardiologist", "neurologist", "nephrologist"],
+      }),
+      ev("specialist_start", { agentId: "cardiologist" }),
+    ];
+    const state = derivePhase(progress, false);
+    expect(state.phase).toBe("consulting");
+    expect(state.totalCount).toBe(3);
+    expect(state.completedCount).toBe(0);
+  });
+
+  test("counts completed specialists against cmo_decision total", () => {
+    const progress = [
+      ev("cmo_decision", {
+        specialistIds: ["cardiologist", "neurologist", "nephrologist"],
+      }),
+      ev("specialist_start", { agentId: "cardiologist" }),
+      ev("specialist_complete", { agentId: "cardiologist" }),
+      ev("specialist_start", { agentId: "neurologist" }),
+    ];
+    const state = derivePhase(progress, false);
+    expect(state.phase).toBe("consulting");
+    expect(state.totalCount).toBe(3);
+    expect(state.completedCount).toBe(1);
+  });
+
+  test("transitions to synthesizing when completed equals cmo_decision total", () => {
+    const progress = [
+      ev("cmo_decision", {
+        specialistIds: ["cardiologist", "neurologist", "nephrologist"],
+      }),
+      ev("specialist_start", { agentId: "cardiologist" }),
+      ev("specialist_complete", { agentId: "cardiologist" }),
+      ev("specialist_start", { agentId: "neurologist" }),
+      ev("specialist_complete", { agentId: "neurologist" }),
+      ev("specialist_start", { agentId: "nephrologist" }),
+      ev("specialist_complete", { agentId: "nephrologist" }),
+    ];
+    const state = derivePhase(progress, false);
+    expect(state.phase).toBe("synthesizing");
+    expect(state.totalCount).toBe(3);
+    expect(state.completedCount).toBe(3);
+  });
+
+  test("transitions to reporting on cmo_final", () => {
+    const progress = [
+      ev("cmo_decision", {
+        specialistIds: ["cardiologist", "neurologist", "nephrologist"],
+      }),
+      ev("specialist_start", { agentId: "cardiologist" }),
+      ev("specialist_complete", { agentId: "cardiologist" }),
+      ev("specialist_start", { agentId: "neurologist" }),
+      ev("specialist_complete", { agentId: "neurologist" }),
+      ev("specialist_start", { agentId: "nephrologist" }),
+      ev("specialist_complete", { agentId: "nephrologist" }),
+      ev("cmo_final"),
+    ];
+    const state = derivePhase(progress, false);
+    expect(state.phase).toBe("reporting");
+    expect(state.totalCount).toBe(3);
+    expect(state.completedCount).toBe(3);
+  });
+
+  test("falls back to specialist_start count when no cmo_decision specialistIds", () => {
+    // Legacy events without specialistIds on cmo_decision.
+    const progress = [
+      ev("cmo_decision"),
+      ev("specialist_start", { agentId: "cardiologist" }),
+    ];
+    const state = derivePhase(progress, false);
+    expect(state.phase).toBe("consulting");
+    expect(state.totalCount).toBe(1);
+    expect(state.completedCount).toBe(0);
+  });
+
+  test("deduplicates specialistIds across multiple cmo_decision rounds", () => {
+    // Round 1: cardiologist, neurologist. Round 2: cardiologist (repeat, filtered out by backend),
+    // nephrologist (new). Total unique = 3.
+    const progress = [
+      ev("cmo_decision", { specialistIds: ["cardiologist", "neurologist"] }),
+      ev("specialist_start", { agentId: "cardiologist" }),
+      ev("specialist_complete", { agentId: "cardiologist" }),
+      ev("specialist_start", { agentId: "neurologist" }),
+      ev("specialist_complete", { agentId: "neurologist" }),
+      ev("cmo_decision", { specialistIds: ["nephrologist"] }),
+    ];
+    const state = derivePhase(progress, false);
+    expect(state.phase).toBe("consulting");
+    expect(state.totalCount).toBe(3);
+    expect(state.completedCount).toBe(2);
+  });
+
+  test("stays in triaging when only round_start present (no cmo_decision or specialist_start)", () => {
+    const progress = [ev("round_start")];
+    const state = derivePhase(progress, false);
+    expect(state.phase).toBe("triaging");
+    expect(state.totalCount).toBe(0);
+  });
+});
+
 // Tests the CSS class derivation logic used in the progress log's rendering.
 // This covers the critical visual differentiation between tool-call entries
 // (indented, muted) and regular entries (brighter, full width).
