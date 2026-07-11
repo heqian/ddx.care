@@ -166,6 +166,12 @@ export function createRoutes(
           );
         }
 
+        // Record immediately after check() succeeds so all requests (valid or
+        // malformed) count against the per-IP limit. This prevents bypass via
+        // rapid invalid payloads. The concurrent-workflow slot is managed
+        // separately (startWorkflow only on successful validation).
+        rateLimiter.record(ip);
+
         if (!rateLimiter.canStartWorkflow()) {
           logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, {
             ip,
@@ -229,8 +235,6 @@ export function createRoutes(
             req,
           );
         }
-
-        rateLimiter.record(ip);
 
         const { medicalHistory, conversationTranscript, labResults } =
           parsed.data;

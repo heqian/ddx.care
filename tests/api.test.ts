@@ -622,14 +622,20 @@ describe("API Endpoints", () => {
       expect(body.status).toBe("already_completed");
     }, 60_000);
   });
-
-  describe("Rate limit recording after validation", () => {
-    test("malformed JSON does not increment rate limit counter", async () => {
+  describe("Rate limit recording after check", () => {
+    // Helper: reset rate limiter state before each test in this block so
+    // prior test requests don't pollute the window.
+    async function resetRateLimiter() {
       const { rateLimiter } = await import("../src/backend/api/routes");
       const savedReset = rateLimiter["hasLoggedReset"];
       rateLimiter["clients"].clear();
       rateLimiter["activeCount"] = 0;
       rateLimiter["hasLoggedReset"] = true;
+      return { rateLimiter, savedReset };
+    }
+
+    test("malformed JSON DOES increment rate limit counter", async () => {
+      const { rateLimiter, savedReset } = await resetRateLimiter();
 
       await fetch(`${BASE}/v1/diagnose`, {
         method: "POST",
@@ -639,21 +645,36 @@ describe("API Endpoints", () => {
 
       const testIp = "::1";
       const entry = rateLimiter["clients"].get(testIp);
-      // The malformed request should not have called rateLimiter.record()
-      // so there should be no timestamps for this IP
-      expect(entry?.timestamps?.length ?? 0).toBe(0);
+      // The malformed request SHOULD have called rateLimiter.record()
+      // (after check() succeeds) so there should be one timestamp.
+      expect(entry?.timestamps?.length ?? 0).toBe(1);
 
       rateLimiter["clients"].clear();
       rateLimiter["activeCount"] = 0;
       rateLimiter["hasLoggedReset"] = savedReset;
     });
 
-    test("valid request does increment rate limit counter", async () => {
-      const { rateLimiter } = await import("../src/backend/api/routes");
-      const savedReset = rateLimiter["hasLoggedReset"];
+    test("schema-validation failure DOES increment rate limit counter", async () => {
+      const { rateLimiter, savedReset } = await resetRateLimiter();
+
+      // Valid JSON but missing required fields — fails Zod validation
+      await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: JSON.stringify({ medicalHistory: "test" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const testIp = "::1";
+      const entry = rateLimiter["clients"].get(testIp);
+      expect(entry?.timestamps?.length ?? 0).toBe(1);
+
       rateLimiter["clients"].clear();
       rateLimiter["activeCount"] = 0;
-      rateLimiter["hasLoggedReset"] = true;
+      rateLimiter["hasLoggedReset"] = savedReset;
+    });
+
+    test("valid request DOES increment rate limit counter", async () => {
+      const { rateLimiter, savedReset } = await resetRateLimiter();
 
       await fetch(`${BASE}/v1/diagnose`, {
         method: "POST",
@@ -668,7 +689,45 @@ describe("API Endpoints", () => {
       const testIp = "::1";
       const entry = rateLimiter["clients"].get(testIp);
       expect(entry).toBeDefined();
-      expect(entry!.timestamps.length).toBeGreaterThan(0);
+      expect(entry!.timestamps.length).toBe(1);
+
+      rateLimiter["clients"].clear();
+      rateLimiter["activeCount"] = 0;
+      rateLimiter["hasLoggedReset"] = savedReset;
+    });
+
+    test("rapid invalid payloads trigger 429 (bypass is closed)", async () => {
+      const { rateLimiter, savedReset } = await resetRateLimiter();
+
+      // Default RATE_LIMIT_MAX_REQUESTS is 10. Send 10 malformed requests
+      // (each should consume a rate-limit slot), then the 11th should 429.
+      const testIp = "::1";
+
+      // Send 10 malformed requests — all should be 400 but consume slots
+      for (let i = 0; i < 10; i++) {
+        const res = await fetch(`${BASE}/v1/diagnose`, {
+          method: "POST",
+          body: "not json",
+          headers: { "Content-Type": "application/json" },
+        });
+        expect(res.status).toBe(400);
+      }
+
+      // Verify all 10 were recorded
+      const entry = rateLimiter["clients"].get(testIp);
+      expect(entry?.timestamps?.length ?? 0).toBe(10);
+
+      // 11th request should be rate-limited (429)
+      const limitedRes = await fetch(`${BASE}/v1/diagnose`, {
+        method: "POST",
+        body: JSON.stringify({
+          medicalHistory: "test",
+          conversationTranscript: "test",
+          labResults: "test",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(limitedRes.status).toBe(429);
 
       rateLimiter["clients"].clear();
       rateLimiter["activeCount"] = 0;

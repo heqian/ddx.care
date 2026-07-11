@@ -94,7 +94,7 @@ Shared utilities:
 
 #### Utilities (`src/backend/utils/`)
 
-- `rate-limiter.ts` — `RateLimiter` class: per-IP sliding window rate limiting + global concurrent workflow cap. In-memory (resets on restart, logs a warning on first request post-restart). Configurable via `RATE_LIMIT_MAX_REQUESTS`, `RATE_LIMIT_WINDOW_MS`, `MAX_CONCURRENT_WORKFLOWS`.
+- `rate-limiter.ts` — `RateLimiter` class: per-IP sliding window rate limiting + global concurrent workflow cap. In-memory (resets on restart, logs a warning on first request post-restart). Configurable via `RATE_LIMIT_MAX_REQUESTS`, `RATE_LIMIT_WINDOW_MS`, `MAX_CONCURRENT_WORKFLOWS`. Per-IP recording happens immediately after `check()` succeeds (before body parsing), so malformed requests count against the limit to prevent bypass.
 - `logger.ts` — Structured logger with `info`, `warn`, `error`, `request`, `workflowStart`, `workflowComplete`, `workflowFail`, `specialistCall` methods. Supports `LOG_FORMAT=json` env var for JSON-line output (for log aggregation). Default: human-readable text.
 - `ws-token.ts` — `generateToken(jobId)` and `verifyToken(jobId, token)` functions using HMAC-SHA256 with `WS_TOKEN_SECRET`. When `WS_TOKEN_SECRET` is empty (dev mode), tokens are not required for WebSocket connections, REST endpoints (`GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId`), or the HTTP polling fallback.
 - `abort-controller-store.ts` — `Map<string, AbortController>` with exported `set`, `get`, `remove` functions. Stores abort controllers for running workflows, enabling cancellation via `DELETE /v1/diagnose/:jobId`.
@@ -211,7 +211,7 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `SPECIALIST_MODEL` | `ollama-cloud/gemma4:31b` | Override specialist agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `ORCHESTRATOR_MODEL` | `ollama-cloud/gemma4:31b` | Override CMO agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max CMO consultation rounds |
-| `RATE_LIMIT_MAX_REQUESTS` | `10` | Max diagnosis requests per IP per window |
+| `RATE_LIMIT_MAX_REQUESTS` | `10` | Max diagnosis requests per IP per window (counts all requests, valid and invalid) |
 | `RATE_LIMIT_WINDOW_MS` | `60000` (1 min) | Rate limit sliding window |
 | `MAX_CONCURRENT_WORKFLOWS` | `3` | Max concurrent diagnostic workflows |
 | `MOCK_LLM` | — | Set to `1` for mock mode (testing) |
