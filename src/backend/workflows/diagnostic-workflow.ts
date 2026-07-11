@@ -349,6 +349,29 @@ export async function mockDiagnosis(
     });
   };
 
+  // E2E test hooks. Only active in mock mode. This sentinel lets headless
+  // tests reach a state the normal mock never produces:
+  //   - "E2E_MOCK_FAIL" → the step throws mid-workflow. The backend surfaces
+  //     Mastra's internally-failed run result as a "failed" job, so the waiting
+  //     room shows the Diagnosis Failed / Retry UI. Used to test that path.
+  // The sentinel is inert in unit tests (which don't set MOCK_LLM=1) and in
+  // production (where mockDiagnosis is never called).
+  if (
+    process.env.MOCK_LLM === "1" &&
+    _patientSummary.includes("E2E_MOCK_FAIL")
+  ) {
+    emit(
+      "round_start",
+      "Round 1 Analysis: Asking CMO for decision on needed specialists...",
+    );
+    await delay(stepDelay * 1.5);
+    emit("specialist_start", "Calling specialist cardiologist...", {
+      agentId: "cardiologist",
+    });
+    await delay(stepDelay);
+    throw new Error("Mock forced failure (E2E sentinel)");
+  }
+
   emit(
     "round_start",
     "Round 1 Analysis: Asking CMO for decision on needed specialists...",

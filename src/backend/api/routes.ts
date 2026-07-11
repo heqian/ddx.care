@@ -236,6 +236,22 @@ export function createRoutes(
             },
           })
           .then((result) => {
+            // Mastra resolves (rather than rejects) when a workflow step throws:
+            // the run result carries status "failed" with an error object, and
+            // no report. Surface that as a failed job so the frontend shows the
+            // Diagnosis Failed / Retry UI instead of a completed job with no
+            // report data.
+            const runResult = result as {
+              status?: string;
+              error?: { message?: string };
+            };
+            if (runResult?.status === "failed") {
+              const message =
+                runResult.error?.message ?? "Diagnosis workflow failed";
+              logger.workflowFail(jobId, Date.now() - startTime, message);
+              progressStore.fail(jobId, message);
+              return;
+            }
             const specialistCount =
               (result as WorkflowRunResult)?.report?.specialistsConsulted
                 ?.length ?? 0;

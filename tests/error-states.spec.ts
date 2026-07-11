@@ -1,0 +1,208 @@
+import { test, expect } from "@playwright/test";
+import {
+  acceptConsent,
+  fillValidForm,
+  submitCase,
+  waitForResults,
+  waitForWaitingRoom,
+  jobIdFromUrl,
+  baseUrl,
+} from "./e2e/helpers";
+
+test.describe("Error states & edge paths", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await acceptConsent(page);
+  });
+
+  test("deep-link reload to a completed job renders the report", async ({
+    page,
+  }) => {
+    await fillValidForm(page);
+    await submitCase(page);
+    await waitForResults(page);
+
+    const jobId = jobIdFromUrl(page.url());
+    expect(jobId).toBeTruthy();
+
+    // Full reload of the results URL simulates a user pasting the deep link.
+    // App remounts with no in-memory jobResult, so it must fetch via the API.
+    await page.goto(`/results/${jobId}`);
+    await expect(
+      page.getByRole("heading", { name: "Differential Diagnosis" }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole("heading", { name: "Hypertensive Urgency" }),
+    ).toBeVisible();
+  });
+
+  test("deep-link to a non-existent job shows the error screen", async ({
+    page,
+  }) => {
+    // A well-formed v4 UUID that the server has never created.
+    const bogusId = "00000000-0000-4000-8000-000000000000";
+    await page.goto(`/results/${bogusId}`);
+    await acceptConsent(page);
+
+    await expect(
+      page.getByText("Could not load results for this case."),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "New Case" }),
+    ).toBeVisible();
+  });
+
+  test("specialist panel warning banner when /v1/agents fails", async ({
+    page,
+  }) => {
+    // Force the agent list request to fail — the waiting room must show a
+    // dismissible warning banner while the diagnosis continues.
+    await page.route("**/v1/agents", (route) =>
+      route.fulfill({ status: 500, body: "boom" }),
+    );
+
+    await fillValidForm(page);
+    await submitCase(page);
+    await waitForWaitingRoom(page);
+
+    const banner = page.getByText("Could not load specialist panel");
+    await expect(banner).toBeVisible({ timeout: 5_000 });
+
+    // Dismiss the banner.
+    await page.getByRole("button", { name: "Dismiss" }).click();
+    await expect(banner).toBeHidden();
+
+    // Diagnosis should still complete despite the agent-list failure.
+    await waitForResults(page);
+  });
+
+  test("submission error alert renders when POST /v1/diagnose fails", async ({
+    page,
+  }) => {
+    // Intercept only the POST (the glob is exact on /v1/diagnose, but guard
+    // the method so a future DELETE could never be affected).
+    await page.route("**/v1/diagnose", (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      return route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: "Server is at capacity. Try again later.",
+        }),
+      });
+    });
+
+    await fillValidForm(page);
+    await submitCase(page);
+
+    // The red error alert shows the server's error message.
+    await expect(
+      page.getByText("Server is at capacity. Try again later."),
+    ).toBeVisible({ timeout: 5_000 });
+
+    // The submit button recovers to an enabled state.
+    await expect(
+      page.getByRole("button", { name: "Submit for Diagnosis" }),
+    ).toBeEnabled();
+  });
+
+  test("cancel button aborts the running job and returns to input", async ({
+    page,
+  }) => {
+    await fillValidForm(page);
+    await submitCase(page);
+    await waitForWaitingRoom(page);
+
+    const jobId = jobIdFromUrl(page.url());
+    expect(jobId).toBeTruthy();
+
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    // UI returns to the input screen.
+    await expect(
+      page.getByRole("heading", { name: "New Case" }),
+    ).toBeVisible({ timeout: 5_000 });
+
+    // The job is marked failed with the cancellation message. Poll because
+    // the DELETE from the browser may still be in flight when we check.
+    await expect.poll(
+      async () => {
+        const res = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+        return (await res.json()).status;
+      },
+      { timeout: 5_000 },
+    ).toBe("failed");
+
+    const finalRes = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+    const finalData = await finalRes.json();
+    expect(finalData.error).toContain("Cancelled");
+  });
+
+  test("workflow failure shows the Diagnosis Failed UI and Retry resubmits a new job", async ({
+    page,
+  }) => {
+    // The sentinel makes the mock workflow throw mid-step. The backend
+    // surfaces Mastra's internally-failed result as a "failed" job, so the
+    // waiting room must show the Diagnosis Failed UI with a Retry button.
+    await fillValidForm(page, {
+      medicalHistory: "E2E_MOCK_FAIL Hypertension history.",
+    });
+    await submitCase(page);
+    await waitForWaitingRoom(page);
+
+    await expect(
+      page.getByRole("heading", { name: "Diagnosis Failed" }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole("button", { name: "Retry Diagnosis" }),
+    ).toBeVisible();
+
+    const failedJobId = jobIdFromUrl(page.url());
+
+    // Retry must submit a brand-new job (new jobId in the waiting URL).
+    await page.getByRole("button", { name: "Retry Diagnosis" }).click();
+    await expect.poll(
+      () => jobIdFromUrl(page.url()),
+      { timeout: 10_000 },
+    ).not.toBe(failedJobId);
+  });
+
+  test("deep-link to a cancelled job shows the failed-result screen", async ({
+    page,
+  }) => {
+    await fillValidForm(page);
+    await submitCase(page);
+    await waitForWaitingRoom(page);
+
+    const jobId = jobIdFromUrl(page.url());
+    expect(jobId).toBeTruthy();
+
+    // Cancel via the UI — returns to the input screen and marks the job
+    // failed ("Cancelled by user"). This is the only path that produces a
+    // "failed" job status, since workflow-internal failures resolve as
+    // "completed" (see the no-report test above).
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(
+      page.getByRole("heading", { name: "New Case" }),
+    ).toBeVisible({ timeout: 5_000 });
+
+    // Wait for the cancel to land on the server before deep-linking.
+    await expect.poll(
+      async () => {
+        const res = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+        return (await res.json()).status;
+      },
+      { timeout: 5_000 },
+    ).toBe("failed");
+
+    // Deep-link to the cancelled job's results URL.
+    await page.goto(`/results/${jobId}`);
+    await expect(page.getByText("Cancelled by user")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(
+      page.getByRole("button", { name: "New Case" }),
+    ).toBeVisible();
+  });
+});

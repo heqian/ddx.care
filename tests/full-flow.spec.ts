@@ -1,24 +1,9 @@
 import { test, expect } from "@playwright/test";
-
-/**
- * Accept the consent gate if it is visible.
- * Call this at the start of every test (after page.goto).
- */
-async function acceptConsent(page: import("@playwright/test").Page) {
-  const heading = page.getByRole("heading", {
-    name: "Legal Disclaimer",
-  });
-  if (await heading.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    // Check the acknowledgment checkbox
-    await page.getByRole("checkbox").check();
-    // Click the accept button
-    await page.getByRole("button", { name: "I Accept" }).click();
-    // Wait for the main app to render
-    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible({
-      timeout: 5_000,
-    });
-  }
-}
+import {
+  acceptConsent,
+  fillValidForm,
+  submitCase,
+} from "./e2e/helpers";
 
 test.describe("Consent gate", () => {
   test("blocks access until accepted", async ({ page }) => {
@@ -131,27 +116,9 @@ test.describe("Full diagnosis flow", () => {
     // 1. Verify the form renders
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
 
-    // 2. Fill the form (labels aren't linked via htmlFor, so use placeholders/roles)
-    await page.getByPlaceholder("e.g., 45").fill("45");
-    await page.getByRole("combobox").selectOption("Male");
-    await page
-      .getByPlaceholder(/Chest pain, shortness of breath/)
-      .fill("Severe headache with blurred vision");
-
-    await page
-      .getByPlaceholder(/Past diagnoses, medications/)
-      .fill("Hypertension diagnosed 5 years ago. On lisinopril 10mg daily.");
-    await page
-      .getByPlaceholder(/Doctor-patient encounter/)
-      .fill(
-        "The individual reports a severe headache for 3 days. Clinician asked about vision changes. Confirmed blurred vision present.",
-      );
-    await page
-      .getByPlaceholder(/Blood panels, urinalysis/)
-      .fill("BP: 180/110. HR: 90.");
-
-    // 3. Submit — click the submit button
-    await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
+    // 2. Fill the form and submit
+    await fillValidForm(page);
+    await submitCase(page);
 
     // 4. Waiting room should appear (briefly — mock completes quickly)
     await expect(
@@ -259,19 +226,8 @@ test.describe("Full diagnosis flow", () => {
     page,
   }) => {
     // Fill and submit
-    await page.getByPlaceholder("e.g., 45").fill("30");
-    await page
-      .getByPlaceholder(/Chest pain, shortness of breath/)
-      .fill("Headache");
-    await page
-      .getByPlaceholder(/Past diagnoses, medications/)
-      .fill("None significant");
-    await page
-      .getByPlaceholder(/Doctor-patient encounter/)
-      .fill("Reports headache for 2 days");
-    await page.getByPlaceholder(/Blood panels, urinalysis/).fill("Normal");
-
-    await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
+    await fillValidForm(page);
+    await submitCase(page);
 
     // Wait for results
     await expect(
@@ -293,22 +249,9 @@ test.describe("Full diagnosis flow", () => {
   });
 
   test("specialist status updates during analysis", async ({ page }) => {
-    // Fill the form
-    await page.getByPlaceholder("e.g., 45").fill("55");
-    await page
-      .getByPlaceholder(/Chest pain, shortness of breath/)
-      .fill("Chest pain");
-    await page
-      .getByPlaceholder(/Past diagnoses, medications/)
-      .fill("Previous MI");
-    await page
-      .getByPlaceholder(/Doctor-patient encounter/)
-      .fill("Chest pain for 1 hour");
-    await page
-      .getByPlaceholder(/Blood panels, urinalysis/)
-      .fill("Troponin elevated");
-
-    await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
+    // Fill the form and submit
+    await fillValidForm(page);
+    await submitCase(page);
 
     // Waiting room should show
     await expect(
@@ -333,20 +276,9 @@ test.describe("Full diagnosis flow", () => {
   test("tool-call and tool-result progress entries appear in waiting room", async ({
     page,
   }) => {
-    // Fill the form
-    await page.getByPlaceholder("e.g., 45").fill("60");
-    await page
-      .getByPlaceholder(/Chest pain, shortness of breath/)
-      .fill("Dizziness");
-    await page
-      .getByPlaceholder(/Past diagnoses, medications/)
-      .fill("Hypertension");
-    await page
-      .getByPlaceholder(/Doctor-patient encounter/)
-      .fill("Dizzy spells");
-    await page.getByPlaceholder(/Blood panels, urinalysis/).fill("BP 160/100");
-
-    await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
+    // Fill the form and submit
+    await fillValidForm(page);
+    await submitCase(page);
 
     // Waiting room should appear
     await expect(
@@ -392,16 +324,8 @@ test.describe("Full diagnosis flow", () => {
     page,
   }) => {
     // Fill and submit a case
-    await page.getByPlaceholder("e.g., 45").fill("55");
-    await page
-      .getByPlaceholder(/Chest pain, shortness of breath/)
-      .fill("Chest pain");
-    await page
-      .getByPlaceholder(/Past diagnoses, medications/)
-      .fill("Hypertension");
-    await page.getByPlaceholder(/Blood panels, urinalysis/).fill("BP 180/110");
-
-    await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
+    await fillValidForm(page);
+    await submitCase(page);
 
     // Wait for completion
     await expect(
