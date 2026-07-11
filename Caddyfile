@@ -21,6 +21,14 @@ ddx.care {
   # HTTP Strict Transport Security — 2-year max-age with preload
   header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
 
+  # Security headers applied to all responses (including HTML pages served by Bun's
+  # HTML bundle routes, which bypass the app's corsHeaders() function).
+  header {
+    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+  }
+
   reverse_proxy localhost:3000 {
     # Forward the client's real IP to the backend app
     header_up X-Real-IP {remote_host}

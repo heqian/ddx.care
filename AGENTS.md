@@ -178,9 +178,11 @@ Entry point. Creates the `Bun.serve()` instance with:
 - `GET /v1/agents` — List available specialist agents (id, name, description).
 - `GET /ws?jobId=...&token=...` — WebSocket for real-time progress streaming. Validates `Origin` header against `TRUSTED_ORIGINS` (or `ALLOWED_ORIGINS` when not set). Validates HMAC token when `WS_TOKEN_SECRET` is set. Replays history on connect, subscribes to live updates.
 - `OPTIONS /v1/*` — CORS preflight catch-all.
-- `/*` — SPA fallback (serves `index.html`).
+- `/*` — SPA fallback (serves the bundled `index.html` via Bun's HTMLBundle route value; security headers applied by Caddy in production, since HTMLBundle routes bypass the app's `corsHeaders()`).
 
-**CORS**: When `TRUSTED_ORIGINS` is set, reflects the request's `Origin` header if it matches the whitelist. When not set, falls back to `ALLOWED_ORIGINS` (default `*`). All responses include `X-Content-Type-Options: nosniff` and `X-Frame-Options: DENY` headers.
+**CORS**: When `TRUSTED_ORIGINS` is set, reflects the request's `Origin` header if it matches the whitelist. When not set, falls back to `ALLOWED_ORIGINS` (default `*`). All `/v1/*` API responses include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Content-Security-Policy` headers via `corsHeaders()`. HTML responses (`"/"` and `"/*"`) are served as Bun HTMLBundle route values, which bypass `corsHeaders()` — security headers for HTML are applied by the Caddy reverse proxy.
+
+**Content-Security-Policy**: The CSP (`CSP_VALUE` in `src/backend/api/routes.ts`) is applied to all `/v1/*` API responses via `corsHeaders()`. For HTML responses, the same CSP is applied by the Caddyfile's `header` directive in production. The CSP enforces: `default-src 'self'`, `script-src 'self'` (no `'unsafe-inline'`), `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` (Google Fonts CSS allowlisted; `'unsafe-inline'` retained for Tailwind v4 runtime styles), `font-src 'self' https://fonts.gstatic.com`, `img-src 'self' data:`, `connect-src 'self'` (same-origin only; no bare `ws:`/`wss:` schemes — `'self'` covers same-origin WebSocket), `frame-ancestors 'none'`, `base-uri 'none'`, `form-action 'self'`, `object-src 'none'`. HSTS is added by Caddy (`Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`).
 
 **WebSocket** (defined in `src/backend/api/websocket.ts`):
 - On open: validates job exists, replays progress history, subscribes to live events.

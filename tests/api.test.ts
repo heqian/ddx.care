@@ -297,7 +297,7 @@ describe("API Endpoints", () => {
       expect(csp).toContain("style-src 'self' 'unsafe-inline'");
       expect(csp).toContain("font-src 'self' https://fonts.gstatic.com");
       expect(csp).toContain("img-src 'self' data:");
-      expect(csp).toContain("connect-src 'self' ws: wss:");
+      expect(csp).toContain("connect-src 'self'");
       expect(csp).toContain("frame-ancestors 'none'");
     });
 
@@ -324,6 +324,52 @@ describe("API Endpoints", () => {
       expect(res.headers.get("Content-Security-Policy")).toContain(
         "default-src 'self'",
       );
+    });
+
+    test("GET / serves the bundled HTML page", async () => {
+      const res = await fetch(`${BASE}/`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toContain("text/html");
+      const body = await res.text();
+      expect(body).toContain("<!doctype html>");
+      expect(body).toContain('id="root"');
+      // Security headers (CSP, X-Frame-Options, X-Content-Type-Options) for
+      // HTML responses are applied by the Caddy reverse proxy in production,
+      // because Bun's HTMLBundle route values bypass the app's corsHeaders().
+    });
+
+    test("GET / SPA fallback serves the bundled HTML page", async () => {
+      const res = await fetch(`${BASE}/some/non-existent/spa/path`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toContain("text/html");
+      const body = await res.text();
+      expect(body).toContain("<!doctype html>");
+    });
+
+    test("CSP includes tightened directives: base-uri, form-action, object-src", async () => {
+      const res = await fetch(`${BASE}/v1/agents`);
+      const csp = res.headers.get("Content-Security-Policy");
+      expect(csp).toContain("base-uri 'none'");
+      expect(csp).toContain("form-action 'self'");
+      expect(csp).toContain("object-src 'none'");
+    });
+
+    test("CSP connect-src is restricted to 'self' without bare ws/wss schemes", async () => {
+      const res = await fetch(`${BASE}/v1/agents`);
+      const csp = res.headers.get("Content-Security-Policy");
+      expect(csp).toContain("connect-src 'self'");
+      const connectSrcMatch = csp?.match(/connect-src ([^;]+)/);
+      const connectSrc = connectSrcMatch?.[1] ?? "";
+      expect(connectSrc).not.toMatch(/\bws:/);
+      expect(connectSrc).not.toMatch(/\bwss:/);
+    });
+
+    test("CSP style-src allowlists Google Fonts CSS origin", async () => {
+      const res = await fetch(`${BASE}/v1/agents`);
+      const csp = res.headers.get("Content-Security-Policy");
+      const styleSrcMatch = csp?.match(/style-src ([^;]+)/);
+      const styleSrc = styleSrcMatch?.[1] ?? "";
+      expect(styleSrc).toContain("https://fonts.googleapis.com");
     });
   });
 

@@ -23,11 +23,14 @@ import {
 const CSP_VALUE =
   "default-src 'self'; " +
   "script-src 'self'; " +
-  "style-src 'self' 'unsafe-inline'; " +
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
   "font-src 'self' https://fonts.gstatic.com; " +
   "img-src 'self' data:; " +
-  "connect-src 'self' ws: wss:; " +
-  "frame-ancestors 'none'";
+  "connect-src 'self'; " +
+  "frame-ancestors 'none'; " +
+  "base-uri 'none'; " +
+  "form-action 'self'; " +
+  "object-src 'none'";
 
 const JOB_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
