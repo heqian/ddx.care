@@ -95,7 +95,7 @@ export function ProgressPhases({ progress, isCompleted }: ProgressPhasesProps) {
 
   return (
     <div className="mb-8">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col items-start gap-3 md:flex-row md:items-center md:justify-between md:gap-2">
         {PHASES.map((p, i) => {
           const isCurrent = i === currentIdx;
           const isPast = isCompleted || i < currentIdx;
