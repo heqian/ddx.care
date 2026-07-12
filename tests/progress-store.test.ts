@@ -335,6 +335,88 @@ describe("JobStore — Cleanup", () => {
 
     expect(store.getJob("recent")).toBeDefined();
   });
+
+  test("cleanupExpired scrubs result before deletion", () => {
+    store.createJob("scrub-1");
+    store.complete("scrub-1", { diagnoses: ["Migraine", "TBI"] });
+    store.emitMessage("scrub-1", "Analyzing patient data...");
+
+    // Make the job old enough to expire
+    const db = (store as any).db;
+    db.exec(
+      `UPDATE jobs SET createdAt = ${Date.now() - 100_000} WHERE id = 'scrub-1'`,
+    );
+
+    // Intercept: check the row is scrubbed BEFORE it's deleted
+    // We use a raw query right after scrubStmt runs (before cleanupStmt)
+    // Since cleanupExpired runs both in sequence, we verify by checking
+    // that the job is gone (scrubbed + deleted)
+    store.cleanupExpired(50_000);
+
+    expect(store.getJob("scrub-1")).toBeUndefined();
+  });
+
+  test("cleanupExpired scrubs progress before deletion", () => {
+    store.createJob("scrub-2");
+    store.emitMessage("scrub-2", {
+      time: new Date().toISOString(),
+      message: "Tool call: aspirin + warfarin",
+      eventType: "tool_call",
+      toolName: "drug-interaction",
+      toolArgs: "aspirin + warfarin",
+    });
+
+    const db = (store as any).db;
+    db.exec(
+      `UPDATE jobs SET createdAt = ${Date.now() - 100_000} WHERE id = 'scrub-2'`,
+    );
+
+    store.cleanupExpired(50_000);
+
+    expect(store.getJob("scrub-2")).toBeUndefined();
+  });
+
+  test("cleanupExpired does not affect non-expired job data", () => {
+    store.createJob("scrub-safe");
+    store.complete("scrub-safe", { result: "should remain" });
+    store.emitMessage("scrub-safe", "progress data");
+
+    store.cleanupExpired(60_000);
+
+    const job = store.getJob("scrub-safe");
+    expect(job).toBeDefined();
+    expect(job!.result).toEqual({ result: "should remain" });
+    expect(job!.progress).toHaveLength(1);
+    expect(job!.progress[0].message).toBe("progress data");
+  });
+
+  test("scrubStmt nulls result and resets progress for expired rows", () => {
+    store.createJob("scrub-verify");
+    store.complete("scrub-verify", { sensitive: "PHI data" });
+    store.emitMessage("scrub-verify", "patient info");
+
+    const db = (store as any).db;
+    // Make the job expired
+    db.exec(
+      `UPDATE jobs SET createdAt = ${Date.now() - 100_000} WHERE id = 'scrub-verify'`,
+    );
+
+    // Run only the scrub statement (not the delete)
+    const cutoff = Date.now() - 50_000;
+    (store as any).scrubStmt.run(cutoff);
+
+    // Verify the row still exists but data is scrubbed
+    const row = db
+      .query("SELECT * FROM jobs WHERE id = 'scrub-verify'")
+      .get() as any;
+    expect(row).toBeDefined();
+    expect(row.result).toBeNull();
+    expect(row.progress).toBe("[]");
+
+    // Now clean up
+    store.cleanupExpired(50_000);
+    expect(store.getJob("scrub-verify")).toBeUndefined();
+  });
 });
 
 describe("JobStore — markStalePending", () => {

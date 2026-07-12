@@ -151,13 +151,18 @@ describe("Logger — Specialized Methods", () => {
     expect(output).toContain('"agentId":"cardiologist"');
     expect(output).toContain('"jobId":"job-1"');
     expect(output).toContain('"toolName":"drug-interaction"');
-    expect(output).toContain('"toolArgs":"aspirin + warfarin"');
+    // Redacted by default: argsPresent + argCount instead of raw values
+    expect(output).toContain('"argsPresent":true');
+    expect(output).toContain('"argCount":2');
+    expect(output).toContain('"toolArgs":null');
   });
 
   test("toolCall() logs null toolArgs", () => {
     logger.toolCall("neurologist", "job-2", "drug-interaction", null);
     const output = logSpy.mock.calls[0][0] as string;
     expect(output).toContain('"toolArgs":null');
+    expect(output).toContain('"argsPresent":false');
+    expect(output).toContain('"argCount":0');
   });
 
   test("toolResult() logs success result", () => {

@@ -3,6 +3,7 @@ import {
   AUDIT_LOG_PATH,
   AUDIT_LOG_MAX_SIZE_MB,
   AUDIT_LOG_MAX_FILES,
+  AUDIT_LOG_REDACT_TOOL_ARGS,
 } from "../config";
 
 type LogLevel = "info" | "warn" | "error";
@@ -25,6 +26,10 @@ if (AUDIT_LOG_PATH) {
 
 export function setAuditLogger(logger: AuditLogger | null): void {
   auditLogger = logger;
+}
+
+export function getAuditLogger(): AuditLogger | null {
+  return auditLogger;
 }
 
 function formatLog(entry: LogEntry): string {
@@ -121,12 +126,27 @@ export const logger = {
     toolName: string,
     toolArgs: string | null,
   ): void {
-    this.info("tool_call", {
-      agentId,
-      jobId,
-      toolName,
-      toolArgs,
-    });
+    if (AUDIT_LOG_REDACT_TOOL_ARGS) {
+      const argsPresent = toolArgs !== null && toolArgs !== "";
+      const argCount = argsPresent
+        ? toolArgs!.split(/[+,]/).filter((s) => s.trim()).length
+        : 0;
+      this.info("tool_call", {
+        agentId,
+        jobId,
+        toolName,
+        toolArgs: null,
+        argsPresent,
+        argCount,
+      });
+    } else {
+      this.info("tool_call", {
+        agentId,
+        jobId,
+        toolName,
+        toolArgs,
+      });
+    }
   },
 
   toolResult(

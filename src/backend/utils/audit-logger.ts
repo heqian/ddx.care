@@ -2,10 +2,12 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   renameSync,
   statSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -38,6 +40,43 @@ export class AuditLogger {
     } catch (err) {
       console.error(
         `[audit-logger] Failed to write audit entry: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
+  purgeOlderThan(hours: number): void {
+    if (!existsSync(this.path)) return;
+    try {
+      const content = readFileSync(this.path, "utf-8");
+      const lines = content.split("\n").filter((l) => l.trim() !== "");
+      if (lines.length === 0) return;
+
+      const cutoff = Date.now() - hours * 60 * 60 * 1000;
+      const kept: string[] = [];
+      let purged = 0;
+
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line) as { timestamp?: string };
+          const ts = entry.timestamp ? Date.parse(entry.timestamp) : NaN;
+          if (Number.isNaN(ts) || ts >= cutoff) {
+            kept.push(line);
+          } else {
+            purged++;
+          }
+        } catch {
+          kept.push(line);
+        }
+      }
+
+      if (purged === 0) return;
+      writeFileSync(this.path, kept.join("\n") + "\n", { encoding: "utf-8" });
+      console.log(
+        `[audit-logger] Purged ${purged} entr${purged === 1 ? "y" : "ies"} older than ${hours}h`,
+      );
+    } catch (err) {
+      console.error(
+        `[audit-logger] Failed to purge audit log: ${err instanceof Error ? err.message : err}`,
       );
     }
   }

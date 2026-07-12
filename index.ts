@@ -16,9 +16,11 @@ import {
   TOOL_CACHE_ENABLED,
   TOOL_CACHE_CLEANUP_INTERVAL_MS,
   MAX_PAYLOAD_BYTES,
+  AUDIT_LOG_PATH,
+  AUDIT_LOG_RETENTION_HOURS,
   validateConfig,
 } from "./src/backend/config";
-import { logger } from "./src/backend/utils/logger";
+import { logger, getAuditLogger } from "./src/backend/utils/logger";
 import { initializeOrphadataCache } from "./src/backend/orphadata-cache";
 import {
   initToolCache,
@@ -48,6 +50,21 @@ const pruneTimer = setInterval(() => {
 const toolCacheCleanupTimer = setInterval(() => {
   cleanupToolCache();
 }, TOOL_CACHE_CLEANUP_INTERVAL_MS);
+
+const auditPurgeTimer = AUDIT_LOG_PATH
+  ? setInterval(
+      () => {
+        const audit = getAuditLogger();
+        if (audit) {
+          audit.purgeOlderThan(AUDIT_LOG_RETENTION_HOURS);
+        }
+      },
+      Math.max(
+        60 * 60 * 1000,
+        Math.floor((AUDIT_LOG_RETENTION_HOURS * 60 * 60 * 1000) / 4),
+      ),
+    )
+  : null;
 
 let server: ReturnType<typeof Bun.serve>;
 
@@ -97,6 +114,7 @@ async function shutdown(signal: string) {
   clearInterval(cleanupTimer);
   clearInterval(pruneTimer);
   clearInterval(toolCacheCleanupTimer);
+  if (auditPurgeTimer) clearInterval(auditPurgeTimer);
 
   // 3. Wait for in-flight workflows to finish (with timeout)
   const start = Date.now();

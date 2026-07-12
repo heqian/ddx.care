@@ -95,6 +95,12 @@ export const AUDIT_LOG_MAX_FILES = parseInt(
   process.env.AUDIT_LOG_MAX_FILES ?? "5",
   10,
 );
+export const AUDIT_LOG_RETENTION_HOURS = parseInt(
+  process.env.AUDIT_LOG_RETENTION_HOURS ?? "168",
+  10,
+);
+export const AUDIT_LOG_REDACT_TOOL_ARGS =
+  process.env.AUDIT_LOG_REDACT_TOOL_ARGS !== "0";
 
 export function validateConfig() {
   if (!process.env.OLLAMA_API_KEY && process.env.MOCK_LLM !== "1") {
@@ -169,6 +175,14 @@ export function validateConfig() {
   if (Number.isNaN(AUDIT_LOG_MAX_FILES) || AUDIT_LOG_MAX_FILES < 0) {
     throw new Error(
       `Invalid AUDIT_LOG_MAX_FILES: ${process.env.AUDIT_LOG_MAX_FILES}. Must be a non-negative number.`,
+    );
+  }
+  if (
+    Number.isNaN(AUDIT_LOG_RETENTION_HOURS) ||
+    AUDIT_LOG_RETENTION_HOURS <= 0
+  ) {
+    throw new Error(
+      `Invalid AUDIT_LOG_RETENTION_HOURS: ${process.env.AUDIT_LOG_RETENTION_HOURS}. Must be a positive number.`,
     );
   }
   if (Number.isNaN(JOB_TTL_MS) || JOB_TTL_MS <= 0) {

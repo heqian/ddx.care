@@ -224,6 +224,8 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `TOOL_CACHE_TTL_MS` | `86400000` (24h) | Tool API response cache TTL. Set to `0` to disable caching. |
 | `TOOL_CACHE_DB_PATH` | `tool-cache.sqlite` | Path to the tool cache SQLite database file |
 | `AUDIT_LOG_MAX_FILES` | `5` | Number of rotated audit log files to retain. |
+| `AUDIT_LOG_RETENTION_HOURS` | `168` (7 days) | Time-based audit log retention. Entries older than this are purged automatically. |
+| `AUDIT_LOG_REDACT_TOOL_ARGS` | `1` (enabled) | When `1`, tool-call events in the audit log record only the tool name, arg count, and presence indicator — not raw argument values. Set to `0` for debugging. |
 | `RATE_LIMIT_MAX_ENTRIES` | `10000` | Max rate limiter entries before evicting oldest |
 | `MAX_SPECIALIST_CONCURRENCY` | `1` | Max concurrent specialist agents per round |
 | `AGENT_GENERATE_MAX_RETRIES` | `3` | Max retries for agent generation calls |
@@ -231,6 +233,32 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `DIAGNOSIS_TIMEOUT_MS` | `900000` (15 min) | Diagnosis workflow timeout |
 | `DB_PATH` | `jobs.sqlite` | Path to SQLite job database |
 | `ORPHADATA_DB_PATH` | `orphadata.sqlite` | Path to SQLite Orphadata cache database |
+
+## PHI Data Retention
+
+ddx.care is explicitly labeled "RESEARCH PROOF-OF-CONCEPT ONLY. NOT a medical device. NOT HIPAA-compliant." However, defense-in-depth principles warrant minimizing PHI-derived data exposure at rest. The following protections are in place:
+
+### Job Data (SQLite `jobs` table)
+
+- **TTL**: Jobs persist for `JOB_TTL_MS` (default 60 min). Reduce this for sensitive deployments (e.g., `JOB_TTL_MS=300000` for 5-minute retention).
+- **Scrub-before-delete**: `cleanupExpired()` nulls the `result` column and resets `progress` to `'[]'` before the `DELETE`, reducing recoverability from disk images where SQLite has not yet reclaimed pages.
+- **In-memory only**: The `jobs` SQLite database is file-backed but transient — data is lost on server restart. `markStalePending()` on startup marks all pending jobs as failed.
+
+### Audit Log
+
+- **Tool-arg redaction**: When `AUDIT_LOG_REDACT_TOOL_ARGS=1` (default), tool-call events record only the tool name, argument count, and a presence indicator (`argsPresent`/`argCount`) — not raw argument values (drug names, condition names, search queries). Set `AUDIT_LOG_REDACT_TOOL_ARGS=0` for debugging sessions.
+- **Time-based purge**: The `AuditLogger.purgeOlderThan(hours)` method removes JSON Lines entries older than `AUDIT_LOG_RETENTION_HOURS` (default 168h / 7 days). A timer calls this at most once per hour (every `AUDIT_LOG_RETENTION_HOURS / 4`, minimum 1 hour). This complements the existing size-based rotation (`AUDIT_LOG_MAX_SIZE_MB` × `AUDIT_LOG_MAX_FILES`).
+- **Startup logging**: The server logs PHI retention settings on startup.
+
+### Frontend
+
+- **sessionStorage**: The input form auto-saves to `sessionStorage` every 500ms, cleared on successful submission. Data persists if the user abandons the form but is cleared on tab close.
+
+### What is NOT covered (operator's responsibility)
+
+- **Disk-level encryption**: Use LUKS, Docker encrypted volumes, or similar to encrypt the SQLite database files at rest.
+- **Database encryption**: Full column-level encryption (e.g., SQLCipher) is not implemented. Access control is via `WS_TOKEN_SECRET` (token auth for WebSocket/REST endpoints).
+- **Network encryption**: TLS is terminated by the Caddy reverse proxy in production.
 
 ## Testing
 
@@ -241,10 +269,11 @@ Backend test files in `tests/`:
 - `tools.test.ts` — Medical tool execution tests
 - `api-integration.test.ts` — API integration tests (live API with `RUN_INTEGRATION=1`)
 - `workflow.test.ts` — Diagnostic workflow, `limitConcurrency`, `withRetry`, `splitToList` tests
-- `progress-store.test.ts` — `JobStore` CRUD, pub/sub, cleanup tests
+- `progress-store.test.ts` — `JobStore` CRUD, pub/sub, cleanup, scrub-before-delete tests
 - `rate-limiter.test.ts` — Rate limiting, concurrent workflow cap, prune tests
-- `logger.test.ts` — Logger output format, JSON mode tests
+- `logger.test.ts` — Logger output format, JSON mode, tool-arg redaction tests
 - `fetch-utils.test.ts` — `fetchJSON` timeout, error handling tests
+- `audit-logger.test.ts` — Audit logger rotation, tool-arg redaction, time-based purge tests
 - `ws-origin.test.ts` — WebSocket origin validation tests
 - `shutdown.test.ts` — Graceful shutdown signal handling tests
 

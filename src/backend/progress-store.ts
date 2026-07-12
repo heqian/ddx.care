@@ -50,6 +50,7 @@ export class JobStore extends EventTarget {
   private emitStmt!: Statement;
   private completeStmt!: Statement;
   private failStmt!: Statement;
+  private scrubStmt!: Statement;
   private cleanupStmt!: Statement;
 
   constructor(dbPath = process.env.DB_PATH || "jobs.sqlite") {
@@ -85,6 +86,9 @@ export class JobStore extends EventTarget {
     );
     this.failStmt = this.db.prepare(
       `UPDATE jobs SET status = ?, error = ? WHERE id = ?`,
+    );
+    this.scrubStmt = this.db.prepare(
+      `UPDATE jobs SET result = NULL, progress = '[]' WHERE createdAt < ?`,
     );
     this.cleanupStmt = this.db.prepare(`DELETE FROM jobs WHERE createdAt < ?`);
   }
@@ -172,6 +176,7 @@ export class JobStore extends EventTarget {
 
   cleanupExpired(ttlMs: number): void {
     const cutoff = Date.now() - ttlMs;
+    this.scrubStmt.run(cutoff);
     this.cleanupStmt.run(cutoff);
   }
 
