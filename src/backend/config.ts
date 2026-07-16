@@ -16,7 +16,10 @@ export const SPECIALIST_MODEL =
   process.env.SPECIALIST_MODEL ?? "ollama-cloud/gemma4:31b";
 export const ORCHESTRATOR_MODEL =
   process.env.ORCHESTRATOR_MODEL ?? "ollama-cloud/gemma4:31b";
-export const DIAGNOSIS_TIMEOUT_MS = 15 * 60 * 1000;
+export const DIAGNOSIS_TIMEOUT_MS = parseInt(
+  process.env.DIAGNOSIS_TIMEOUT_MS ?? String(15 * 60 * 1000),
+  10,
+);
 export const MAX_DIAGNOSIS_ROUNDS = parseInt(
   process.env.MAX_DIAGNOSIS_ROUNDS ?? "3",
   10,
@@ -116,6 +119,11 @@ export function validateConfig() {
   if (Number.isNaN(MAX_DIAGNOSIS_ROUNDS) || MAX_DIAGNOSIS_ROUNDS <= 0) {
     throw new Error(
       `Invalid MAX_DIAGNOSIS_ROUNDS: ${process.env.MAX_DIAGNOSIS_ROUNDS}. Must be a positive number.`,
+    );
+  }
+  if (Number.isNaN(DIAGNOSIS_TIMEOUT_MS) || DIAGNOSIS_TIMEOUT_MS <= 0) {
+    throw new Error(
+      `Invalid DIAGNOSIS_TIMEOUT_MS: ${process.env.DIAGNOSIS_TIMEOUT_MS}. Must be a positive number.`,
     );
   }
   if (Number.isNaN(RATE_LIMIT_MAX_REQUESTS) || RATE_LIMIT_MAX_REQUESTS <= 0) {

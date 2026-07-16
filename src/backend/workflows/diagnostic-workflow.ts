@@ -74,21 +74,40 @@ export async function limitConcurrency<T, R>(
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
   const executing = new Set<Promise<void>>();
+  let firstError: unknown;
+  let hasErrored = false;
 
   for (let i = 0; i < items.length; i++) {
+    // Stop scheduling new work once a task has failed.
+    if (hasErrored) break;
+
     // Each iteration gets its own `i` binding (JS `let` in `for` creates per-iteration scope)
-    const p = fn(items[i]).then((result) => {
-      results[i] = result;
-      executing.delete(p);
-    });
-    executing.add(p);
+    const task = fn(items[i])
+      .then((result) => {
+        results[i] = result;
+      })
+      .catch((err) => {
+        if (!hasErrored) {
+          hasErrored = true;
+          firstError = err;
+        }
+      })
+      .then(() => {
+        executing.delete(task);
+      });
+    executing.add(task);
 
     if (executing.size >= limit) {
       await Promise.race(executing);
     }
   }
 
-  await Promise.all(executing);
+  // Wait for all in-flight tasks to settle so none are orphaned. Without this,
+  // a rejection via Promise.race would abandon surviving promises and they
+  // could surface as unhandled rejections.
+  await Promise.allSettled([...executing]);
+
+  if (hasErrored) throw firstError;
   return results;
 }
 

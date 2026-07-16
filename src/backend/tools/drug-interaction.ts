@@ -182,10 +182,11 @@ export const drugInteractionTool = createTool({
     "Check drug-drug interactions between two or more medications by searching FDA drug labeling data. Provide drug names (generic or brand). Returns interaction details including severity and descriptions from official FDA labels. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
   inputSchema: z.object({
     drugNames: z
-      .array(z.string())
+      .array(z.string().max(100))
       .min(2)
+      .max(10)
       .describe(
-        "Array of drug names to check for interactions (at least 2). Use generic names for best results (e.g. ['aspirin', 'warfarin']).",
+        "Array of drug names to check for interactions (2–10). Use generic names for best results (e.g. ['aspirin', 'warfarin']).",
       ),
   }),
   outputSchema: z.union([
@@ -231,8 +232,21 @@ export const drugInteractionTool = createTool({
 
       const labelCache = new Map<string, FdaLabelResult | null>();
 
-      for (const drugName of drugNames) {
+      // Memoize RxCUI lookups per drug name so the N×N interaction loop
+      // makes at most one RxNorm call per unique drug (not N²).
+      const rxcuiCache = new Map<string, string | undefined>();
+      const lookupRxcuiMemoized = async (
+        drugName: string,
+      ): Promise<string | undefined> => {
+        const key = drugName.toLowerCase();
+        if (rxcuiCache.has(key)) return rxcuiCache.get(key);
         const rxcui = await lookupRxcui(drugName);
+        rxcuiCache.set(key, rxcui);
+        return rxcui;
+      };
+
+      for (const drugName of drugNames) {
+        const rxcui = await lookupRxcuiMemoized(drugName);
 
         let labelUrl: string;
         if (rxcui) {
@@ -276,7 +290,7 @@ export const drugInteractionTool = createTool({
         for (const otherDrug of otherDrugs) {
           const otherLower = otherDrug.toLowerCase();
           const otherVariants = [otherLower];
-          const otherRxcui = await lookupRxcui(otherDrug);
+          const otherRxcui = await lookupRxcuiMemoized(otherDrug);
           if (otherRxcui) otherVariants.push(otherRxcui);
 
           let matched = false;

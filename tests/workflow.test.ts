@@ -534,6 +534,61 @@ describe("limitConcurrency", () => {
     // The function should propagate the error (Promise.all semantics)
     expect(results).toBe("caught");
   });
+
+  test("awaits all in-flight tasks when one fails (no orphaned promises)", async () => {
+    const completed: number[] = [];
+    const items = [1, 2, 3];
+
+    // All three start concurrently (limit 3). Item 2 fails fast (30ms); items
+    // 1 and 3 finish later (60ms). The function must wait for the survivors to
+    // settle (via Promise.allSettled) before re-throwing, so that no in-flight
+    // task is orphaned.
+    const promise = limitConcurrency(items, 3, async (n) => {
+      await new Promise((r) => setTimeout(r, n === 2 ? 30 : 60));
+      if (n === 2) throw new Error("item 2 failed");
+      completed.push(n);
+      return n * 10;
+    });
+
+    await expect(promise).rejects.toThrow("item 2 failed");
+    // Survivors completed before the rejection surfaced.
+    expect(completed.sort()).toEqual([1, 3]);
+  });
+
+  test("stops scheduling remaining items after first error", async () => {
+    const invoked: number[] = [];
+    const items = [1, 2, 3, 4, 5];
+
+    await limitConcurrency(items, 1, async (n) => {
+      invoked.push(n);
+      await new Promise((r) => setTimeout(r, 10));
+      if (n === 2) throw new Error("item 2 failed");
+      return n * 10;
+    }).catch(() => "caught");
+
+    // With concurrency 1, item 2 fails before item 3 is scheduled; the loop
+    // breaks and never invokes items 3–5.
+    expect(invoked).toEqual([1, 2]);
+  });
+
+  test("throws first error and awaits survivors when multiple tasks fail", async () => {
+    const completed: number[] = [];
+    const items = [1, 2, 3];
+
+    // All three run concurrently (limit 3). Items 1 and 2 both reject; item 3
+    // succeeds. Every rejection must be internalized by its own .catch (no
+    // unhandled rejection), and the surviving task must be awaited before the
+    // function re-throws the first error.
+    const promise = limitConcurrency(items, 3, async (n) => {
+      await new Promise((r) => setTimeout(r, 30));
+      if (n !== 3) throw new Error(`item ${n} failed`);
+      completed.push(n);
+      return n * 10;
+    });
+
+    await expect(promise).rejects.toThrow(/item [12] failed/);
+    expect(completed).toEqual([3]);
+  });
 });
 
 describe("withRetry", () => {

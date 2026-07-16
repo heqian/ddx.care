@@ -69,6 +69,43 @@ describe("Config — Constants", () => {
   test("ORPHADATA_ENABLED is a boolean", () => {
     expect(typeof ORPHADATA_ENABLED).toBe("boolean");
   });
+
+  test("DIAGNOSIS_TIMEOUT_MS defaults to 15 minutes", () => {
+    expect(DIAGNOSIS_TIMEOUT_MS).toBe(15 * 60 * 1000);
+  });
+});
+
+describe("Config — DIAGNOSIS_TIMEOUT_MS env override", () => {
+  const key = "DIAGNOSIS_TIMEOUT_MS";
+
+  async function importFresh(value: string | undefined) {
+    const original = process.env[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+    try {
+      return await import(
+        `../src/backend/config?t=${Date.now()}-${Math.random()}`
+      );
+    } finally {
+      if (original === undefined) delete process.env[key];
+      else process.env[key] = original;
+    }
+  }
+
+  test("reads custom value from env", async () => {
+    const mod = await importFresh("120000");
+    expect(mod.DIAGNOSIS_TIMEOUT_MS).toBe(120000);
+  });
+
+  test("validateConfig throws on non-positive value", async () => {
+    const mod = await importFresh("0");
+    expect(() => mod.validateConfig()).toThrow("DIAGNOSIS_TIMEOUT_MS");
+  });
+
+  test("validateConfig throws on non-numeric value", async () => {
+    const mod = await importFresh("abc");
+    expect(() => mod.validateConfig()).toThrow("DIAGNOSIS_TIMEOUT_MS");
+  });
 });
 
 describe("Config — validateConfig", () => {

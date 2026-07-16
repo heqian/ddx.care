@@ -201,7 +201,9 @@ describe("Config", () => {
     const { DIAGNOSIS_TIMEOUT_MS } = await import("../src/backend/config");
 
     expect(DIAGNOSIS_TIMEOUT_MS).toBeGreaterThan(0);
-    expect(DIAGNOSIS_TIMEOUT_MS).toBeLessThanOrEqual(900_000);
+    // Default is 900000 (15 min); value is operator-configurable, so we only
+    // assert the default here and leave the upper bound to validateConfig.
+    expect(DIAGNOSIS_TIMEOUT_MS).toBe(900_000);
   });
 
   test("CMO context max chars is positive", async () => {

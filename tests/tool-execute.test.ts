@@ -214,6 +214,137 @@ describe("drug-interaction tool execute", () => {
     expect(result.data.noInteractionsFound).toBe(true);
   });
 
+  test("drugInteractionTool memoizes RxCUI lookups (no N² RxNorm calls)", async () => {
+    const { drugInteractionTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+
+    let rxnavLookupCount = 0;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes("/drugs.json")) {
+        rxnavLookupCount++;
+        const name =
+          new URL(url, "https://rxnav.nlm.nih.gov").searchParams.get("name") ??
+          "";
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            drugGroup: {
+              conceptGroup: [
+                {
+                  tty: "SBD",
+                  conceptProperties: [{ rxcui: "123", name, tty: "SBD" }],
+                },
+              ],
+            },
+          }),
+        };
+      }
+      if (url.includes("/drug/label.json")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ results: [] }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
+    }) as any;
+
+    // 3 unique drugs. Without memoization the N×N loop makes 6 RxNorm calls
+    // (3 outer + 3 inner). With memoization it makes exactly 3 (one per drug).
+    await drugInteractionTool.execute({
+      drugNames: ["aspirin", "warfarin", "ibuprofen"],
+    });
+    expect(rxnavLookupCount).toBe(3);
+  });
+
+  test("drugInteractionTool memoizes RxCUI lookups case-insensitively", async () => {
+    const { drugInteractionTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+
+    let rxnavLookupCount = 0;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes("/drugs.json")) {
+        rxnavLookupCount++;
+        const name =
+          new URL(url, "https://rxnav.nlm.nih.gov").searchParams.get("name") ??
+          "";
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            drugGroup: {
+              conceptGroup: [
+                {
+                  tty: "SBD",
+                  conceptProperties: [{ rxcui: "123", name, tty: "SBD" }],
+                },
+              ],
+            },
+          }),
+        };
+      }
+      if (url.includes("/drug/label.json")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ results: [] }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
+    }) as any;
+
+    // "Aspirin" and "aspirin" share a cache key (lowercased) → a single RxNorm
+    // lookup, not two.
+    await drugInteractionTool.execute({
+      drugNames: ["Aspirin", "aspirin"],
+    });
+    expect(rxnavLookupCount).toBe(1);
+  });
+
+  test("drugInteractionTool schema rejects more than 10 drug names", async () => {
+    const { drugInteractionTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+    const schema = (drugInteractionTool as any).inputSchema;
+    const eleven = Array.from({ length: 11 }, (_, i) => `drug${i}`);
+    expect(schema.safeParse({ drugNames: eleven }).success).toBe(false);
+  });
+
+  test("drugInteractionTool schema rejects fewer than 2 drug names", async () => {
+    const { drugInteractionTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+    const schema = (drugInteractionTool as any).inputSchema;
+    expect(schema.safeParse({ drugNames: ["aspirin"] }).success).toBe(false);
+  });
+
+  test("drugInteractionTool schema accepts up to 10 drug names", async () => {
+    const { drugInteractionTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+    const schema = (drugInteractionTool as any).inputSchema;
+    const ten = Array.from({ length: 10 }, (_, i) => `drug${i}`);
+    expect(schema.safeParse({ drugNames: ten }).success).toBe(true);
+  });
+
+  test("drugInteractionTool schema rejects drug names over 100 characters", async () => {
+    const { drugInteractionTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+    const schema = (drugInteractionTool as any).inputSchema;
+    // 101 chars → rejected.
+    expect(
+      schema.safeParse({ drugNames: ["aspirin", "a".repeat(101)] }).success,
+    ).toBe(false);
+    // Exactly 100 chars → accepted (boundary).
+    expect(
+      schema.safeParse({ drugNames: ["aspirin", "b".repeat(100)] }).success,
+    ).toBe(true);
+  });
+
   test("drugSpellingTool returns suggestions", async () => {
     const { drugSpellingTool } = await import(
       "../src/backend/tools/drug-interaction"
