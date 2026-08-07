@@ -118,7 +118,52 @@ describe("API Endpoints", () => {
 
     expect(jobStatus).toBe("completed");
     expect(finalResult.result).toBeDefined();
+    const outcome = finalResult.result as Record<string, unknown>;
+    expect(outcome.status).toBe("available");
+    expect(outcome.report).toBeDefined();
+    expect(outcome.result).toBeUndefined();
   }, 60_000);
+
+  test("POST /v1/diagnose completes with generation_failed when report generation is unavailable", async () => {
+    const startRes = await fetch(`${BASE}/v1/diagnose`, {
+      method: "POST",
+      body: JSON.stringify({
+        medicalHistory: "E2E_MOCK_REPORT_FAILURE Hypertension history.",
+        conversationTranscript: "Persistent severe headache.",
+        labResults: "BP: 180 over 110.",
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(startRes.status).toBe(202);
+    const { jobId } = (await startRes.json()) as { jobId: string };
+    let finalResult: Record<string, unknown> | null = null;
+
+    for (let i = 0; i < 30; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const statusRes = await fetch(`${BASE}/v1/status/${jobId}`);
+      expect(statusRes.status).toBe(200);
+      const statusBody = (await statusRes.json()) as Record<string, unknown>;
+      if (statusBody.status !== "pending") {
+        finalResult = statusBody;
+        break;
+      }
+    }
+
+    if (!finalResult) {
+      throw new Error("Job did not complete within 3 seconds");
+    }
+
+    expect(finalResult.status).toBe("completed");
+    const outcome = finalResult.result as Record<string, unknown>;
+    expect(outcome.status).toBe("generation_failed");
+    expect(outcome.errorCode).toBe("REPORT_PROVIDER_UNAVAILABLE");
+    expect(outcome.retryable).toBe(true);
+    expect(outcome.report).toBeUndefined();
+    expect(outcome.diagnoses).toBeUndefined();
+    expect(outcome.confidence).toBeUndefined();
+    expect(outcome.urgency).toBeUndefined();
+  }, 10_000);
 
   test("POST /v1/diagnose returns 413 for oversized payload", async () => {
     // MAX_PAYLOAD_BYTES is 1,000,000 — create a body that exceeds it

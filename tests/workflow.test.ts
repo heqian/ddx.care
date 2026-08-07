@@ -14,8 +14,8 @@ import {
   generateFinalReport,
   formatToolArgs,
   mockDiagnosis,
-  createMinimalReport,
 } from "../src/backend/workflows/diagnostic-workflow";
+import { reportOutcomeSchema } from "../src/shared/report-outcome";
 import { summarizeToolResult } from "../src/backend/workflows/tool-result-summary";
 import { createStepEventHandler } from "../src/backend/workflows/on-step-finish";
 import type { ProgressEvent } from "../src/backend/progress-store";
@@ -235,10 +235,14 @@ describe("formatReport", () => {
     recommendedImmediateActions:
       "Administer IV antihypertensive. Order STAT CT head.",
   };
+  const sampleOutcome = {
+    status: "available" as const,
+    diagnosisReport: sampleReport,
+  };
 
   test("formats ranked diagnoses with correct rank numbers", async () => {
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: sampleReport },
+      inputData: sampleOutcome,
     } as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses).toHaveLength(2);
@@ -248,7 +252,7 @@ describe("formatReport", () => {
 
   test("maps diagnosis fields correctly", async () => {
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: sampleReport },
+      inputData: sampleOutcome,
     } as Parameters<typeof formatReport.execute>[0]);
 
     const first = result.report.diagnoses[0];
@@ -260,7 +264,7 @@ describe("formatReport", () => {
 
   test("splits evidence into arrays", async () => {
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: sampleReport },
+      inputData: sampleOutcome,
     } as Parameters<typeof formatReport.execute>[0]);
 
     const first = result.report.diagnoses[0];
@@ -277,7 +281,7 @@ describe("formatReport", () => {
 
   test("preserves semicolons in evidence text", async () => {
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: sampleReport },
+      inputData: sampleOutcome,
     } as Parameters<typeof formatReport.execute>[0]);
 
     // Second diagnosis has semicolons in supportingEvidence — should NOT split
@@ -289,7 +293,7 @@ describe("formatReport", () => {
 
   test("normalizes urgency to lowercase", async () => {
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: sampleReport },
+      inputData: sampleOutcome,
     } as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses[0].urgency).toBe("emergent");
@@ -298,7 +302,7 @@ describe("formatReport", () => {
 
   test("includes disclaimer and timestamp", async () => {
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: sampleReport },
+      inputData: sampleOutcome,
     } as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.disclaimer).toContain("RESEARCH USE ONLY");
@@ -310,7 +314,7 @@ describe("formatReport", () => {
 
   test("preserves specialists and metadata", async () => {
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: sampleReport },
+      inputData: sampleOutcome,
     } as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.specialistsConsulted).toHaveLength(2);
@@ -333,7 +337,7 @@ describe("formatReport", () => {
     };
 
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: emptyReport },
+      inputData: { status: "available", diagnosisReport: emptyReport },
     } as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses).toEqual([]);
@@ -360,7 +364,7 @@ describe("formatReport", () => {
     };
 
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: sparseReport },
+      inputData: { status: "available", diagnosisReport: sparseReport },
     } as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses[0].name).toBe("Unknown");
@@ -971,12 +975,15 @@ describe("runDiagnosis - CMO parsing logic", () => {
     });
 
     expect(callCount).toBe(5);
-    expect(result.diagnosisReport.rankedDiagnoses[0].diagnosisName).toBe(
-      "Mock Condition",
-    );
+    expect(result.status).toBe("available");
+    if (result.status === "available") {
+      expect(result.diagnosisReport.rankedDiagnoses[0].diagnosisName).toBe(
+        "Mock Condition",
+      );
+    }
   });
 
-  test("returns a minimal report if CMO completely fails to parse even for the final report", async () => {
+  test("returns generation_failed if CMO returns empty responses", async () => {
     let callCount = 0;
     const mockCmoGenerate = mock(async () => {
       callCount++;
@@ -1002,12 +1009,13 @@ describe("runDiagnosis - CMO parsing logic", () => {
       runId: "mock-run-id",
     });
 
-    expect(result.diagnosisReport.chiefComplaint).toBe(
-      "Unable to generate complete diagnosis",
-    );
-    expect(result.diagnosisReport.rankedDiagnoses[0].confidencePercentage).toBe(
-      0,
-    );
+    expect(result).toMatchObject({
+      status: "generation_failed",
+      errorCode: "REPORT_EMPTY_RESPONSE",
+      retryable: true,
+    });
+    expect(reportOutcomeSchema.safeParse(result).success).toBe(true);
+    expect(result).not.toHaveProperty("diagnosisReport");
     expect(callCount).toBeGreaterThanOrEqual(6);
   });
 
@@ -1067,11 +1075,14 @@ describe("runDiagnosis - CMO parsing logic", () => {
     });
 
     expect(callCount).toBe(3);
-    expect(result.diagnosisReport.chiefComplaint).toBe("Headache");
-    expect(result.diagnosisReport.rankedDiagnoses).toHaveLength(1);
+    expect(result.status).toBe("available");
+    if (result.status === "available") {
+      expect(result.diagnosisReport.chiefComplaint).toBe("Headache");
+      expect(result.diagnosisReport.rankedDiagnoses).toHaveLength(1);
+    }
   });
 
-  test("falls back to minimal report when retry also fails schema validation", async () => {
+  test("returns generation_failed when correction also fails schema validation", async () => {
     let callCount = 0;
     const mockCmoGenerate = mock(async () => {
       callCount++;
@@ -1109,13 +1120,12 @@ describe("runDiagnosis - CMO parsing logic", () => {
     });
 
     expect(callCount).toBe(3);
-    // Should get a minimal report since raw output doesn't validate
-    expect(result.diagnosisReport.chiefComplaint).toBe(
-      "Unable to generate complete diagnosis",
-    );
-    expect(result.diagnosisReport.rankedDiagnoses[0].confidencePercentage).toBe(
-      0,
-    );
+    expect(result).toMatchObject({
+      status: "generation_failed",
+      errorCode: "REPORT_VALIDATION_FAILED",
+      retryable: false,
+    });
+    expect(result).not.toHaveProperty("diagnosisReport");
   });
 
   test("passes abort signal to CMO generate and withRetry", async () => {
@@ -1243,7 +1253,10 @@ describe("runDiagnosis - CMO parsing logic", () => {
       runId: "specialist-fail-id",
     });
 
-    expect(result.diagnosisReport.specialistsConsulted).toHaveLength(1);
+    expect(result.status).toBe("available");
+    if (result.status === "available") {
+      expect(result.diagnosisReport.specialistsConsulted).toHaveLength(1);
+    }
   });
 
   test("falls back to max-rounds final report when CMO never returns isFinal", async () => {
@@ -1284,7 +1297,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       runId: "max-rounds-id",
     });
 
-    expect(result.diagnosisReport).toBeDefined();
+    expect(["available", "generation_failed"]).toContain(result.status);
     expect(round).toBeGreaterThanOrEqual(1);
   });
 
@@ -1341,7 +1354,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       runId: "empty-specialists-id",
     });
 
-    expect(result.diagnosisReport).toBeDefined();
+    expect(result.status).toBe("available");
     expect(callCount).toBe(2);
   });
 });
@@ -1368,7 +1381,10 @@ describe("formatReport — malformed input handling", () => {
     };
 
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: sparseReport as any },
+      inputData: {
+        status: "available",
+        diagnosisReport: sparseReport as any,
+      },
     } as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.chiefComplaint).toBe("");
@@ -1405,7 +1421,7 @@ describe("formatReport — malformed input handling", () => {
     };
 
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: report as any },
+      inputData: { status: "available", diagnosisReport: report as any },
     } as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses[0].urgency).toBe("routine");
@@ -1432,7 +1448,7 @@ describe("formatReport — malformed input handling", () => {
     };
 
     const result = await formatReport.execute({
-      inputData: { diagnosisReport: report },
+      inputData: { status: "available", diagnosisReport: report },
     } as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses[0].supportingEvidence).toEqual([]);
@@ -1543,9 +1559,11 @@ describe("mockDiagnosis", () => {
       stepDelayMs: 0,
     });
 
-    expect(result.diagnosisReport).toBeDefined();
-    expect(result.diagnosisReport.chiefComplaint).toBeTruthy();
-    expect(result.diagnosisReport.rankedDiagnoses).toHaveLength(3);
+    expect(result.status).toBe("available");
+    if (result.status === "available") {
+      expect(result.diagnosisReport.chiefComplaint).toBeTruthy();
+      expect(result.diagnosisReport.rankedDiagnoses).toHaveLength(3);
+    }
   });
 
   test("emits round_start events", async () => {
@@ -1745,8 +1763,11 @@ describe("generateFinalReport", () => {
       jobId: "test",
     });
 
-    expect(result.chiefComplaint).toBe("Headache");
-    expect(result.rankedDiagnoses).toHaveLength(1);
+    expect(result.status).toBe("available");
+    if (result.status === "available") {
+      expect(result.diagnosisReport.chiefComplaint).toBe("Headache");
+      expect(result.diagnosisReport.rankedDiagnoses).toHaveLength(1);
+    }
     expect(mockCmo.generate).toHaveBeenCalledTimes(1);
     // No retry messages should be emitted
     expect(emitted.filter((m) => m.includes("validation failed"))).toHaveLength(
@@ -1781,11 +1802,14 @@ describe("generateFinalReport", () => {
     });
 
     expect(callCount).toBe(2);
-    expect(result.chiefComplaint).toBe("Headache");
-    expect(emitted.some((m) => m.includes("validation failed"))).toBe(true);
+    expect(result.status).toBe("available");
+    if (result.status === "available") {
+      expect(result.diagnosisReport.chiefComplaint).toBe("Headache");
+    }
+    expect(emitted.some((m) => m.includes("first report attempt"))).toBe(true);
   });
 
-  test("falls back to minimal report when both attempts fail schema validation", async () => {
+  test("returns generation_failed when correction fails schema validation", async () => {
     const rawOutput = { chiefComplaint: "Raw fallback", broken: true };
     const mockCmo = {
       generate: mock(async () => ({ object: rawOutput })),
@@ -1805,21 +1829,27 @@ describe("generateFinalReport", () => {
     });
 
     expect(mockCmo.generate).toHaveBeenCalledTimes(2);
-    // Should get a minimal report since raw output doesn't validate
-    expect(result.chiefComplaint).toBe("Unable to generate complete diagnosis");
-    expect(result.rankedDiagnoses[0].confidencePercentage).toBe(0);
-    expect(
-      emitted.some(
-        (m) => m.includes("minimal report") || m.includes("Minimal"),
-      ),
-    ).toBe(true);
+    expect(result).toMatchObject({
+      status: "generation_failed",
+      errorCode: "REPORT_VALIDATION_FAILED",
+      retryable: false,
+    });
+    expect(reportOutcomeSchema.safeParse(result).success).toBe(true);
+    expect(result).not.toHaveProperty("diagnosisReport");
+    expect(emitted.some((m) => m.includes("could not be generated"))).toBe(
+      true,
+    );
   });
 
-  test("respects abort signal", async () => {
+  test("propagates abort instead of returning generation_failed", async () => {
     const ac = new AbortController();
-    ac.abort();
+    const abortError = new Error("Cancelled during report generation");
+    abortError.name = "AbortError";
     const mockCmo = {
-      generate: mock(async () => ({ object: validReport })),
+      generate: mock(async () => {
+        ac.abort(abortError);
+        throw abortError;
+      }),
     };
     const emit = mock(() => {});
 
@@ -1833,10 +1863,11 @@ describe("generateFinalReport", () => {
         logContext: { jobId: "abort-test" },
         jobId: "abort-test",
       }),
-    ).rejects.toThrow("Aborted");
+    ).rejects.toThrow("Cancelled during report generation");
+    expect(mockCmo.generate).toHaveBeenCalledTimes(1);
   });
 
-  test("returns minimal report when structured output throws and fallback yields nothing", async () => {
+  test("recovers when the initial structured-output call throws", async () => {
     let callCount = 0;
     const mockCmo = {
       generate: mock(async () => {
@@ -1846,7 +1877,7 @@ describe("generateFinalReport", () => {
             "Structured output schema validation failed",
           );
         }
-        return { text: undefined, object: undefined };
+        return { object: validReport };
       }),
     };
     const emitted: string[] = [];
@@ -1863,12 +1894,14 @@ describe("generateFinalReport", () => {
       jobId: "terminal-fallback-test",
     });
 
-    expect(result.chiefComplaint).toBe("Unable to generate complete diagnosis");
-    expect(result.rankedDiagnoses[0].confidencePercentage).toBe(0);
+    expect(result.status).toBe("available");
+    if (result.status === "available") {
+      expect(result.diagnosisReport.chiefComplaint).toBe("Headache");
+    }
     expect(callCount).toBe(2);
   });
 
-  test("terminal fallback minimal report message mentions fallback exhaustion", async () => {
+  test("returns REPORT_EMPTY_RESPONSE when both responses are empty", async () => {
     const mockCmo = {
       generate: mock(async () => ({ text: undefined, object: undefined })),
     };
@@ -1886,12 +1919,42 @@ describe("generateFinalReport", () => {
       jobId: "message-test",
     });
 
-    expect(result.rankedDiagnoses[0].rationale).toContain("fallback");
-    expect(
-      emitted.some((m) =>
-        m.toLowerCase().includes("all report generation strategies exhausted"),
-      ),
-    ).toBe(true);
+    expect(result).toMatchObject({
+      status: "generation_failed",
+      errorCode: "REPORT_EMPTY_RESPONSE",
+      retryable: true,
+    });
+    expect(result).not.toHaveProperty("diagnosisReport");
+    expect(emitted.some((m) => m.includes("could not be generated"))).toBe(
+      true,
+    );
+  });
+
+  test("returns REPORT_PROVIDER_UNAVAILABLE when the provider is down", async () => {
+    const mockCmo = {
+      generate: mock(async () => {
+        throw new Error("Provider service unavailable");
+      }),
+    };
+    const ac = new AbortController();
+
+    const result = await generateFinalReport({
+      cmo: mockCmo as any,
+      prompt: "Generate final report",
+      builtContextHistory: "context",
+      abortSignal: ac.signal,
+      emit: mock(() => {}) as any,
+      logContext: { jobId: "provider-outage-test" },
+      jobId: "provider-outage-test",
+    });
+
+    expect(mockCmo.generate).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      status: "generation_failed",
+      errorCode: "REPORT_PROVIDER_UNAVAILABLE",
+      retryable: true,
+    });
+    expect(result).not.toHaveProperty("diagnosisReport");
   });
 });
 
@@ -2420,42 +2483,5 @@ describe("createStepEventHandler", () => {
     const callIndex = events.findIndex((e) => e.eventType === "tool_call");
     const resultIndex = events.findIndex((e) => e.eventType === "tool_result");
     expect(callIndex).toBeLessThan(resultIndex);
-  });
-});
-
-describe("createMinimalReport", () => {
-  test("produces a report that passes Zod validation", () => {
-    const report = createMinimalReport("test error context");
-    const validated = diagnosisReportSchema.safeParse(report);
-    expect(validated.success).toBe(true);
-  });
-
-  test("includes error context in rationale", () => {
-    const report = createMinimalReport("API timeout after 30000ms");
-    expect(report.rankedDiagnoses[0].rationale).toContain(
-      "API timeout after 30000ms",
-    );
-  });
-
-  test("has 0% confidence and Routine urgency", () => {
-    const report = createMinimalReport("error");
-    expect(report.rankedDiagnoses[0].confidencePercentage).toBe(0);
-    expect(report.rankedDiagnoses[0].urgency).toBe("Routine");
-  });
-
-  test("has empty specialistsConsulted and crossSpecialtyObservations", () => {
-    const report = createMinimalReport("error");
-    expect(report.specialistsConsulted).toEqual([]);
-    expect(report.crossSpecialtyObservations).toBe("");
-  });
-
-  test("includes all required DiagnosisReport fields", () => {
-    const report = createMinimalReport("error");
-    expect(report).toHaveProperty("chiefComplaint");
-    expect(report).toHaveProperty("patientSummary");
-    expect(report).toHaveProperty("specialistsConsulted");
-    expect(report).toHaveProperty("rankedDiagnoses");
-    expect(report).toHaveProperty("crossSpecialtyObservations");
-    expect(report).toHaveProperty("recommendedImmediateActions");
   });
 });

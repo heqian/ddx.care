@@ -87,8 +87,9 @@ Shared utilities:
 
 - `diagnostic-workflow.ts` — Two-step Mastra workflow: `runDiagnosis` → `formatReport`
   - **runDiagnosis**: Multi-round CMO supervisor loop. The CMO decides which specialists to consult per round, delegates via `limitConcurrency` (default: max 1 concurrent), and uses `withRetry` (3 attempts, exponential backoff). Continues up to `MAX_DIAGNOSIS_ROUNDS` (default 3) or until the CMO declares `isFinal`. Timeout: 900s (15 min). Supports agent-to-agent context sharing via `SPECIALIST_CONTEXT_MODE` — the CMO can provide per-specialist "context directives" so specialists see prior consultation findings.
-  - **formatReport**: Transforms raw diagnosis into frontend-friendly format with ranked diagnoses, urgency levels, evidence arrays, and a disclaimer.
-- Exports `reportSchema` (Zod schema for the formatted report) and `diagnosticWorkflow`.
+  - **Report generation**: Uses one initial structured generation and one corrected structured generation. Valid output becomes an `available` outcome; exhausted validation, empty-response, or provider failures become `generation_failed` without fabricated medical content. Cancellation and timeout still propagate as workflow failures.
+  - **formatReport**: Converts validated raw diagnosis data into the `available` variant with ranked diagnoses, urgency levels, evidence arrays, generation metadata, and a disclaimer. It passes `generation_failed` through unchanged.
+- Shared runtime schemas and derived types (`DiagnosisReport`, `ReportOutcome`, error codes) live in `src/shared/report-outcome.ts`.
 - **Mock mode**: When `MOCK_LLM=1`, `runDiagnosis` returns a canned response without calling real LLMs.
 - Utility exports: `limitConcurrency`, `withRetry`, `splitToList` (also used in tests).
 
@@ -114,7 +115,7 @@ Shared utilities:
 #### Progress Store (`src/backend/progress-store.ts`)
 
 - `JobStore` class (extends `EventTarget`) — SQLite-backed (`bun:sqlite`) job persistence.
-- Stores job status (`pending` | `completed` | `failed`), progress events (JSON array), and results.
+- Stores job status (`pending` | `completed` | `failed`), progress events (JSON array), and a schema-validated `ReportOutcome` result for completed jobs. Both `available` and `generation_failed` are completed jobs; cancellation, timeout, and unrecoverable workflow errors are failed jobs.
 - Pub/sub via `CustomEvent` dispatch for real-time WebSocket updates.
 - TTL-based cleanup: `cleanupExpired()` called every 5 minutes, removes jobs older than 60 minutes.
 - `markStalePending()` called on startup, marks all `pending` jobs as `failed("Server restarted — job interrupted")`.
@@ -143,7 +144,7 @@ All constants centralized here, read from environment variables with defaults:
 
 1. **InputDashboard** — Case submission form with three text areas (medical history, conversation transcript, lab results). Includes speech-to-text input (Web Speech API with typed `SpeechRecognition` interfaces in `types/speech.d.ts`), file drop zones for uploading text files, and agent grid showing available specialists.
 2. **WaitingRoom** — Real-time progress display during diagnosis. Shows agent status cards with progress events streamed via WebSocket. Displays a warning banner if agent list fails to load.
-3. **ResultsView** — Diagnosis report with ranked diagnoses, confidence badges, urgency badges, specialist consult notes, and print/export functionality.
+3. **ResultsView** — Branches on `ReportOutcome` before reading report data. `available` renders ranked diagnoses, confidence and urgency badges, consult notes, and print/share controls. `generation_failed` renders only unavailable-report, retry, and professional-evaluation guidance.
 
 #### Components (`src/frontend/components/`)
 
@@ -162,8 +163,8 @@ All constants centralized here, read from environment variables with defaults:
 #### Other Frontend Files
 
 - `context/ThemeContext.tsx` — Light/dark mode toggle
-- `api/client.ts` — API client functions (`submitDiagnosis`, `getJobStatus`, `getAgents`, `cancelDiagnosis`)
-- `api/types.ts` — Shared TypeScript types (`DiagnoseRequest`, `StatusResponse`, `WsMessage`, etc.). `DiagnosisReport` type is derived from the backend Zod schema via `z.infer<typeof reportSchema>`.
+- `api/client.ts` — API client functions (`submitDiagnosis`, `getJobStatus`, `getAgents`, `cancelDiagnosis`). Completed status responses are runtime-validated with the shared `reportOutcomeSchema`.
+- `api/types.ts` — Frontend API types (`DiagnoseRequest`, `StatusResponse`, `WsMessage`, etc.). `DiagnosisReport` and `ReportOutcome` are re-exported from the shared schema module rather than duplicated.
 - `types/speech.d.ts` — Ambient type declarations for `SpeechRecognition`, `SpeechRecognitionEvent`, etc.
 
 ### Server (`index.ts`)
@@ -172,11 +173,11 @@ Entry point. Creates the `Bun.serve()` instance with:
 
 **Routes** (defined in `src/backend/api/routes.ts`):
 - `POST /v1/diagnose` — Submit a diagnostic case. Validates input (Zod schema, payload size limit), checks rate limit (per-IP + concurrent workflow cap), starts async workflow, returns `202 Accepted` with `jobId` and `token`.
-- `GET /v1/status/:jobId` — Poll job status and progress events. Requires `?token=<hmac>` query parameter when `WS_TOKEN_SECRET` is set (403 on missing/invalid token). Token is verified before job existence lookup to prevent enumeration (ordering: format check 400 → token check 403 → existence 404).
+- `GET /v1/status/:jobId` — Poll job status and progress events. A completed response contains a direct `result: ReportOutcome`; there is no nested workflow-result wrapper. Requires `?token=<hmac>` query parameter when `WS_TOKEN_SECRET` is set (403 on missing/invalid token). Token is verified before job existence lookup to prevent enumeration (ordering: format check 400 → token check 403 → existence 404).
 - `DELETE /v1/diagnose/:jobId` — Cancel a running diagnostic workflow. Requires `?token=<hmac>` query parameter when `WS_TOKEN_SECRET` is set (403 on missing/invalid token). Aborts the workflow's `AbortController`, marks the job as `failed("Cancelled by user")`, and frees the concurrent workflow slot.
 - `GET /v1/health` — Health check endpoint (uptime, active workflows, SQLite connectivity).
 - `GET /v1/agents` — List available specialist agents (id, name, description).
-- `GET /ws?jobId=...&token=...` — WebSocket for real-time progress streaming. Validates `Origin` header against `TRUSTED_ORIGINS` (or `ALLOWED_ORIGINS` when not set). Validates HMAC token when `WS_TOKEN_SECRET` is set. Replays history on connect, subscribes to live updates.
+- `GET /ws?jobId=...&token=...` — WebSocket for real-time progress streaming. Completion messages are `{ type: "completed", jobId, result: ReportOutcome }`. Validates `Origin` header against `TRUSTED_ORIGINS` (or `ALLOWED_ORIGINS` when not set). Validates HMAC token when `WS_TOKEN_SECRET` is set. Replays history on connect, subscribes to live updates.
 - `OPTIONS /v1/*` — CORS preflight catch-all.
 - `/*` — SPA fallback (serves the bundled `index.html` via Bun's HTMLBundle route value; security headers applied by Caddy in production, since HTMLBundle routes bypass the app's `corsHeaders()`).
 
@@ -185,8 +186,14 @@ Entry point. Creates the `Bun.serve()` instance with:
 **Content-Security-Policy**: The CSP (`CSP_VALUE` in `src/backend/api/routes.ts`) is applied to all `/v1/*` API responses via `corsHeaders()`. For HTML responses, the same CSP is applied by the Caddyfile's `header` directive in production. The CSP enforces: `default-src 'self'`, `script-src 'self'` (no `'unsafe-inline'`), `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` (Google Fonts CSS allowlisted; `'unsafe-inline'` retained for Tailwind v4 runtime styles), `font-src 'self' https://fonts.gstatic.com`, `img-src 'self' data:`, `connect-src 'self'` (same-origin only; no bare `ws:`/`wss:` schemes — `'self'` covers same-origin WebSocket), `frame-ancestors 'none'`, `base-uri 'none'`, `form-action 'self'`, `object-src 'none'`. HSTS is added by Caddy (`Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`).
 
 **WebSocket** (defined in `src/backend/api/websocket.ts`):
-- On open: validates job exists, replays progress history, subscribes to live events.
+- On open: validates job exists, replays progress history, and either replays the terminal `ReportOutcome` or subscribes to live events.
 - On close: unsubscribes from progress store.
+
+**Report outcome deployment:**
+- Deploy backend and frontend together because the direct `ReportOutcome` response is a breaking wire change.
+- Clear legacy persisted jobs during deployment or allow the default one-hour job TTL to expire before serving them to the new client.
+- Roll back backend and frontend together. Do not restore the historical 0%-confidence, `Routine` fake diagnosis fallback.
+- Monitor job terminal status separately from report outcome status: `completed` can contain either `available` or `generation_failed`.
 
 **Graceful shutdown**:
 - Handles `SIGINT` and `SIGTERM` signals.

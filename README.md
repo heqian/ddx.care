@@ -83,6 +83,40 @@ See [`.env.example`](.env.example) for a template.
 | `GET` | `/v1/agents` | List available specialist agents |
 | `GET` | `/ws?jobId=...` | WebSocket for real-time progress streaming |
 
+### Report Outcome Contract
+
+`GET /v1/status/:jobId` returns a direct `ReportOutcome` in `result` when the
+job status is `completed`. WebSocket completion messages use the same direct
+shape in `{ "type": "completed", "jobId": "...", "result": ReportOutcome }`.
+This is a breaking replacement for the previous nested result shape.
+
+```ts
+type ReportOutcome =
+  | {
+      status: "available";
+      report: DiagnosisReport;
+      generatedAt: string;
+      disclaimer: string;
+    }
+  | {
+      status: "generation_failed";
+      errorCode:
+        | "REPORT_PROVIDER_UNAVAILABLE"
+        | "REPORT_VALIDATION_FAILED"
+        | "REPORT_EMPTY_RESPONSE";
+      message: string;
+      retryable: boolean;
+      safetyGuidance: string;
+    };
+```
+
+A report-generation outage settles the job as `completed` with
+`result.status: "generation_failed"`; it does not contain diagnoses,
+confidence, urgency, or treatment recommendations. Cancellation, timeout, and
+unrecoverable workflow errors instead settle the job as `failed` without a
+report outcome. Clients must branch on the job status first and then on
+`result.status` before reading report fields.
+
 ## Tech Stack
 
 - **Runtime:** Bun

@@ -104,8 +104,11 @@ function App() {
     }
     setRetrying(true);
     try {
-      const { jobId: newJobId } = await submitDiagnosis(lastPayload.current);
+      const { jobId: newJobId, token } = await submitDiagnosis(
+        lastPayload.current,
+      );
       setJobResult(null);
+      setWsToken(token);
       navigate({ screen: "waiting", jobId: newJobId });
     } catch {
       handleCancel();
@@ -148,7 +151,12 @@ function App() {
       {route.screen === "results" &&
         jobResult &&
         jobResult.status !== "failed" && (
-          <ResultsView result={jobResult} onNewCase={handleReset} />
+          <ResultsView
+            result={jobResult}
+            onNewCase={handleReset}
+            onRetry={handleRetry}
+            retrying={retrying}
+          />
         )}
       {route.screen === "results" && jobResult?.status === "failed" && (
         <div className="max-w-md mx-auto text-center py-16 space-y-4">

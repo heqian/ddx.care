@@ -4,6 +4,7 @@ import type {
   StatusResponse,
   AgentsResponse,
 } from "./types";
+import { reportOutcomeSchema } from "../../shared/report-outcome";
 
 export interface ApiError extends Error {
   status: number;
@@ -53,7 +54,14 @@ export async function getJobStatus(
   if (!res.ok) {
     await handleResponseText(res);
   }
-  return res.json();
+  const status = (await res.json()) as StatusResponse;
+  if (status.status === "completed") {
+    return {
+      ...status,
+      result: reportOutcomeSchema.parse(status.result),
+    };
+  }
+  return status;
 }
 
 export async function getAgents(): Promise<AgentsResponse> {

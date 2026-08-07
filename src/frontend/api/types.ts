@@ -1,6 +1,14 @@
-import type { z } from "zod";
-import type { reportSchema } from "../../backend/workflows/diagnostic-workflow";
 import type { ProgressEventType } from "../../backend/progress-store";
+import type {
+  DiagnosisReport,
+  ReportOutcome,
+} from "../../shared/report-outcome";
+
+export type {
+  AvailableReportOutcome,
+  DiagnosisReport,
+  ReportOutcome,
+} from "../../shared/report-outcome";
 
 export interface DiagnoseRequest {
   medicalHistory: string;
@@ -19,14 +27,7 @@ export interface SpecialistConsulted {
   keyFindings: string;
 }
 
-export type DiagnosisReport = z.infer<typeof reportSchema>;
 export type Diagnosis = DiagnosisReport["diagnoses"][number];
-
-export interface DiagnosisResult {
-  report: DiagnosisReport;
-  generatedAt: string;
-  disclaimer: string;
-}
 
 export type ToolStatus = "running" | "success" | "error";
 
@@ -58,11 +59,7 @@ export interface StatusResponse {
   jobId: string;
   status: "pending" | "completed" | "failed";
   progress?: ProgressEvent[];
-  result?: {
-    status: string;
-    result?: DiagnosisResult;
-    error?: string;
-  };
+  result?: ReportOutcome;
   error?: string;
 }
 
@@ -85,8 +82,6 @@ export type WsMessage =
   | {
       type: "completed";
       jobId: string;
-      result:
-        | { result?: DiagnosisResult; error?: string; status: string }
-        | DiagnosisResult;
+      result: ReportOutcome;
     }
   | { type: "failed"; jobId: string; error: string };

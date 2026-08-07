@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useMemo } from "react";
 import {
   ArrowPathIcon,
   DocumentChartBarIcon,
+  ExclamationTriangleIcon,
   PrinterIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "../components/ui/Button";
@@ -9,11 +10,13 @@ import { DiagnosisCard } from "../components/diagnosis/DiagnosisCard";
 import { ConsultNotes } from "../components/diagnosis/ConsultNotes";
 import { marked } from "marked";
 import DOMPurify from "isomorphic-dompurify";
-import type { StatusResponse } from "../api/types";
+import type { AvailableReportOutcome, StatusResponse } from "../api/types";
 
 interface ResultsViewProps {
   result: StatusResponse;
   onNewCase: () => void;
+  onRetry?: () => void;
+  retrying?: boolean;
 }
 
 type Tab = "diagnoses" | "consult";
@@ -23,12 +26,98 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "consult", label: "Full Report" },
 ];
 
-export function ResultsView({ result, onNewCase }: ResultsViewProps) {
+export function ResultsView({
+  result,
+  onNewCase,
+  onRetry,
+  retrying = false,
+}: ResultsViewProps) {
+  const outcome = result.result;
+
+  if (!outcome) {
+    return (
+      <div className="text-center space-y-4">
+        <p className="text-lg text-danger">No report data available.</p>
+        <Button onClick={onNewCase}>Start New Case</Button>
+      </div>
+    );
+  }
+
+  if (outcome.status === "generation_failed") {
+    return (
+      <section
+        className="mx-auto max-w-2xl overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm dark:border-amber-900/70 dark:bg-slate-900"
+        aria-labelledby="report-unavailable-title"
+      >
+        <div className="border-b border-amber-200 bg-amber-50 px-6 py-7 dark:border-amber-900/70 dark:bg-amber-950/30 sm:px-8">
+          <div className="flex items-start gap-4">
+            <div className="rounded-full border border-amber-300 bg-white p-3 text-amber-700 shadow-sm dark:border-amber-800 dark:bg-slate-900 dark:text-amber-400">
+              <ExclamationTriangleIcon className="h-6 w-6" aria-hidden="true" />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700 dark:text-amber-400">
+                No medical conclusions generated
+              </p>
+              <h1
+                id="report-unavailable-title"
+                className="font-display text-2xl text-slate-950 dark:text-white sm:text-3xl"
+              >
+                Diagnostic Report Unavailable
+              </h1>
+              <p className="text-sm leading-6 text-slate-700 dark:text-slate-300">
+                {outcome.message}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6 px-6 py-7 sm:px-8">
+          <div className="border-l-2 border-danger pl-4">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+              Seek professional evaluation
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              {outcome.safetyGuidance}
+            </p>
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Reference code: {outcome.errorCode}
+          </p>
+
+          <div className="flex flex-col gap-3 border-t border-slate-200 pt-6 dark:border-slate-800 sm:flex-row">
+            {outcome.retryable && onRetry && (
+              <Button onClick={onRetry} disabled={retrying}>
+                <ArrowPathIcon className="h-4 w-4" aria-hidden="true" />
+                {retrying ? "Retrying..." : "Try Again"}
+              </Button>
+            )}
+            <Button variant="secondary" onClick={onNewCase}>
+              Start New Case
+            </Button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return <AvailableResultsView outcome={outcome} onNewCase={onNewCase} />;
+}
+
+interface AvailableResultsViewProps {
+  outcome: AvailableReportOutcome;
+  onNewCase: () => void;
+}
+
+function AvailableResultsView({
+  outcome,
+  onNewCase,
+}: AvailableResultsViewProps) {
   const [tab, setTab] = useState<Tab>("diagnoses");
   const tabListRef = useRef<HTMLDivElement>(null);
 
-  const report = result.result?.result?.report;
-  const generatedAt = result.result?.result?.generatedAt;
+  const report = outcome.report;
+  const generatedAt = outcome.generatedAt;
 
   const renderMarkdown = useCallback(
     (text: string) =>
@@ -103,15 +192,6 @@ export function ResultsView({ result, onNewCase }: ResultsViewProps) {
     },
     [selectTab],
   );
-
-  if (!report) {
-    return (
-      <div className="text-center space-y-4">
-        <p className="text-lg text-danger">No report data available.</p>
-        <Button onClick={onNewCase}>Start New Case</Button>
-      </div>
-    );
-  }
 
   const topDiagnoses = report.diagnoses.slice(0, 3);
   const otherDiagnoses = report.diagnoses.slice(3);

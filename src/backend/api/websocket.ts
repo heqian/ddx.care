@@ -1,4 +1,6 @@
 import type { ServerWebSocket } from "bun";
+import type { ReportOutcome } from "../../shared/report-outcome";
+import type { ProgressEvent } from "../progress-store";
 import { progressStore } from "../progress-store";
 
 const PING_INTERVAL_MS = 30000;
@@ -11,11 +13,10 @@ export interface WsData {
   pongTimer?: ReturnType<typeof setTimeout>;
 }
 
-interface ProgressEventData {
-  type: string;
-  jobId: string;
-  [key: string]: unknown;
-}
+type ProgressEventData =
+  | { type: "progress"; jobId: string; event: ProgressEvent }
+  | { type: "completed"; jobId: string; result: ReportOutcome }
+  | { type: "failed"; jobId: string; error: string };
 
 export const websocketHandlers = {
   open(ws: ServerWebSocket<WsData>) {

@@ -1,5 +1,9 @@
 import { Database, type Statement } from "bun:sqlite";
 import { logger } from "./utils/logger";
+import {
+  reportOutcomeSchema,
+  type ReportOutcome,
+} from "../shared/report-outcome";
 
 export type ProgressEventType =
   | "round_start"
@@ -37,7 +41,7 @@ interface JobRow {
 
 export interface JobEntry {
   status: "pending" | "completed" | "failed";
-  result?: unknown;
+  result?: ReportOutcome;
   error?: string;
   createdAt: number;
   progress: ProgressEvent[];
@@ -103,7 +107,9 @@ export class JobStore extends EventTarget {
 
     return {
       status: row.status as JobEntry["status"],
-      result: row.result ? JSON.parse(row.result) : undefined,
+      result: row.result
+        ? reportOutcomeSchema.parse(JSON.parse(row.result))
+        : undefined,
       error: row.error || undefined,
       createdAt: row.createdAt,
       progress: JSON.parse(row.progress),
@@ -124,7 +130,7 @@ export class JobStore extends EventTarget {
     );
   }
 
-  complete(jobId: string, result: unknown): void {
+  complete(jobId: string, result: ReportOutcome): void {
     const current = this.getStmt.get(jobId) as JobRow | null;
     if (current?.status === "failed") {
       logger.warn("complete_skipped_already_failed", {
@@ -133,11 +139,12 @@ export class JobStore extends EventTarget {
       });
       return;
     }
-    this.completeStmt.run("completed", JSON.stringify(result), jobId);
+    const validatedResult = reportOutcomeSchema.parse(result);
+    this.completeStmt.run("completed", JSON.stringify(validatedResult), jobId);
 
     this.dispatchEvent(
       new CustomEvent(`progress-${jobId}`, {
-        detail: { type: "completed", jobId, result },
+        detail: { type: "completed", jobId, result: validatedResult },
       }),
     );
   }

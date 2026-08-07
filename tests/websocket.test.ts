@@ -1,6 +1,27 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { progressStore } from "../src/backend/progress-store";
 import { websocketHandlers, type WsData } from "../src/backend/api/websocket";
+import {
+  createGenerationFailedReportOutcome,
+  type AvailableReportOutcome,
+} from "../src/shared/report-outcome";
+
+const availableOutcome: AvailableReportOutcome = {
+  status: "available",
+  report: {
+    chiefComplaint: "Headache",
+    patientSummary: "Adult with recurrent headache",
+    specialistsConsulted: [],
+    diagnoses: [],
+    crossSpecialtyObservations: "None",
+    recommendedImmediateActions: "Clinical follow-up",
+  },
+  generatedAt: "2026-01-15T10:30:00.000Z",
+  disclaimer: "Research use only",
+};
+const generationFailedOutcome = createGenerationFailedReportOutcome(
+  "REPORT_VALIDATION_FAILED",
+);
 
 // Minimal mock of Bun's ServerWebSocket for unit testing
 class MockWebSocket {
@@ -74,17 +95,24 @@ describe("WebSocket handler — open", () => {
     expect(msg.error).toBe("Job not found");
   });
 
-  test("closes after sending result for completed job", () => {
-    progressStore.createJob("job-2");
-    progressStore.complete("job-2", { done: true });
+  test.each([
+    ["available", availableOutcome],
+    ["generation_failed", generationFailedOutcome],
+  ] as const)("sends the exact %s payload for a completed job", (_, outcome) => {
+    const jobId = `job-completed-${outcome.status}`;
+    progressStore.createJob(jobId);
+    progressStore.complete(jobId, outcome);
 
-    const ws = new MockWebSocket({ jobId: "job-2" });
+    const ws = new MockWebSocket({ jobId });
     websocketHandlers.open(ws as any);
 
     expect(ws.closed).toBe(true);
     expect(ws.messages).toHaveLength(1);
-    const msg = JSON.parse(ws.messages[0]);
-    expect(msg.type).toBe("completed");
+    expect(JSON.parse(ws.messages[0])).toEqual({
+      type: "completed",
+      jobId,
+      result: outcome,
+    });
   });
 
   test("closes after sending error for failed job", () => {
@@ -123,8 +151,13 @@ describe("WebSocket handler — open", () => {
     const ws = new MockWebSocket({ jobId: "job-5" });
     websocketHandlers.open(ws as any);
 
-    progressStore.complete("job-5", { result: "ok" });
+    progressStore.complete("job-5", availableOutcome);
     expect(ws.closed).toBe(true);
+    expect(JSON.parse(ws.messages[0])).toEqual({
+      type: "completed",
+      jobId: "job-5",
+      result: availableOutcome,
+    });
   });
 
   test("closes socket when failure event arrives", () => {
@@ -169,7 +202,7 @@ describe("WebSocket handler — heartbeat", () => {
 
   test("does not start ping timer when job is already completed", () => {
     progressStore.createJob("job-9");
-    progressStore.complete("job-9", {});
+    progressStore.complete("job-9", generationFailedOutcome);
 
     const ws = new MockWebSocket({ jobId: "job-9" });
     websocketHandlers.open(ws as any);

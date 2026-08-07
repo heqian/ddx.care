@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getJobStatus } from "../api/client";
 import type { StatusResponse, WsMessage } from "../api/types";
+import { reportOutcomeSchema } from "../../shared/report-outcome";
 
 export function useJobStream(jobId: string | null, token?: string) {
   const [status, setStatus] = useState<StatusResponse | null>(null);
@@ -46,16 +47,11 @@ export function useJobStream(jobId: string | null, token?: string) {
             }
 
             if (data.type === "completed") {
-              const resultObj =
-                "result" in data.result && "status" in data.result
-                  ? data.result
-                  : { status: "completed", result: data.result };
-
               return {
                 ...current,
                 status: "completed",
-                result: resultObj,
-              } as StatusResponse;
+                result: reportOutcomeSchema.parse(data.result),
+              };
             }
 
             if (data.type === "failed") {

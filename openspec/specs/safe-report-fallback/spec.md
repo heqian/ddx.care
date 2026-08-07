@@ -2,27 +2,28 @@
 
 ### Requirement: Minimal valid report constructed on generation failure
 
-The system SHALL provide a `createMinimalReport(errorContext: string): DiagnosisReport` function that constructs a valid `DiagnosisReport` conforming to the Zod schema. This function SHALL be used in place of unsafe type casts (`as DiagnosisReport`) in `generateFinalReport` when all validation and retry attempts fail.
+The system SHALL provide a terminal fallback that constructs a valid `generation_failed` report outcome when all validation and retry attempts fail. Despite the historical requirement name, this fallback SHALL NOT construct a `DiagnosisReport` or cast unvalidated output into one.
 
-The generated report SHALL include:
-- `chiefComplaint`: A fixed message indicating generation failure
-- `patientSummary`: A fixed message indicating incomplete analysis
-- `specialistsConsulted`: An empty array
-- `rankedDiagnoses`: A single diagnosis entry with `confidencePercentage: 0`, `urgency: "Routine"`, and a `rationale` containing the `errorContext`
-- `crossSpecialtyObservations`: An empty string
-- `recommendedImmediateActions`: A suggestion to retry
+The generated outcome SHALL include:
+- `status`: `"generation_failed"`
+- `errorCode`: A stable public code that does not contain provider internals
+- `message`: A fixed user-facing explanation that report generation was unavailable
+- `retryable`: Whether a later retry may succeed
+- `safetyGuidance`: Generic guidance to seek qualified professional or emergency help when appropriate
+
+The generated outcome SHALL NOT include diagnoses, confidence, urgency, or treatment recommendations.
 
 #### Scenario: All report generation strategies fail
-- **WHEN** `generateFinalReport` exhausts all 4 fallback strategies (structured output, correction prompt, manual JSON extraction, raw object)
-- **THEN** the function returns `createMinimalReport(errorSummary)` instead of casting the raw object
+- **WHEN** report generation exhausts all bounded strategies
+- **THEN** the function returns a schema-valid `generation_failed` outcome instead of constructing or casting a diagnosis report
 
-#### Scenario: Minimal report passes Zod validation
-- **WHEN** `createMinimalReport` is called with any error context string
-- **THEN** `diagnosisReportSchema.safeParse(report)` returns `{ success: true }`
+#### Scenario: Generation failure outcome passes validation
+- **WHEN** the terminal fallback is created with any internal error context
+- **THEN** the public outcome schema validates and excludes the internal error detail
 
-#### Scenario: Minimal report renders in frontend
-- **WHEN** the frontend receives a minimal report from the API
-- **THEN** the `ResultsView` renders it as a single diagnosis card with 0% confidence, "Routine" urgency, and the error context in the rationale field
+#### Scenario: Generation failure renders in frontend
+- **WHEN** the frontend receives a `generation_failed` outcome
+- **THEN** it renders the unavailable-report state and no diagnosis card or urgency badge
 
 ### Requirement: Correction prompts include malformed output
 

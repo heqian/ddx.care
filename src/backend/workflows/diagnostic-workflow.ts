@@ -29,6 +29,15 @@ import {
   isRetriableError,
   sanitizeForContext,
 } from "../utils/errors";
+import {
+  createGenerationFailedReportOutcome,
+  generationFailedReportOutcomeSchema,
+  reportOutcomeSchema,
+  reportSchema,
+  type ReportGenerationErrorCode,
+} from "../../shared/report-outcome";
+
+export { reportOutcomeSchema, reportSchema } from "../../shared/report-outcome";
 
 const specialistNameMap = new Map<string, string>();
 for (const agent of agentList) {
@@ -219,30 +228,17 @@ export const diagnosisReportSchema = z.object({
   recommendedImmediateActions: z.string(),
 });
 
-type DiagnosisReport = zInfer<typeof diagnosisReportSchema>;
+type RawDiagnosisReport = zInfer<typeof diagnosisReportSchema>;
 
-/** Construct a minimal valid report when all generation/validation attempts fail */
-export function createMinimalReport(errorContext: string): DiagnosisReport {
-  return {
-    chiefComplaint: "Unable to generate complete diagnosis",
-    patientSummary: "Report generation encountered errors",
-    specialistsConsulted: [],
-    rankedDiagnoses: [
-      {
-        diagnosisName: "Diagnosis incomplete — generation error",
-        confidencePercentage: 0,
-        urgency: "Routine" as const,
-        rationale: `Automated diagnosis could not be completed: ${errorContext}`,
-        supportingEvidence: "N/A — report generation failed",
-        contradictoryEvidence: "N/A",
-        suggestedNextSteps:
-          "Please retry the diagnosis or consult a physician directly",
-      },
-    ],
-    crossSpecialtyObservations: "",
-    recommendedImmediateActions: "Retry the diagnostic analysis",
-  };
-}
+export const reportGenerationOutcomeSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    status: z.literal("available"),
+    diagnosisReport: diagnosisReportSchema,
+  }),
+  generationFailedReportOutcomeSchema,
+]);
+
+type ReportGenerationOutcome = zInfer<typeof reportGenerationOutcomeSchema>;
 
 const cmoDecisionSchema = z.object({
   specialistsToConsult: z.array(
@@ -352,7 +348,7 @@ export async function mockDiagnosis(
   _patientSummary: string,
   emitProgress: (msg: string | ProgressEvent) => void,
   options?: { stepDelayMs?: number },
-): Promise<{ diagnosisReport: DiagnosisReport }> {
+): Promise<ReportGenerationOutcome> {
   const stepDelay = options?.stepDelayMs ?? 200;
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const emit = (
@@ -389,6 +385,22 @@ export async function mockDiagnosis(
     });
     await delay(stepDelay);
     throw new Error("Mock forced failure (E2E sentinel)");
+  }
+
+  if (
+    process.env.MOCK_LLM === "1" &&
+    _patientSummary.includes("E2E_MOCK_REPORT_FAILURE")
+  ) {
+    emit(
+      "round_start",
+      "Round 1 Analysis: Asking CMO for decision on needed specialists...",
+    );
+    await delay(stepDelay);
+    emit(
+      "cmo_final",
+      "The analysis finished, but a validated report could not be generated.",
+    );
+    return createGenerationFailedReportOutcome("REPORT_PROVIDER_UNAVAILABLE");
   }
 
   emit(
@@ -451,6 +463,7 @@ export async function mockDiagnosis(
   await delay(stepDelay);
 
   return {
+    status: "available",
     diagnosisReport: {
       chiefComplaint: "Severe headache with blurred vision",
       patientSummary:
@@ -530,11 +543,90 @@ export async function mockDiagnosis(
 // currently accommodate the multi-round context accumulation pattern needed here.
 // If Mastra adds support for multi-round supervisor workflows, migrating would reduce
 // maintenance burden.
-/**
- * Generate the final CMO report with validate → retry → fallback.
- * Extracted to avoid duplicating this pattern in the "no new specialists" and
- * "max rounds reached" code paths.
- */
+interface GeneratedReportResponse {
+  object?: unknown;
+  text?: string;
+}
+
+type ReportAttemptResult =
+  | { success: true; report: RawDiagnosisReport }
+  | {
+      success: false;
+      errorCode: ReportGenerationErrorCode;
+      correctionReason: string;
+    };
+
+function inspectReportAttempt(
+  response: GeneratedReportResponse,
+): ReportAttemptResult {
+  if (response.object === undefined || response.object === null) {
+    if (!response.text?.trim()) {
+      return {
+        success: false,
+        errorCode: "REPORT_EMPTY_RESPONSE",
+        correctionReason: "The previous attempt returned no report content.",
+      };
+    }
+    return {
+      success: false,
+      errorCode: "REPORT_VALIDATION_FAILED",
+      correctionReason:
+        "The previous attempt returned text instead of the required structured report.",
+    };
+  }
+
+  const validated = diagnosisReportSchema.safeParse(response.object);
+  if (validated.success) {
+    return { success: true, report: validated.data };
+  }
+
+  return {
+    success: false,
+    errorCode: "REPORT_VALIDATION_FAILED",
+    correctionReason: validated.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; "),
+  };
+}
+
+export function classifyReportGenerationFailure(
+  error: unknown,
+): ReportGenerationErrorCode {
+  if (error instanceof SchemaValidationError) {
+    return "REPORT_VALIDATION_FAILED";
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  if (/empty|no (?:report|response|content|output)/i.test(message)) {
+    return "REPORT_EMPTY_RESPONSE";
+  }
+  if (/schema|validat|structured output|json|pars(?:e|ing)/i.test(message)) {
+    return "REPORT_VALIDATION_FAILED";
+  }
+  return "REPORT_PROVIDER_UNAVAILABLE";
+}
+
+function rethrowIfReportGenerationAborted(
+  error: unknown,
+  abortSignal: AbortSignal,
+): void {
+  if (abortSignal.aborted) {
+    if (abortSignal.reason instanceof Error) {
+      throw abortSignal.reason;
+    }
+    if (error instanceof Error) {
+      throw error;
+    }
+    const abortError = new Error("Aborted");
+    abortError.name = "AbortError";
+    throw abortError;
+  }
+  if (error instanceof Error && error.name === "AbortError") {
+    throw error;
+  }
+}
+
+/** Generate a validated report with one bounded correction attempt. */
 export async function generateFinalReport(opts: {
   cmo: Agent;
   prompt: string;
@@ -547,7 +639,7 @@ export async function generateFinalReport(opts: {
   ) => void;
   logContext: Record<string, unknown>;
   jobId: string;
-}): Promise<DiagnosisReport> {
+}): Promise<ReportGenerationOutcome> {
   const {
     cmo,
     prompt,
@@ -564,163 +656,93 @@ export async function generateFinalReport(opts: {
     emit,
   );
 
-  let finalResponse: Awaited<ReturnType<typeof cmo.generate>> | undefined;
+  let correctionReason =
+    "The previous attempt did not return a validated structured report.";
   try {
-    finalResponse = await runWithCacheTracking(() =>
-      withRetry(
-        () =>
-          cmo.generate(prompt, {
-            structuredOutput: {
-              jsonPromptInjection: true,
-              schema: diagnosisReportSchema,
-            },
-            abortSignal,
-            onStepFinish: cmoOnStepFinish,
-          }),
-        AGENT_GENERATE_MAX_RETRIES,
-        AGENT_GENERATE_RETRY_BASE_DELAY,
+    const finalResponse = await runWithCacheTracking(() =>
+      cmo.generate(prompt, {
+        structuredOutput: {
+          jsonPromptInjection: true,
+          schema: diagnosisReportSchema,
+        },
         abortSignal,
-        isRetriableError,
-      ),
+        onStepFinish: cmoOnStepFinish,
+      }),
     );
+    const inspected = inspectReportAttempt(finalResponse);
+    if (inspected.success) {
+      return { status: "available", diagnosisReport: inspected.report };
+    }
+    correctionReason = inspected.correctionReason;
+    logger.warn("report_generation_attempt_failed", {
+      ...logContext,
+      attempt: "initial",
+      errorCode: inspected.errorCode,
+      error: sanitizeForContext(inspected.correctionReason),
+    });
   } catch (e) {
-    if (
-      (e instanceof Error && e.name === "AbortError") ||
-      abortSignal.aborted
-    ) {
-      throw e;
-    }
-    const msg = e instanceof Error ? e.message : String(e);
-    logger.warn("report_structured_output_failed", {
+    rethrowIfReportGenerationAborted(e, abortSignal);
+    const errorCode = classifyReportGenerationFailure(e);
+    const message = e instanceof Error ? e.message : String(e);
+    correctionReason =
+      errorCode === "REPORT_EMPTY_RESPONSE"
+        ? "The previous attempt returned no report content."
+        : "The previous structured report attempt failed.";
+    logger.warn("report_generation_attempt_failed", {
       ...logContext,
-      error: msg,
+      attempt: "initial",
+      errorCode,
+      error: sanitizeForContext(message),
     });
-    emit(
-      "general",
-      `Final report structured output validation failed, retrying with correction prompt...`,
-    );
   }
 
-  if (finalResponse?.object) {
-    const validated = diagnosisReportSchema.safeParse(finalResponse.object);
-    if (validated.success) {
-      return validated.data;
-    }
+  emit(
+    "general",
+    "The first report attempt was not valid. Retrying once with a correction prompt...",
+  );
+  const correctionPrompt = `The previous report attempt did not produce a valid result. ${sanitizeForContext(correctionReason, 500)}\n\nProvide the complete report again and ensure every field conforms to the required structured output schema.\n\n${builtContextHistory}`;
 
-    const zodErrors = validated.error.issues
-      .map((i) => `${i.path.join(".")}: ${i.message}`)
-      .join("; ");
-    logger.warn("report_validation_failed", {
-      ...logContext,
-      errors: zodErrors,
-    });
-    emit(
-      "general",
-      `Final report validation failed, retrying with correction prompt...`,
-    );
-
-    const malformedOutput =
-      typeof finalResponse.text === "string" && finalResponse.text.length > 0
-        ? finalResponse.text.slice(0, 500) +
-          (finalResponse.text.length > 500 ? " [truncated]" : "")
-        : "";
-    const malformedSection = malformedOutput
-      ? `\n\nPrevious malformed output (truncated):\n${malformedOutput}`
-      : "";
-    const correctionPrompt = `The previous response did not match the expected schema. Errors: ${zodErrors}.${malformedSection}\n\nPlease provide the response again, ensuring it conforms to the schema.\n\n${builtContextHistory}`;
-    const retryResponse = await runWithCacheTracking(() =>
-      withRetry(
-        () =>
-          cmo.generate(correctionPrompt, {
-            structuredOutput: {
-              jsonPromptInjection: true,
-              schema: diagnosisReportSchema,
-            },
-            abortSignal,
-            onStepFinish: cmoOnStepFinish,
-          }),
-        AGENT_GENERATE_MAX_RETRIES,
-        AGENT_GENERATE_RETRY_BASE_DELAY,
+  let finalErrorCode: ReportGenerationErrorCode;
+  try {
+    const correctionResponse = await runWithCacheTracking(() =>
+      cmo.generate(correctionPrompt, {
+        structuredOutput: {
+          jsonPromptInjection: true,
+          schema: diagnosisReportSchema,
+        },
         abortSignal,
-        isRetriableError,
-      ),
+        onStepFinish: cmoOnStepFinish,
+      }),
     );
-
-    const retryValidated = diagnosisReportSchema.safeParse(
-      retryResponse.object,
-    );
-    if (retryValidated.success) {
-      return retryValidated.data;
+    const inspected = inspectReportAttempt(correctionResponse);
+    if (inspected.success) {
+      return { status: "available", diagnosisReport: inspected.report };
     }
-
-    logger.warn("report_validation_retry_failed", logContext);
-    emit("general", `Retry also failed. Generating minimal report.`);
-    return createMinimalReport(
-      `Schema validation failed after retry. Errors: ${zodErrors}`,
-    );
+    finalErrorCode = inspected.errorCode;
+    logger.warn("report_generation_attempt_failed", {
+      ...logContext,
+      attempt: "correction",
+      errorCode: finalErrorCode,
+      error: sanitizeForContext(inspected.correctionReason),
+    });
+  } catch (e) {
+    rethrowIfReportGenerationAborted(e, abortSignal);
+    finalErrorCode = classifyReportGenerationFailure(e);
+    const message = e instanceof Error ? e.message : String(e);
+    logger.warn("report_generation_attempt_failed", {
+      ...logContext,
+      attempt: "correction",
+      errorCode: finalErrorCode,
+      error: sanitizeForContext(message),
+    });
   }
 
-  // Structured output threw — fall back to generating without structured output
-  logger.warn("report_fallback_no_structured_output", logContext);
-  emit(
-    "general",
-    `Structured output unavailable, generating report without schema constraints...`,
-  );
-
-  const fallbackResponse = await runWithCacheTracking(() =>
-    withRetry(
-      () =>
-        cmo.generate(
-          `${prompt}\n\nYou MUST respond with a valid JSON object matching this schema:\n${JSON.stringify(diagnosisReportSchema.shape, null, 2)}`,
-          {
-            abortSignal,
-            onStepFinish: cmoOnStepFinish,
-          },
-        ),
-      AGENT_GENERATE_MAX_RETRIES,
-      AGENT_GENERATE_RETRY_BASE_DELAY,
-      abortSignal,
-      isRetriableError,
-    ),
-  );
-
-  const fallbackText = fallbackResponse.text;
-  if (fallbackText) {
-    try {
-      const jsonMatch = fallbackText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        const validated = diagnosisReportSchema.safeParse(parsed);
-        if (validated.success) {
-          return validated.data;
-        }
-      }
-    } catch {
-      // Fall through to final fallback
-    }
-  }
-
-  // Last resort: return a minimal report instead of an unsafe cast
-  if (fallbackResponse.object) {
-    const fallbackValidated = diagnosisReportSchema.safeParse(
-      fallbackResponse.object,
-    );
-    if (fallbackValidated.success) {
-      return fallbackValidated.data;
-    }
-    return createMinimalReport(
-      `Report generation failed after all attempts. Raw output was unparseable.`,
-    );
-  }
-
-  logger.warn("report_all_fallbacks_exhausted", logContext);
-  emit(
-    "general",
-    `All report generation strategies exhausted. Generating minimal report.`,
-  );
-  return createMinimalReport(
-    "Report generation failed after all retries and fallbacks. No structured output was produced.",
-  );
+  logger.warn("report_generation_failed", {
+    ...logContext,
+    errorCode: finalErrorCode,
+  });
+  emit("general", "A validated diagnostic report could not be generated.");
+  return createGenerationFailedReportOutcome(finalErrorCode);
 }
 
 export const runDiagnosis = createStep({
@@ -730,9 +752,7 @@ export const runDiagnosis = createStep({
     conversationTranscript: z.string(),
     labResults: z.string(),
   }),
-  outputSchema: z.object({
-    diagnosisReport: diagnosisReportSchema,
-  }),
+  outputSchema: reportGenerationOutcomeSchema,
   execute: async ({ inputData, mastra, runId }) => {
     const emitProgress = (messageOrEvent: string | ProgressEvent) => {
       if (runId) {
@@ -776,7 +796,7 @@ export const runDiagnosis = createStep({
     const allConsultedSpecialists = new Set<string>();
     const contextHistory = ["=== PATIENT CASE ===", patientSummary];
 
-    let finalDiagnosisReport: DiagnosisReport | null = null;
+    let finalReportOutcome: ReportGenerationOutcome | null = null;
 
     // Use the AbortController from the store (set by the route handler) so
     // that DELETE /v1/diagnose/:jobId can actually cancel the running workflow.
@@ -950,7 +970,10 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
             "cmo_final",
             "CMO has determined no further consultations are needed and finalized the report.",
           );
-          finalDiagnosisReport = finalReport;
+          finalReportOutcome = {
+            status: "available",
+            diagnosisReport: finalReport,
+          };
           break;
         }
 
@@ -970,7 +993,7 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
             "cmo_final",
             "No new specialists requested. Compiling final report...",
           );
-          finalDiagnosisReport = await generateFinalReport({
+          finalReportOutcome = await generateFinalReport({
             cmo,
             prompt: `You did not request any new specialists, or there are no more to consult. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.\n\n${builtContextHistory}`,
             builtContextHistory,
@@ -1092,13 +1115,13 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
         round++;
       }
 
-      if (!finalDiagnosisReport) {
+      if (!finalReportOutcome) {
         // Reached max rounds without final report
         const builtContextHistory = buildCmoContext(
           contextHistory,
           CMO_CONTEXT_MAX_CHARS,
         );
-        finalDiagnosisReport = await generateFinalReport({
+        finalReportOutcome = await generateFinalReport({
           cmo,
           prompt: `Maximum diagnostic rounds (${MAX_ROUNDS}) reached. Please provide the final comprehensive differential diagnosis report based on the case and the consultations obtained so far.\n\n${builtContextHistory}`,
           builtContextHistory,
@@ -1138,53 +1161,24 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
       clearTimeout(timeoutId);
     }
 
-    if (!finalDiagnosisReport) {
+    if (!finalReportOutcome) {
       throw new Error("Diagnosis generation returned an empty response");
     }
 
-    return {
-      diagnosisReport: finalDiagnosisReport,
-    };
+    return finalReportOutcome;
   },
-});
-
-export const reportSchema = z.object({
-  chiefComplaint: z.string(),
-  patientSummary: z.string(),
-  specialistsConsulted: z.array(
-    z.object({
-      specialist: z.string(),
-      keyFindings: z.string(),
-    }),
-  ),
-  diagnoses: z.array(
-    z.object({
-      rank: z.number(),
-      name: z.string(),
-      confidence: z.number(),
-      urgency: z.enum(["emergent", "urgent", "routine"]),
-      rationale: z.string(),
-      supportingEvidence: z.array(z.string()),
-      contradictoryEvidence: z.array(z.string()),
-      nextSteps: z.array(z.string()),
-    }),
-  ),
-  crossSpecialtyObservations: z.string(),
-  recommendedImmediateActions: z.string(),
 });
 
 // Step 3: Format the final report for the frontend
 export const formatReport = createStep({
   id: "format-report",
-  inputSchema: z.object({
-    diagnosisReport: diagnosisReportSchema,
-  }),
-  outputSchema: z.object({
-    report: reportSchema,
-    generatedAt: z.string(),
-    disclaimer: z.string(),
-  }),
+  inputSchema: reportGenerationOutcomeSchema,
+  outputSchema: reportOutcomeSchema,
   execute: async ({ inputData }) => {
+    if (inputData.status === "generation_failed") {
+      return inputData;
+    }
+
     const raw = inputData.diagnosisReport;
 
     const disclaimer =
@@ -1197,6 +1191,7 @@ export const formatReport = createStep({
       "By using this tool, you accept all risk and release the operators from any liability.";
 
     return {
+      status: "available" as const,
       report: {
         chiefComplaint: raw.chiefComplaint ?? "",
         patientSummary: raw.patientSummary ?? "",
@@ -1207,7 +1202,7 @@ export const formatReport = createStep({
           }),
         ),
         diagnoses: (raw.rankedDiagnoses ?? []).map(
-          (d: DiagnosisReport["rankedDiagnoses"][number], i: number) => ({
+          (d: RawDiagnosisReport["rankedDiagnoses"][number], i: number) => ({
             rank: i + 1,
             name: d.diagnosisName ?? "",
             confidence: d.confidencePercentage ?? 0,
@@ -1237,11 +1232,7 @@ export const diagnosticWorkflow = createWorkflow({
     conversationTranscript: z.string(),
     labResults: z.string(),
   }),
-  outputSchema: z.object({
-    report: reportSchema,
-    generatedAt: z.string(),
-    disclaimer: z.string(),
-  }),
+  outputSchema: reportOutcomeSchema,
 })
   .then(runDiagnosis)
   .then(formatReport)

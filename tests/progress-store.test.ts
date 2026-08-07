@@ -1,9 +1,39 @@
 import { test, expect, describe, beforeEach } from "bun:test";
+import { JobStore, type ProgressEvent } from "../src/backend/progress-store";
 import {
-  JobStore,
-  type JobEntry,
-  type ProgressEvent,
-} from "../src/backend/progress-store";
+  createGenerationFailedReportOutcome,
+  type AvailableReportOutcome,
+} from "../src/shared/report-outcome";
+
+const availableOutcome: AvailableReportOutcome = {
+  status: "available",
+  report: {
+    chiefComplaint: "Headache",
+    patientSummary: "Adult with recurrent headache",
+    specialistsConsulted: [
+      { specialist: "Neurologist", keyFindings: "Migraine is likely" },
+    ],
+    diagnoses: [
+      {
+        rank: 1,
+        name: "Migraine",
+        confidence: 80,
+        urgency: "routine",
+        rationale: "Recurrent headache pattern",
+        supportingEvidence: ["Recurrent headache"],
+        contradictoryEvidence: [],
+        nextSteps: ["Clinical follow-up"],
+      },
+    ],
+    crossSpecialtyObservations: "No additional observations",
+    recommendedImmediateActions: "Seek care if symptoms worsen",
+  },
+  generatedAt: "2026-01-15T10:30:00.000Z",
+  disclaimer: "Research use only",
+};
+const generationFailedOutcome = createGenerationFailedReportOutcome(
+  "REPORT_PROVIDER_UNAVAILABLE",
+);
 
 let store: JobStore;
 
@@ -31,12 +61,11 @@ describe("JobStore — Job Lifecycle", () => {
 
   test("complete sets status and result", () => {
     store.createJob("job-2");
-    const result = { report: { diagnoses: [] } };
-    store.complete("job-2", result);
+    store.complete("job-2", availableOutcome);
 
     const job = store.getJob("job-2");
     expect(job!.status).toBe("completed");
-    expect(job!.result).toEqual(result);
+    expect(job!.result).toEqual(availableOutcome);
     expect(job!.error).toBeUndefined();
   });
 
@@ -50,26 +79,22 @@ describe("JobStore — Job Lifecycle", () => {
     expect(job!.result).toBeUndefined();
   });
 
-  test("complete with complex nested result", () => {
-    store.createJob("job-4");
-    const result = {
-      report: {
-        chiefComplaint: "Headache",
-        diagnoses: [
-          { name: "Migraine", confidence: 80, nested: { deep: true } },
-        ],
-      },
-    };
-    store.complete("job-4", result);
+  test.each([
+    ["available", availableOutcome],
+    ["generation_failed", generationFailedOutcome],
+  ] as const)("round-trips a %s outcome", (_variant, outcome) => {
+    store.createJob(`job-round-trip-${outcome.status}`);
+    store.complete(`job-round-trip-${outcome.status}`, outcome);
 
-    const job = store.getJob("job-4");
-    expect(job!.result).toEqual(result);
+    const job = store.getJob(`job-round-trip-${outcome.status}`);
+    expect(job!.status).toBe("completed");
+    expect(job!.result).toEqual(outcome);
   });
 
   test("complete does not overwrite failed status", () => {
     store.createJob("job-cancel-1");
     store.fail("job-cancel-1", "Cancelled by user");
-    store.complete("job-cancel-1", { result: "should not write" });
+    store.complete("job-cancel-1", availableOutcome);
 
     const job = store.getJob("job-cancel-1");
     expect(job!.status).toBe("failed");
@@ -79,11 +104,11 @@ describe("JobStore — Job Lifecycle", () => {
 
   test("complete works normally after fail+prune cycle (fresh job)", () => {
     store.createJob("job-fresh");
-    store.complete("job-fresh", { result: "done" });
+    store.complete("job-fresh", generationFailedOutcome);
 
     const job = store.getJob("job-fresh");
     expect(job!.status).toBe("completed");
-    expect(job!.result).toEqual({ result: "done" });
+    expect(job!.result).toEqual(generationFailedOutcome);
   });
 });
 
@@ -116,7 +141,7 @@ describe("JobStore — Progress Events", () => {
   test("progress persists after complete", () => {
     store.createJob("job-p3");
     store.emitMessage("job-p3", "Working...");
-    store.complete("job-p3", { done: true });
+    store.complete("job-p3", availableOutcome);
 
     const job = store.getJob("job-p3");
     expect(job!.status).toBe("completed");
@@ -202,19 +227,21 @@ describe("JobStore — Pub/Sub", () => {
     expect((received[0] as any).event.message).toBe("Hello");
   });
 
-  test("subscribe receives completion events", () => {
-    store.createJob("job-s2");
+  test.each([
+    ["available", availableOutcome],
+    ["generation_failed", generationFailedOutcome],
+  ] as const)("subscribe receives the exact %s completion event", (_, outcome) => {
+    const jobId = `job-subscribe-${outcome.status}`;
+    store.createJob(jobId);
     const received: unknown[] = [];
 
-    store.subscribe("job-s2", (data) => {
+    store.subscribe(jobId, (data) => {
       received.push(data);
     });
 
-    store.complete("job-s2", { result: "done" });
+    store.complete(jobId, outcome);
 
-    expect(received).toHaveLength(1);
-    expect((received[0] as any).type).toBe("completed");
-    expect((received[0] as any).result).toEqual({ result: "done" });
+    expect(received).toEqual([{ type: "completed", jobId, result: outcome }]);
   });
 
   test("subscribe receives failure events", () => {
@@ -338,7 +365,7 @@ describe("JobStore — Cleanup", () => {
 
   test("cleanupExpired scrubs result before deletion", () => {
     store.createJob("scrub-1");
-    store.complete("scrub-1", { diagnoses: ["Migraine", "TBI"] });
+    store.complete("scrub-1", availableOutcome);
     store.emitMessage("scrub-1", "Analyzing patient data...");
 
     // Make the job old enough to expire
@@ -378,21 +405,21 @@ describe("JobStore — Cleanup", () => {
 
   test("cleanupExpired does not affect non-expired job data", () => {
     store.createJob("scrub-safe");
-    store.complete("scrub-safe", { result: "should remain" });
+    store.complete("scrub-safe", generationFailedOutcome);
     store.emitMessage("scrub-safe", "progress data");
 
     store.cleanupExpired(60_000);
 
     const job = store.getJob("scrub-safe");
     expect(job).toBeDefined();
-    expect(job!.result).toEqual({ result: "should remain" });
+    expect(job!.result).toEqual(generationFailedOutcome);
     expect(job!.progress).toHaveLength(1);
     expect(job!.progress[0].message).toBe("progress data");
   });
 
   test("scrubStmt nulls result and resets progress for expired rows", () => {
     store.createJob("scrub-verify");
-    store.complete("scrub-verify", { sensitive: "PHI data" });
+    store.complete("scrub-verify", availableOutcome);
     store.emitMessage("scrub-verify", "patient info");
 
     const db = (store as any).db;
@@ -436,7 +463,7 @@ describe("JobStore — markStalePending", () => {
 
   test("does not modify completed jobs", () => {
     store.createJob("completed-1");
-    store.complete("completed-1", { result: "done" });
+    store.complete("completed-1", availableOutcome);
     store.createJob("pending-1");
 
     store.markStalePending();
@@ -458,7 +485,7 @@ describe("JobStore — markStalePending", () => {
 
   test("handles no pending jobs gracefully", () => {
     store.createJob("done-1");
-    store.complete("done-1", { ok: true });
+    store.complete("done-1", generationFailedOutcome);
 
     expect(() => store.markStalePending()).not.toThrow();
     expect(store.getJob("done-1")!.status).toBe("completed");

@@ -46,16 +46,16 @@ When a workflow's abort signal fires, the error handler SHALL inspect `abortCont
 
 ### Requirement: generateFinalReport always returns a report
 
-The `generateFinalReport()` function SHALL never throw an exception. All failure paths — including the terminal case where no structured output, no parseable text, and no `.object` are available — SHALL return a minimal report via `createMinimalReport()` with an explanatory message. The function SHALL only throw if the abort signal is triggered (user cancellation or timeout).
+The report-generation operation SHALL return a typed report outcome for every non-abort terminal path. Successful generation SHALL return `available` with a validated report. Exhausted or unavailable generation SHALL return `generation_failed`. The operation SHALL only throw when cancellation, timeout, or an unrecoverable application invariant requires the workflow itself to fail.
 
-#### Scenario: All fallbacks exhausted returns minimal report
-- **WHEN** the CMO's structured output fails validation, the correction retry fails, the no-structured-output fallback produces no parseable text, and `fallbackResponse.object` is falsy
-- **THEN** `generateFinalReport()` returns a `createMinimalReport()` result with a message explaining that all fallbacks were exhausted, and does not throw
+#### Scenario: All fallbacks exhausted returns generation failure
+- **WHEN** structured output, correction, and bounded fallback generation are exhausted
+- **THEN** the operation returns a `generation_failed` outcome and does not synthesize a diagnosis
 
-#### Scenario: Minimal report includes explanatory message
-- **WHEN** the terminal fallback path is reached
-- **THEN** the returned minimal report's message field includes text indicating report generation failed after all retries and fallbacks
+#### Scenario: Generation failure includes a stable explanation
+- **WHEN** a `generation_failed` outcome is returned
+- **THEN** it includes a stable public error code and fixed user-facing message without raw provider details
 
 #### Scenario: Abort signal still propagates as an error
-- **WHEN** the abort signal is triggered during `generateFinalReport()` (user cancellation or timeout)
-- **THEN** the abort error propagates as before — this is not a report-generation failure and SHALL NOT be caught as a fallback case
+- **WHEN** the abort signal is triggered by user cancellation or timeout during report generation
+- **THEN** the abort condition propagates as a workflow failure and is not caught as a generation fallback

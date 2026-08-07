@@ -8,6 +8,7 @@ import { generateToken, verifyToken } from "../utils/ws-token";
 import * as abortStore from "../utils/abort-controller-store";
 import { getCacheStats } from "../tools/utils/tool-cache";
 import { TOOL_CACHE_ENABLED } from "../config";
+import { reportOutcomeSchema } from "../../shared/report-outcome";
 import {
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
@@ -103,12 +104,6 @@ const diagnoseSchema = z.object({
   conversationTranscript: z.string().max(MAX_INPUT_FIELD_LENGTH),
   labResults: z.string().max(MAX_INPUT_FIELD_LENGTH),
 });
-
-interface WorkflowRunResult {
-  report?: {
-    specialistsConsulted?: Array<{ specialist: string; keyFindings: string }>;
-  };
-}
 
 interface RouteRequest extends Request {
   params: Record<string, string>;
@@ -269,6 +264,7 @@ export function createRoutes(
             // report data.
             const runResult = result as {
               status?: string;
+              result?: unknown;
               error?: { message?: string };
             };
             if (runResult?.status === "failed") {
@@ -278,15 +274,17 @@ export function createRoutes(
               progressStore.fail(jobId, message);
               return;
             }
+            const outcome = reportOutcomeSchema.parse(runResult.result);
             const specialistCount =
-              (result as WorkflowRunResult)?.report?.specialistsConsulted
-                ?.length ?? 0;
+              outcome.status === "available"
+                ? outcome.report.specialistsConsulted.length
+                : 0;
             logger.workflowComplete(
               jobId,
               Date.now() - startTime,
               specialistCount,
             );
-            progressStore.complete(jobId, result);
+            progressStore.complete(jobId, outcome);
           })
           .catch((error) => {
             const message =

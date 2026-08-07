@@ -167,6 +167,48 @@ test.describe("Error states & edge paths", () => {
       .not.toBe(failedJobId);
   });
 
+  test("report generation failure shows safety guidance without report content", async ({
+    page,
+  }) => {
+    await fillValidForm(page, {
+      medicalHistory: "E2E_MOCK_REPORT_FAILURE Hypertension history.",
+    });
+    await submitCase(page);
+
+    await expect(
+      page.getByRole("heading", { name: "Diagnostic Report Unavailable" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText(
+        "The report service is temporarily unavailable. No diagnostic report was produced.",
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Seek professional evaluation" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/contact local emergency services now/),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Try Again" })).toBeVisible();
+
+    await expect(page.getByRole("tablist")).toHaveCount(0);
+    await expect(page.getByRole("tabpanel")).toHaveCount(0);
+    await expect(page.getByText("Top Differential Diagnoses")).toHaveCount(0);
+    await expect(page.getByText("Emergent", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/confidence/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Print|Share/ })).toHaveCount(
+      0,
+    );
+
+    const jobId = jobIdFromUrl(page.url());
+    const statusResponse = await page.request.get(
+      `${baseUrl}/v1/status/${jobId}`,
+    );
+    const statusBody = await statusResponse.json();
+    expect(statusBody.status).toBe("completed");
+    expect(statusBody.result.status).toBe("generation_failed");
+  });
+
   test("deep-link to a cancelled job shows the failed-result screen", async ({
     page,
   }) => {
@@ -178,9 +220,8 @@ test.describe("Error states & edge paths", () => {
     expect(jobId).toBeTruthy();
 
     // Cancel via the UI — returns to the input screen and marks the job
-    // failed ("Cancelled by user"). This is the only path that produces a
-    // "failed" job status, since workflow-internal failures resolve as
-    // "completed" (see the no-report test above).
+    // failed ("Cancelled by user"), unlike a report-generation failure, which
+    // settles as completed with a generation_failed report outcome.
     await page.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible({
       timeout: 5_000,

@@ -1265,16 +1265,30 @@ describe("useJobStream", () => {
     });
 
     const ws = MockWebSocket.instances[0];
+    const outcome = {
+      status: "available" as const,
+      report: {
+        chiefComplaint: "Chest pain",
+        patientSummary: "Adult with acute chest pain.",
+        specialistsConsulted: [],
+        diagnoses: [],
+        crossSpecialtyObservations: "No additional observations.",
+        recommendedImmediateActions: "Seek urgent clinical evaluation.",
+      },
+      generatedAt: "2024-01-01T00:00:00Z",
+      disclaimer: "Research only",
+    };
 
     await hookAct(async () => {
       ws.simulateMessage({
         type: "completed",
         jobId: "job-complete",
-        result: { status: "completed", result: { report: {} } },
+        result: outcome,
       });
     });
 
     expect(result.current.status?.status).toBe("completed");
+    expect(result.current.status?.result).toEqual(outcome);
   });
 
   test("handles failed messages", async () => {
@@ -1643,41 +1657,125 @@ function makeResults(overrides: Partial<StatusResponse> = {}): StatusResponse {
     jobId: "test-job",
     status: "completed",
     result: {
-      status: "completed",
-      result: {
-        report: {
-          diagnoses: [
-            {
-              rank: 1,
-              name: "Myocardial Infarction",
-              confidence: 85,
-              urgency: "emergent",
-              rationale: "Chest pain with ST elevation",
-              supportingEvidence: ["Troponin elevated"],
-              contradictoryEvidence: [],
-              nextSteps: ["ECG"],
-            },
-            {
-              rank: 2,
-              name: "Angina",
-              confidence: 60,
-              urgency: "urgent",
-              rationale: "Recurrent chest pain",
-              supportingEvidence: [],
-              contradictoryEvidence: [],
-              nextSteps: [],
-            },
-          ],
-          chiefComplaint: "Chest pain",
-          recommendedImmediateActions: "Order ECG and troponin",
-        },
-        generatedAt: "2024-01-01T00:00:00Z",
-        disclaimer: "Research only",
+      status: "available",
+      report: {
+        diagnoses: [
+          {
+            rank: 1,
+            name: "Myocardial Infarction",
+            confidence: 85,
+            urgency: "emergent",
+            rationale: "Chest pain with ST elevation",
+            supportingEvidence: ["Troponin elevated"],
+            contradictoryEvidence: [],
+            nextSteps: ["ECG"],
+          },
+          {
+            rank: 2,
+            name: "Angina",
+            confidence: 60,
+            urgency: "urgent",
+            rationale: "Recurrent chest pain",
+            supportingEvidence: [],
+            contradictoryEvidence: [],
+            nextSteps: [],
+          },
+        ],
+        chiefComplaint: "Chest pain",
+        patientSummary: "Adult with acute chest pain.",
+        specialistsConsulted: [],
+        crossSpecialtyObservations: "Cardiac causes require exclusion.",
+        recommendedImmediateActions: "Order ECG and troponin",
       },
+      generatedAt: "2024-01-01T00:00:00Z",
+      disclaimer: "Research only",
     },
     ...overrides,
-  } as StatusResponse;
+  };
 }
+
+function makeGenerationFailedResults(retryable: boolean): StatusResponse {
+  return {
+    jobId: "failed-report-job",
+    status: "completed",
+    result: {
+      status: "generation_failed",
+      errorCode: retryable
+        ? "REPORT_PROVIDER_UNAVAILABLE"
+        : "REPORT_VALIDATION_FAILED",
+      message: retryable
+        ? "The report service is temporarily unavailable. No diagnostic report was produced."
+        : "A safe, validated report could not be produced. No diagnostic report is available.",
+      retryable,
+      safetyGuidance:
+        "No diagnostic report is available. Seek evaluation from a qualified healthcare professional. If symptoms are severe, rapidly worsening, or may be an emergency, contact local emergency services now.",
+    },
+  };
+}
+
+describe("ResultsView generation_failed outcomes", () => {
+  test("shows the unavailable state and only safe failure actions", async () => {
+    resetBody();
+    const onRetry = vi.fn();
+    const { container } = render(
+      createElement(ResultsView, {
+        result: makeGenerationFailedResults(true),
+        onNewCase: () => {},
+        onRetry,
+      }),
+    );
+
+    expect(getByText(container, "Diagnostic Report Unavailable")).toBeTruthy();
+    expect(
+      getByText(container, "The report service is temporarily unavailable."),
+    ).toBeTruthy();
+    expect(getByText(container, "Seek professional evaluation")).toBeTruthy();
+    expect(
+      getByText(container, "contact local emergency services now"),
+    ).toBeTruthy();
+
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const retryButton = buttons.find((button) =>
+      button.textContent?.includes("Try Again"),
+    );
+    expect(retryButton).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(retryButton!);
+    });
+    expect(onRetry).toHaveBeenCalledTimes(1);
+
+    expect(container.querySelector('[role="tablist"]')).toBeNull();
+    expect(container.querySelector('[role="tabpanel"]')).toBeNull();
+    expect(container.textContent).not.toContain("Myocardial Infarction");
+    expect(container.textContent).not.toContain("Top Differential Diagnoses");
+    expect(container.textContent).not.toContain("Emergent");
+    expect(container.textContent).not.toContain("confidence");
+    expect(container.textContent).not.toContain("Full Report");
+    expect(
+      buttons.some((button) => button.textContent?.includes("Print")),
+    ).toBe(false);
+    expect(
+      buttons.some((button) => button.textContent?.includes("Share")),
+    ).toBe(false);
+  });
+
+  test("does not offer retry when report generation is not retryable", () => {
+    resetBody();
+    const { container } = render(
+      createElement(ResultsView, {
+        result: makeGenerationFailedResults(false),
+        onNewCase: () => {},
+        onRetry: () => {},
+      }),
+    );
+
+    expect(
+      getByText(container, "A safe, validated report could not be produced."),
+    ).toBeTruthy();
+    expect(container.textContent).not.toContain("Try Again");
+    expect(container.textContent).toContain("Start New Case");
+  });
+});
 
 describe("Accessibility — ResultsView tabs", () => {
   test("tablist has role=tablist", () => {

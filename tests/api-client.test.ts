@@ -5,6 +5,27 @@ import {
   getAgents,
   cancelDiagnosis,
 } from "../src/frontend/api/client";
+import {
+  createGenerationFailedReportOutcome,
+  type AvailableReportOutcome,
+} from "../src/shared/report-outcome";
+
+const availableOutcome: AvailableReportOutcome = {
+  status: "available",
+  report: {
+    chiefComplaint: "Headache",
+    patientSummary: "Adult with recurrent headache",
+    specialistsConsulted: [],
+    diagnoses: [],
+    crossSpecialtyObservations: "None",
+    recommendedImmediateActions: "Clinical follow-up",
+  },
+  generatedAt: "2026-01-15T10:30:00.000Z",
+  disclaimer: "Research use only",
+};
+const generationFailedOutcome = createGenerationFailedReportOutcome(
+  "REPORT_EMPTY_RESPONSE",
+);
 
 const originalFetch = globalThis.fetch;
 
@@ -94,6 +115,7 @@ describe("getJobStatus", () => {
         jobId: "job-1",
         status: "completed",
         progress: [],
+        result: availableOutcome,
       }),
     }) as any;
 
@@ -111,7 +133,7 @@ describe("getJobStatus", () => {
       ok: true,
       json: async () => ({
         jobId: "job-1",
-        status: "completed",
+        status: "pending",
         progress: [],
       }),
     }) as any;
@@ -127,7 +149,7 @@ describe("getJobStatus", () => {
       ok: true,
       json: async () => ({
         jobId: "job-1",
-        status: "completed",
+        status: "pending",
         progress: [],
       }),
     }) as any;
@@ -154,6 +176,42 @@ describe("getJobStatus", () => {
 
     const fetchCall = (globalThis.fetch as any).mock.calls[0];
     expect(fetchCall[0]).toBe("/v1/status/job-1");
+  });
+
+  test.each([
+    ["available", availableOutcome],
+    ["generation_failed", generationFailedOutcome],
+  ] as const)("accepts a completed %s outcome", async (_, outcome) => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobId: "job-validated",
+        status: "completed",
+        progress: [],
+        result: outcome,
+      }),
+    }) as any;
+
+    const result = await getJobStatus("job-validated");
+
+    expect(result.result).toEqual(outcome);
+  });
+
+  test.each([
+    ["malformed", { status: "available", report: {} }],
+    ["legacy", availableOutcome.report],
+  ] as const)("rejects a %s completed outcome", async (_, outcome) => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        jobId: "job-invalid",
+        status: "completed",
+        progress: [],
+        result: outcome,
+      }),
+    }) as any;
+
+    await expect(getJobStatus("job-invalid")).rejects.toThrow();
   });
 
   test("throws on non-OK response", async () => {
