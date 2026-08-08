@@ -1,7 +1,7 @@
 import { createSpecialistAgent } from "./factory";
 
 export const allergistImmunologist = createSpecialistAgent({
-  id: "allergist-immunologist",
+  id: "allergistImmunologist",
   name: "Allergist / Immunologist",
   description:
     "Evaluates immune system disorders, allergies, anaphylaxis, autoimmune conditions, and immunodeficiency. Use when allergic reactions, recurrent infections, or immune system dysfunction is suspected.",

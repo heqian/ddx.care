@@ -1,4 +1,14 @@
 import type { Agent } from "@mastra/core/agent";
+import { specialistManifest, type SpecialistId } from "./manifest";
+
+export {
+  specialistCatalog,
+  specialistIds,
+  specialistManifest,
+  specialistMetadataById,
+  type SpecialistId,
+  type SpecialistMetadata,
+} from "./manifest";
 
 // Primary Care
 import { generalist } from "./generalist";
@@ -96,14 +106,13 @@ export const specialists = {
   emergencyPhysician,
   sportsMedicinePhysician,
   podiatrist,
-} satisfies Record<string, Agent>;
-
-/** Specialist agent IDs (camelCase, matching agent record keys) */
-export type SpecialistId = keyof typeof specialists;
+} satisfies Record<SpecialistId, Agent>;
 
 /** List of agent metadata for the /v1/agents endpoint */
-export const agentList = Object.entries(specialists).map(([id, agent]) => ({
-  id,
-  name: agent.name,
-  description: agent.getDescription(),
-}));
+export const agentList = specialistManifest.map(
+  ({ id, name, description }) => ({
+    id,
+    name,
+    description,
+  }),
+);

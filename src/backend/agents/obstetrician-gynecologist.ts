@@ -1,7 +1,7 @@
 import { createSpecialistAgent } from "./factory";
 
 export const obstetricianGynecologist = createSpecialistAgent({
-  id: "obstetrician-gynecologist",
+  id: "obstetricianGynecologist",
   name: "Obstetrician-Gynecologist",
   description:
     "Evaluates female reproductive health and pregnancy-related conditions including pelvic pain, abnormal uterine bleeding, pregnancy complications, ovarian masses, cervical pathology, and menopause management. Use when gynecologic or obstetric conditions are suspected.",

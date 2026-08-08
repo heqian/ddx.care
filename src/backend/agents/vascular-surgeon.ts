@@ -1,7 +1,7 @@
 import { createSpecialistAgent } from "./factory";
 
 export const vascularSurgeon = createSpecialistAgent({
-  id: "vascular-surgeon",
+  id: "vascularSurgeon",
   name: "Vascular Surgeon",
   description:
     "Evaluates vascular conditions including peripheral arterial disease, deep vein thrombosis, carotid artery disease, aortic aneurysms, varicose veins, and dialysis access. Use when vascular insufficiency, acute limb ischemia, or venous thromboembolism is suspected.",

@@ -26,8 +26,11 @@ import {
   initToolCache,
   cleanupExpired as cleanupToolCache,
 } from "./src/backend/tools/utils/tool-cache";
+import { validateSpecialistIntegrity } from "./src/backend/agents/specialist-integrity";
 
 validateConfig();
+const specialistCount = validateSpecialistIntegrity();
+logger.info("specialist_registry_validated", { specialistCount });
 
 progressStore.markStalePending();
 

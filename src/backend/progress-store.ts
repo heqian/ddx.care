@@ -4,6 +4,7 @@ import {
   reportOutcomeSchema,
   type ReportOutcome,
 } from "../shared/report-outcome";
+import type { SpecialistId } from "./agents/manifest";
 
 export type ProgressEventType =
   | "round_start"
@@ -16,12 +17,13 @@ export type ProgressEventType =
   | "general";
 
 export type ToolResultStatus = "success" | "partial" | "failed";
+export type ProgressAgentId = SpecialistId | "chiefMedicalOfficer";
 
 export interface ProgressEvent {
   time: string;
   message: string;
   eventType?: ProgressEventType;
-  agentId?: string;
+  agentId?: ProgressAgentId;
   toolName?: string;
   toolArgs?: string | null;
   success?: boolean;
@@ -31,7 +33,7 @@ export interface ProgressEvent {
   resultSummary?: string | null;
   errorType?: string;
   cached?: boolean;
-  specialistIds?: string[];
+  specialistIds?: SpecialistId[];
 }
 
 interface JobRow {

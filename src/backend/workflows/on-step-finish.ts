@@ -1,5 +1,6 @@
 import type {
   ProgressEvent,
+  ProgressAgentId,
   ProgressEventType,
   ToolResultStatus,
 } from "../progress-store";
@@ -62,7 +63,7 @@ function classifyToolResult(
 }
 
 export function createStepEventHandler(
-  agentId: string,
+  agentId: ProgressAgentId,
   jobId: string,
   emit: EmitFn,
 ) {

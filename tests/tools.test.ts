@@ -1,24 +1,75 @@
 import { test, expect, describe } from "bun:test";
 
+const EXPECTED_TOOL_ASSIGNMENTS = {
+  generalist: ["universal", "prescribing"],
+  pediatrician: ["universal", "prescribing", "rareDisease"],
+  geriatrician: ["universal", "prescribing"],
+  cardiologist: ["universal", "prescribing"],
+  dermatologist: ["universal"],
+  endocrinologist: ["universal", "prescribing"],
+  gastroenterologist: ["universal", "prescribing"],
+  hematologist: ["universal", "prescribing", "trials"],
+  infectiologist: ["universal", "prescribing"],
+  nephrologist: ["universal", "prescribing"],
+  neurologist: ["universal", "prescribing", "rareDisease", "trials"],
+  oncologist: ["universal", "prescribing", "trials"],
+  pulmonologist: ["universal", "prescribing"],
+  rheumatologist: ["universal", "prescribing", "trials", "labPhenotype"],
+  generalSurgeon: ["universal", "prescribing"],
+  cardiothoracicSurgeon: ["universal", "prescribing"],
+  neurosurgeon: ["universal", "prescribing"],
+  orthopedist: ["universal", "prescribing"],
+  otolaryngologist: ["universal", "prescribing"],
+  urologist: ["universal", "prescribing"],
+  vascularSurgeon: ["universal", "prescribing"],
+  pathologist: ["universal", "rareDisease", "labPhenotype"],
+  radiologist: ["universal"],
+  geneticist: ["universal", "rareDisease", "labPhenotype"],
+  obstetricianGynecologist: ["universal", "prescribing"],
+  andrologist: ["universal", "prescribing"],
+  maternalFetalMedicine: ["universal", "prescribing", "rareDisease"],
+  psychiatrist: ["universal", "prescribing"],
+  intensivist: ["universal", "prescribing", "toxicology"],
+  toxicologist: ["universal", "prescribing", "toxicology"],
+  allergistImmunologist: ["universal", "prescribing"],
+  ophthalmologist: ["universal", "prescribing"],
+  emergencyPhysician: ["universal", "prescribing", "toxicology"],
+  sportsMedicinePhysician: ["universal", "prescribing"],
+  podiatrist: ["universal", "prescribing"],
+} as const;
+
+const TOOL_IDS_BY_CATEGORY = {
+  universal: [
+    "medlineplus-search",
+    "drug-labeling",
+    "adverse-events",
+    "food-adverse-events",
+    "device-adverse-events",
+  ],
+  prescribing: [
+    "drug-lookup",
+    "drug-interaction",
+    "drug-spelling-suggestion",
+    "drug-shortages",
+    "drug-recall",
+  ],
+  rareDisease: [
+    "rare-disease-search",
+    "rare-disease-genes",
+    "rare-disease-phenotypes",
+  ],
+  toxicology: ["substance-toxicology"],
+  trials: ["clinical-trials-search"],
+  labPhenotype: ["hpo-term-search", "loinc-test-lookup"],
+} as const;
+
 describe("Agent Registry", () => {
-  test("all specialist agents are registered", async () => {
-    const { specialists } = await import("../src/backend/agents/index");
-    const keys = Object.keys(specialists);
+  test("all canonical specialist agents are registered", async () => {
+    const { specialistIds, specialists } = await import(
+      "../src/backend/agents/index"
+    );
 
-    // Should have a reasonable number of specialists (guards against accidental removal)
-    expect(keys.length).toBeGreaterThan(30);
-
-    // Spot-check key specialties exist
-    expect(keys).toContain("generalist");
-    expect(keys).toContain("cardiologist");
-    expect(keys).toContain("neurologist");
-    expect(keys).toContain("emergencyPhysician");
-    expect(keys).toContain("psychiatrist");
-    expect(keys).toContain("obstetricianGynecologist");
-    expect(keys).toContain("vascularSurgeon");
-    expect(keys).toContain("intensivist");
-    expect(keys).toContain("toxicologist");
-    expect(keys).toContain("maternalFetalMedicine");
+    expect(Object.keys(specialists)).toEqual(specialistIds);
   });
 
   test("agent list provides metadata", async () => {
@@ -155,33 +206,120 @@ describe("Tool Assignments", () => {
     expect(tools).toHaveProperty("clinical-trials-search");
   });
 
-  test("unknown specialist ID gets fallback universal tools only", async () => {
+  test("unknown specialist ID fails instead of receiving fallback tools", async () => {
     const { getToolsForSpecialist } = await import(
       "../src/backend/tools/index"
     );
-    const tools = getToolsForSpecialist("nonexistent-spec");
-    // Universal tools should be present
-    expect(tools).toHaveProperty("medlineplus-search");
-    expect(tools).toHaveProperty("drug-labeling");
-    expect(tools).toHaveProperty("adverse-events");
-    // But not prescribing or specialized
-    expect(tools).not.toHaveProperty("drug-interaction");
-    expect(tools).not.toHaveProperty("rare-disease-search");
+    const lookup = getToolsForSpecialist as (id: string) => unknown;
+
+    expect(() => lookup("nonexistent-spec")).toThrow(
+      'No tool assignment configured for specialist "nonexistent-spec"',
+    );
   });
 
-  test("TOOL_ASSIGNMENTS keys match registered specialist agent IDs", async () => {
-    const { getToolsForSpecialist } = await import(
+  test("every specialist has the exact expected tool categories", async () => {
+    const { toolAssignments } = await import("../src/backend/tools/index");
+
+    expect(toolAssignments).toEqual(EXPECTED_TOOL_ASSIGNMENTS);
+  });
+
+  test("formerly mismatched specialists use canonical runtime IDs and exact tools", async () => {
+    const { specialists } = await import("../src/backend/agents/index");
+    const { getToolsForSpecialist, toolAssignments } = await import(
       "../src/backend/tools/index"
     );
-    const { specialists } = await import("../src/backend/agents/index");
+    const regressions = [
+      ["generalSurgeon", "general-surgeon"],
+      ["cardiothoracicSurgeon", "cardiothoracic-surgeon"],
+      ["vascularSurgeon", "vascular-surgeon"],
+      ["obstetricianGynecologist", "obstetrician-gynecologist"],
+      ["maternalFetalMedicine", "maternal-fetal-medicine"],
+      ["allergistImmunologist", "allergist-immunologist"],
+      ["emergencyPhysician", "emergency-physician"],
+      ["sportsMedicinePhysician", "sports-medicine-physician"],
+    ] as const;
 
-    const specialistIds = Object.keys(specialists);
-    expect(specialistIds.length).toBeGreaterThan(0);
+    for (const [canonicalId, legacyId] of regressions) {
+      const categories = EXPECTED_TOOL_ASSIGNMENTS[canonicalId];
+      const expectedToolIds = categories.flatMap(
+        (category) => TOOL_IDS_BY_CATEGORY[category],
+      );
 
-    for (const id of specialistIds) {
-      const tools = getToolsForSpecialist(id);
-      expect(Object.keys(tools).length).toBeGreaterThan(0);
+      expect(specialists[canonicalId].id).toBe(canonicalId);
+      expect(specialists[canonicalId].id).not.toBe(legacyId);
+      expect(toolAssignments[canonicalId]).toEqual(categories);
+      expect(Object.keys(getToolsForSpecialist(canonicalId))).toEqual(
+        expectedToolIds,
+      );
     }
+  });
+});
+
+describe("Specialist identity validation", () => {
+  const validInput = {
+    manifest: [{ id: "generalist" }],
+    registry: { generalist: { id: "generalist" } },
+    assignmentIds: ["generalist"],
+    cmoIds: ["generalist"],
+    apiIds: ["generalist"],
+  };
+
+  test("accepts equal identity sets", async () => {
+    const { validateSpecialistIntegrity } = await import(
+      "../src/backend/agents/specialist-integrity"
+    );
+
+    expect(validateSpecialistIntegrity(validInput)).toBe(1);
+  });
+
+  test("reports duplicate manifest IDs", async () => {
+    const { validateSpecialistIntegrity } = await import(
+      "../src/backend/agents/specialist-integrity"
+    );
+
+    expect(() =>
+      validateSpecialistIntegrity({
+        ...validInput,
+        manifest: [{ id: "generalist" }, { id: "generalist" }],
+      }),
+    ).toThrow('duplicate manifest ID "generalist"');
+  });
+
+  test("reports missing and orphaned assignments", async () => {
+    const { validateSpecialistIntegrity } = await import(
+      "../src/backend/agents/specialist-integrity"
+    );
+
+    expect(() =>
+      validateSpecialistIntegrity({ ...validInput, assignmentIds: [] }),
+    ).toThrow('missing tool assignment ID "generalist"');
+    expect(() =>
+      validateSpecialistIntegrity({
+        ...validInput,
+        assignmentIds: ["generalist", "unknownSpecialist"],
+      }),
+    ).toThrow('orphaned tool assignment ID "unknownSpecialist"');
+  });
+
+  test("reports runtime and CMO identity drift", async () => {
+    const { validateSpecialistIntegrity } = await import(
+      "../src/backend/agents/specialist-integrity"
+    );
+
+    expect(() =>
+      validateSpecialistIntegrity({
+        ...validInput,
+        registry: { generalist: { id: "general-specialist" } },
+      }),
+    ).toThrow(
+      'registry ID "generalist" does not match runtime ID "general-specialist"',
+    );
+    expect(() =>
+      validateSpecialistIntegrity({
+        ...validInput,
+        cmoIds: ["generalist", "unknownSpecialist"],
+      }),
+    ).toThrow('orphaned CMO ID "unknownSpecialist"');
   });
 });
 
@@ -227,20 +365,20 @@ describe("Config", () => {
 });
 
 describe("Agent factory", () => {
-  test("createSpecialistAgent succeeds for valid kebab-case ID", async () => {
+  test("createSpecialistAgent succeeds for canonical camelCase ID", async () => {
     const { createSpecialistAgent } = await import(
       "../src/backend/agents/factory"
     );
 
     const agent = createSpecialistAgent({
-      id: "general-surgeon",
+      id: "generalSurgeon",
       name: "General Surgeon",
       description: "Test",
       instructions: "Test",
     });
 
     expect(agent).toBeDefined();
-    expect(agent.id).toBe("general-surgeon");
+    expect(agent.id).toBe("generalSurgeon");
   });
 
   test("createSpecialistAgent assigns per-specialist tools", async () => {

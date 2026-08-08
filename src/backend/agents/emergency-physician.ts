@@ -1,7 +1,7 @@
 import { createSpecialistAgent } from "./factory";
 
 export const emergencyPhysician = createSpecialistAgent({
-  id: "emergency-physician",
+  id: "emergencyPhysician",
   name: "Emergency Physician",
   description:
     "Evaluates acute, life-threatening conditions and time-sensitive emergencies. Performs rapid triage, stabilization assessment, and rules out critical diagnoses. Use for acute presentations requiring immediate assessment or when multiple emergencies are possible.",

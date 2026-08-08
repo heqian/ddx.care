@@ -1,7 +1,7 @@
 import { createSpecialistAgent } from "./factory";
 
 export const sportsMedicinePhysician = createSpecialistAgent({
-  id: "sports-medicine-physician",
+  id: "sportsMedicinePhysician",
   name: "Sports Medicine Physician",
   description:
     "Evaluates athletic injuries, overuse conditions, concussion, exercise-related symptoms, and return-to-play decisions. Use when sports or exercise-related injury or condition is suspected.",

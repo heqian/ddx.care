@@ -21,9 +21,16 @@ describe("API Endpoints", () => {
     const res = await fetch(`${BASE}/v1/agents`);
     expect(res.ok).toBe(true);
 
-    const body = (await res.json()) as { agents: unknown[] };
+    const { specialistIds } = await import("../src/backend/agents/manifest");
+    const body = (await res.json()) as {
+      agents: Array<{ id: string; name: string; description: string }>;
+    };
     expect(body.agents).toBeInstanceOf(Array);
-    expect(body.agents.length).toBeGreaterThan(0);
+    expect(body.agents.map(({ id }) => id)).toEqual(specialistIds);
+    expect(body.agents.every(({ id }) => !id.includes("-"))).toBe(true);
+    expect(
+      body.agents.every(({ name, description }) => name && description),
+    ).toBe(true);
   });
 
   test("GET /v1/health returns ok", async () => {

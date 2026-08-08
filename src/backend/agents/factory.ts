@@ -1,9 +1,10 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
 import { getToolsForSpecialist } from "../tools";
+import type { SpecialistId } from "./manifest";
 
 export interface SpecialistConfig {
-  id: string;
+  id: SpecialistId;
   name: string;
   description: string;
   instructions: string;

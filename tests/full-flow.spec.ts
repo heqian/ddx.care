@@ -6,6 +6,20 @@ import {
   baseUrl,
   jobIdFromUrl,
 } from "./e2e/helpers";
+import { specialistIds } from "../src/backend/agents/manifest";
+
+test("agent API exposes the stable canonical specialist IDs", async ({
+  request,
+}) => {
+  const response = await request.get(`${baseUrl}/v1/agents`);
+  expect(response.ok()).toBe(true);
+
+  const body = (await response.json()) as {
+    agents: Array<{ id: string }>;
+  };
+  expect(body.agents.map(({ id }) => id)).toEqual(specialistIds);
+  expect(body.agents.every(({ id }) => !id.includes("-"))).toBe(true);
+});
 
 test.describe("Consent gate", () => {
   test("blocks access until accepted", async ({ page }) => {

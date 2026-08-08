@@ -1,7 +1,7 @@
 import { createSpecialistAgent } from "./factory";
 
 export const generalSurgeon = createSpecialistAgent({
-  id: "general-surgeon",
+  id: "generalSurgeon",
   name: "General Surgeon",
   description:
     "Evaluates surgical conditions of the abdomen and soft tissue including acute abdomen, appendicitis, cholecystitis, bowel obstruction, hernias, and soft tissue infections. Use when surgical intervention may be needed or acute abdominal pathology is suspected.",

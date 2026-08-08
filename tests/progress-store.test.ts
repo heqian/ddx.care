@@ -189,6 +189,36 @@ describe("JobStore — Progress Events", () => {
     expect(job!.progress[0].toolArgs).toBeNull();
   });
 
+  test("canonical multiword specialist IDs round-trip unchanged", () => {
+    store.createJob("job-canonical-ids");
+    const specialistIds = [
+      "generalSurgeon",
+      "cardiothoracicSurgeon",
+      "vascularSurgeon",
+      "obstetricianGynecologist",
+      "maternalFetalMedicine",
+      "allergistImmunologist",
+      "emergencyPhysician",
+      "sportsMedicinePhysician",
+    ] as const;
+    store.emitMessage("job-canonical-ids", {
+      time: "2026-01-15T10:30:00.000Z",
+      message: "CMO requested canonical multiword specialists",
+      eventType: "cmo_decision",
+      specialistIds: [...specialistIds],
+    });
+    store.emitMessage("job-canonical-ids", {
+      time: "2026-01-15T10:30:01.000Z",
+      message: "Calling emergency specialist",
+      eventType: "specialist_start",
+      agentId: "emergencyPhysician",
+    });
+
+    const progress = store.getJob("job-canonical-ids")!.progress;
+    expect(progress[0].specialistIds).toEqual(specialistIds);
+    expect(progress[1].agentId).toBe("emergencyPhysician");
+  });
+
   test("partial tool result status and retry classification round-trip", () => {
     store.createJob("job-partial");
     store.emitMessage("job-partial", {

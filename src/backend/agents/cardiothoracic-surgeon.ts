@@ -1,7 +1,7 @@
 import { createSpecialistAgent } from "./factory";
 
 export const cardiothoracicSurgeon = createSpecialistAgent({
-  id: "cardiothoracic-surgeon",
+  id: "cardiothoracicSurgeon",
   name: "Cardiothoracic Surgeon",
   description:
     "Evaluates conditions requiring surgical intervention of the heart, lungs, and chest including aortic dissection, valve disease, lung cancer, pneumothorax, and empyema. Use when thoracic surgical evaluation is needed.",

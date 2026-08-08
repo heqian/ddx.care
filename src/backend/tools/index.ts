@@ -1,4 +1,5 @@
 import type { ToolsInput } from "@mastra/core/agent";
+import type { SpecialistId } from "../agents/manifest";
 
 // Drug interactions (RxNav)
 export {
@@ -59,7 +60,7 @@ import {
 } from "./orphadata";
 import { hpoTermSearchTool, loincTestLookupTool } from "./nlm-clinical-tables";
 
-type ToolCategory =
+export type ToolCategory =
   | "universal"
   | "prescribing"
   | "rareDisease"
@@ -99,7 +100,7 @@ const TOOL_DEFS = {
   },
 } satisfies Record<ToolCategory, ToolsInput>;
 
-const TOOL_ASSIGNMENTS: Record<string, ToolCategory[]> = {
+export const toolAssignments = {
   // Primary Care
   generalist: ["universal", "prescribing"],
   pediatrician: ["universal", "prescribing", "rareDisease"],
@@ -150,13 +151,14 @@ const TOOL_ASSIGNMENTS: Record<string, ToolCategory[]> = {
   emergencyPhysician: ["universal", "prescribing", "toxicology"],
   sportsMedicinePhysician: ["universal", "prescribing"],
   podiatrist: ["universal", "prescribing"],
-};
+} satisfies Record<SpecialistId, readonly ToolCategory[]>;
 
-export function getToolsForSpecialist(specialistId: string): ToolsInput {
-  const categories = TOOL_ASSIGNMENTS[specialistId];
+export function getToolsForSpecialist(specialistId: SpecialistId): ToolsInput {
+  const categories = toolAssignments[specialistId];
   if (!categories) {
-    // Fallback: universal tools only for unknown specialists
-    return { ...TOOL_DEFS.universal };
+    throw new Error(
+      `No tool assignment configured for specialist "${specialistId}"`,
+    );
   }
 
   const tools: ToolsInput = {};

@@ -19,7 +19,7 @@ import {
 } from "../progress-store";
 import { logger } from "../utils/logger";
 import * as abortStore from "../utils/abort-controller-store";
-import { agentList, specialists } from "../agents";
+import { agentList, specialistIds, type SpecialistId } from "../agents";
 import { formatToolLabel } from "../tools/tool-labels";
 import { createStepEventHandler } from "./on-step-finish";
 import { runWithCacheTracking } from "./cache-context";
@@ -240,10 +240,12 @@ export const reportGenerationOutcomeSchema = z.discriminatedUnion("status", [
 
 type ReportGenerationOutcome = zInfer<typeof reportGenerationOutcomeSchema>;
 
+const specialistIdSchema = z.enum(specialistIds);
+
 const cmoDecisionSchema = z.object({
   specialistsToConsult: z.array(
     z.object({
-      id: z.string(),
+      id: specialistIdSchema,
       contextDirective: z.string().optional(),
     }),
   ),
@@ -261,7 +263,7 @@ export function splitToList(value: string | undefined): string[] {
 }
 
 interface CmoSpecialistRequest {
-  id: string;
+  id: SpecialistId;
   contextDirective?: string;
 }
 
@@ -409,7 +411,7 @@ export async function mockDiagnosis(
   );
   await delay(stepDelay * 1.5);
 
-  const specialists = [
+  const specialists: Array<{ id: SpecialistId; hasContext: boolean }> = [
     { id: "cardiologist", hasContext: false },
     { id: "neurologist", hasContext: false },
     { id: "nephrologist", hasContext: false },
@@ -781,19 +783,15 @@ export const runDiagnosis = createStep({
 
     const cmo = mastra.getAgent("chiefMedicalOfficer");
 
-    const availableSpecialistIds = Object.keys(specialists);
+    const availableSpecialistIds = specialistIds;
     if (availableSpecialistIds.length === 0) {
       throw new Error("No specialist agents registered — cannot run diagnosis");
     }
-    const specialistIdEnum = z.enum(
-      availableSpecialistIds as [string, ...string[]],
-    );
-
     const MAX_ROUNDS = MAX_DIAGNOSIS_ROUNDS;
     let round = 1;
     let parseFailureCount = 0;
     const MAX_PARSE_FAILURES = 3;
-    const allConsultedSpecialists = new Set<string>();
+    const allConsultedSpecialists = new Set<SpecialistId>();
     const contextHistory = ["=== PATIENT CASE ===", patientSummary];
 
     let finalReportOutcome: ReportGenerationOutcome | null = null;
@@ -857,7 +855,7 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
                       specialistsToConsult: z
                         .array(
                           z.object({
-                            id: specialistIdEnum.describe(
+                            id: specialistIdSchema.describe(
                               "Specialist ID (e.g. 'generalist', 'cardiologist')",
                             ),
                             contextDirective: z
@@ -978,7 +976,7 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
         }
 
         // Filter to new specialists only, deduplicate by id within round
-        const seenIds = new Set<string>();
+        const seenIds = new Set<SpecialistId>();
         const newSpecialistRequests = (specialistsToConsult || []).filter(
           (s) => {
             if (allConsultedSpecialists.has(s.id)) return false;

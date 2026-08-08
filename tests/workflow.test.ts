@@ -24,6 +24,8 @@ import {
   APITimeoutError,
   SchemaValidationError,
 } from "../src/backend/utils/errors";
+import { mastra } from "../src/backend";
+import { specialistIds, specialists } from "../src/backend/agents";
 
 describe("splitToList", () => {
   test("returns empty array for undefined", () => {
@@ -714,6 +716,26 @@ describe("normalizeSpecialistName", () => {
     expect(normalizeSpecialistName("custom specialist")).toBe(
       "Custom Specialist",
     );
+  });
+});
+
+describe("CMO specialist identity", () => {
+  test("every allowed specialist ID resolves to its intended runtime agent", () => {
+    for (const id of specialistIds) {
+      const agent = mastra.getAgent(id);
+      expect(agent).toBe(specialists[id]);
+      expect(agent.id).toBe(id);
+    }
+  });
+
+  test("CMO instructions list every canonical specialist ID", async () => {
+    const instructions = String(
+      await mastra.getAgent("chiefMedicalOfficer").getInstructions(),
+    );
+
+    for (const id of specialistIds) {
+      expect(instructions).toContain(`**${id}**`);
+    }
   });
 });
 

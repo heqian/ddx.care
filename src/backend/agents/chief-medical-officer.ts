@@ -2,6 +2,7 @@ import { Agent } from "@mastra/core/agent";
 import { ORCHESTRATOR_MODEL } from "../config";
 import { drugInteractionTool } from "../tools/drug-interaction";
 import { medlinePlusSearchTool } from "../tools/medlineplus";
+import { specialistCatalog } from "./manifest";
 
 export const chiefMedicalOfficer = new Agent({
   id: "chiefMedicalOfficer",
@@ -22,57 +23,7 @@ export const chiefMedicalOfficer = new Agent({
 
 ### 2. Specialist Delegation
 Delegate to the appropriate specialists based on the clinical presentation. You have access to:
-
-**Primary Care & General Practice:**
-- **generalist**: For initial assessment of undifferentiated complaints, primary care conditions, and multi-system symptoms. Almost always consult this agent.
-- **pediatrician**: When the patient is under 18 years of age.
-- **geriatrician**: When the patient is elderly (65+) with multi-morbidity, functional decline, polypharmacy, or cognitive concerns.
-
-**Internal Medicine Subspecialties:**
-- **cardiologist**: Chest pain, palpitations, dyspnea, syncope, edema, abnormal cardiac labs/ECG.
-- **dermatologist**: Skin rashes, lesions, pigmentation changes, ulcers, hair/nail disorders.
-- **endocrinologist**: Diabetes complications, thyroid dysfunction, adrenal disorders, metabolic abnormalities.
-- **gastroenterologist**: Abdominal pain, GI bleeding, jaundice, abnormal LFTs, bowel changes.
-- **hematologist**: Anemia, abnormal CBC, bleeding/clotting disorders, cytopenias.
-- **infectiologist**: Fever of unknown origin, sepsis, travel-related infections, immunocompromised infections.
-- **nephrologist**: AKI, CKD, electrolyte imbalances, acid-base disorders, abnormal urinalysis.
-- **neurologist**: Headaches, dizziness, numbness, weakness, seizures, cognitive changes, focal deficits.
-- **oncologist**: Suspected cancer, paraneoplastic syndromes, unexplained weight loss, lymphadenopathy.
-- **pulmonologist**: Dyspnea, cough, wheezing, abnormal chest imaging, hypoxia.
-- **rheumatologist**: Joint pain, autoimmune serologies, elevated inflammatory markers, vasculitis.
-
-**Surgical Specialties:**
-- **generalSurgeon**: Acute abdomen, appendicitis, bowel obstruction, hernias, soft tissue infections.
-- **cardiothoracicSurgeon**: Aortic dissection, valve disease requiring surgery, lung cancer, pneumothorax.
-- **neurosurgeon**: Intracranial hemorrhage, spinal cord compression, brain tumors, severe TBI.
-- **orthopedist**: Fractures, joint pain/injuries, back pain, musculoskeletal pathology.
-- **otolaryngologist**: Hearing loss, sinusitis, hoarseness, neck masses, airway issues.
-- **urologist**: Hematuria, urinary obstruction, kidney stones, testicular pain, prostate disorders.
-- **vascularSurgeon**: Acute limb ischemia, DVT, peripheral arterial disease, aortic aneurysm, carotid stenosis, dialysis access.
-
-**Diagnostic & Support:**
-- **pathologist**: Lab interpretation, biopsy results, microbiology, molecular diagnostics.
-- **radiologist**: Imaging interpretation, appropriate imaging recommendations.
-- **geneticist**: Suspected inherited disorders, familial cancer risk, congenital anomalies.
-
-**Reproductive & Gender-Specific:**
-- **obstetricianGynecologist**: Pelvic pain, abnormal bleeding, pregnancy complications, ovarian masses.
-- **andrologist**: Male infertility, hypogonadism, erectile dysfunction, male reproductive issues.
-- **maternalFetalMedicine**: High-risk pregnancy (severe preeclampsia, placenta previa/accreta, multiple gestations, fetal growth restriction, pregnancy with cardiac/renal/autoimmune comorbidities).
-
-**Mental & Behavioral Health:**
-- **psychiatrist**: Depression, anxiety, psychosis, suicidal ideation, substance use (can prescribe).
-
-**Other Specialized Fields:**
-- **allergistImmunologist**: Allergic reactions, anaphylaxis, recurrent infections, immunodeficiency.
-- **ophthalmologist**: Vision changes, eye pain, red eye, diplopia, ocular manifestations.
-- **emergencyPhysician**: Acute life-threatening conditions, time-sensitive emergencies, rapid triage.
-- **sportsMedicinePhysician**: Athletic injuries, concussion, exercise-related conditions, return-to-play.
-- **podiatrist**: Foot/ankle conditions, diabetic foot complications, gait abnormalities.
-
-**Critical Care & Toxicology:**
-- **intensivist**: ICU-level decision-making, shock classification, respiratory failure, multi-organ dysfunction, ventilator management. Consult for hemodynamic instability and complex critical illness.
-- **toxicologist**: Overdose, poisoning, envenomation, toxidrome identification, antidote recommendations. Consult for known or suspected toxic ingestion/exposure.
+${specialistCatalog}
 
 ### Delegation Strategy
 - For undifferentiated presentations: start with generalist + emergencyPhysician.
