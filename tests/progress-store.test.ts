@@ -189,6 +189,24 @@ describe("JobStore — Progress Events", () => {
     expect(job!.progress[0].toolArgs).toBeNull();
   });
 
+  test("partial tool result status and retry classification round-trip", () => {
+    store.createJob("job-partial");
+    store.emitMessage("job-partial", {
+      time: "2026-01-15T10:30:00.000Z",
+      message: "Interaction check completed with partial coverage",
+      eventType: "tool_result",
+      agentId: "cardiologist",
+      toolName: "drug-interaction",
+      success: false,
+      toolResultStatus: "partial",
+      retriable: true,
+    });
+
+    const event = store.getJob("job-partial")!.progress[0];
+    expect(event.toolResultStatus).toBe("partial");
+    expect(event.retriable).toBe(true);
+  });
+
   test("mixed string and ProgressEvent emitMessage calls", () => {
     store.createJob("job-p6");
     store.emitMessage("job-p6", "Starting analysis...");

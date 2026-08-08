@@ -59,7 +59,7 @@ export function summarizeToolResult(
     return null;
   }
 
-  const obj = result as Record<string, unknown>;
+  let obj = result as Record<string, unknown>;
 
   if (Array.isArray(obj)) {
     if (obj.length === 0) return null;
@@ -68,16 +68,57 @@ export function summarizeToolResult(
     );
   }
 
+  if (obj.ok === false) {
+    const message = extractStringField(obj, "error") ?? "Tool error";
+    const retry = obj.retriable === true ? "retriable" : "not retriable";
+    return truncateSummary(`${message} (${retry})`);
+  }
+
+  if (
+    obj.ok === true &&
+    typeof obj.data === "object" &&
+    obj.data !== null &&
+    !Array.isArray(obj.data)
+  ) {
+    obj = obj.data as Record<string, unknown>;
+  }
+
   switch (toolName) {
     case "drug-interaction": {
       const interactions = obj.interactions;
+      const coverage = extractStringField(obj, "coverage");
+      const interactionStatus = extractStringField(obj, "interactionStatus");
+      const checks = Array.isArray(obj.checks) ? obj.checks : [];
+      const checkedCount = checks.filter(
+        (check) =>
+          typeof check === "object" &&
+          check !== null &&
+          (check as Record<string, unknown>).status === "checked",
+      ).length;
+      const coverageSummary = coverage
+        ? `${coverage} coverage${checks.length > 0 ? `; ${checkedCount} of ${checks.length} drugs checked` : ""}`
+        : "coverage not reported";
+
       if (Array.isArray(interactions)) {
-        if (interactions.length === 0) return "No interactions found";
+        if (interactionStatus === "none_found" && coverage === "complete") {
+          return truncateSummary(
+            `No interactions found in checked FDA labels (${coverageSummary}; not comprehensive clearance)`,
+          );
+        }
+        if (interactionStatus === "unknown" || coverage === "unavailable") {
+          return truncateSummary(
+            `Unknown interaction result (${coverageSummary}); no reliable negative result`,
+          );
+        }
+        if (interactions.length === 0) {
+          return truncateSummary(
+            `Interaction result has no findings (${coverageSummary})`,
+          );
+        }
         return truncateSummary(
-          `${interactions.length} interaction${interactions.length === 1 ? "" : "s"} found`,
+          `${interactions.length} interaction${interactions.length === 1 ? "" : "s"} found (${coverageSummary})`,
         );
       }
-      if (obj.noInteractionsFound) return "No interactions found";
       break;
     }
     case "drug-lookup": {

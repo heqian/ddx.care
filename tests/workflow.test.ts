@@ -1357,6 +1357,101 @@ describe("runDiagnosis - CMO parsing logic", () => {
     expect(result.status).toBe("available");
     expect(callCount).toBe(2);
   });
+
+  for (const scenario of [
+    {
+      name: "partial positive interaction coverage",
+      specialistText:
+        "Aspirin-warfarin interaction found. Coverage is partial: 2 of 3 drugs checked; mystery-drug was unresolved. FDA label text is not comprehensive clinical clearance.",
+    },
+    {
+      name: "unknown unavailable interaction coverage",
+      specialistText:
+        "Interaction status is unknown and coverage is unavailable: 0 of 2 drugs checked. No reliable negative result is available from FDA label text.",
+    },
+  ]) {
+    test(`preserves ${scenario.name} through CMO synthesis`, async () => {
+      let cmoCallCount = 0;
+      let synthesisPrompt = "";
+      const mockCmoGenerate = mock(async (prompt: string) => {
+        cmoCallCount++;
+        if (cmoCallCount === 1) {
+          return {
+            object: {
+              specialistsToConsult: [{ id: "cardiologist" }],
+              isFinal: false,
+            },
+          };
+        }
+        synthesisPrompt = prompt;
+        return {
+          object: {
+            specialistsToConsult: [],
+            isFinal: true,
+            finalReport: {
+              chiefComplaint: "Medication safety review",
+              patientSummary: "Patient taking multiple medications",
+              specialistsConsulted: [
+                {
+                  specialist: "cardiologist",
+                  keyFindings: scenario.specialistText,
+                },
+              ],
+              rankedDiagnoses: [
+                {
+                  diagnosisName: "Medication interaction risk",
+                  confidencePercentage: 60,
+                  urgency: "Urgent",
+                  rationale: "Interaction evidence requires clinical review.",
+                  supportingEvidence: scenario.specialistText,
+                  contradictoryEvidence: "Incomplete source coverage",
+                  suggestedNextSteps:
+                    "Verify with a clinical interaction source.",
+                },
+              ],
+              crossSpecialtyObservations: scenario.specialistText,
+              recommendedImmediateActions:
+                "Do not change medication without professional review.",
+            },
+          },
+        };
+      });
+      const mockSpecialistGenerate = mock(async () => ({
+        text: scenario.specialistText,
+      }));
+      const mockMastra = {
+        getAgent: (id: string) =>
+          id === "chiefMedicalOfficer"
+            ? { generate: mockCmoGenerate }
+            : { generate: mockSpecialistGenerate },
+      };
+
+      const result = await runDiagnosis.execute({
+        context: {} as any,
+        stepId: "run-diagnosis",
+        workflowId: "test-wf",
+        inputData: {
+          medicalHistory: "Polypharmacy",
+          conversationTranscript: "Medication safety question",
+          labResults: "",
+        },
+        mastra: mockMastra as any,
+        runId: `coverage-preservation-${cmoCallCount}-${scenario.name}`,
+      });
+
+      expect(synthesisPrompt).toContain(scenario.specialistText);
+      expect(result.status).toBe("available");
+      if (result.status === "available") {
+        expect(result.diagnosisReport.crossSpecialtyObservations).toContain(
+          scenario.specialistText,
+        );
+        expect(
+          result.diagnosisReport.rankedDiagnoses[0].supportingEvidence,
+        ).toContain(scenario.specialistText);
+      }
+      expect(synthesisPrompt).not.toContain("noInteractionsFound");
+    });
+  }
 });
 
 describe("formatReport — malformed input handling", () => {
@@ -2188,23 +2283,84 @@ describe("summarizeToolResult", () => {
     expect(result).toBe("API rate limited");
   });
 
-  test("summarizes drug-interaction with interactions", () => {
+  test("unwraps and summarizes drug-interaction findings with coverage", () => {
     const result = summarizeToolResult("drug-interaction", {
-      interactions: [{}, {}, {}],
+      ok: true,
+      data: {
+        interactionStatus: "found",
+        coverage: "partial",
+        checks: [
+          { status: "checked" },
+          { status: "checked" },
+          { status: "failed" },
+        ],
+        interactions: [{}, {}, {}],
+      },
     });
-    expect(result).toBe("3 interactions found");
+    expect(result).toBe(
+      "3 interactions found (partial coverage; 2 of 3 drugs checked)",
+    );
   });
 
-  test("summarizes drug-interaction with no interactions", () => {
+  test("summarizes complete drug-interaction negative with limitation", () => {
     const result = summarizeToolResult("drug-interaction", {
-      interactions: [],
+      ok: true,
+      data: {
+        interactionStatus: "none_found",
+        coverage: "complete",
+        checks: [{ status: "checked" }, { status: "checked" }],
+        interactions: [],
+      },
     });
-    expect(result).toBe("No interactions found");
+    expect(result).toBe(
+      "No interactions found in checked FDA labels (complete coverage; 2 of 2 drugs checked; not comprehensive clearance)",
+    );
   });
 
-  test("summarizes drug-labeling with brandName", () => {
+  test("summarizes partial unknown without making a negative claim", () => {
+    const result = summarizeToolResult("drug-interaction", {
+      ok: true,
+      data: {
+        interactionStatus: "unknown",
+        coverage: "partial",
+        checks: [{ status: "checked" }, { status: "unresolved" }],
+        interactions: [],
+      },
+    });
+    expect(result).toBe(
+      "Unknown interaction result (partial coverage; 1 of 2 drugs checked); no reliable negative result",
+    );
+  });
+
+  test("summarizes unavailable interaction coverage", () => {
+    const result = summarizeToolResult("drug-interaction", {
+      ok: true,
+      data: {
+        interactionStatus: "unknown",
+        coverage: "unavailable",
+        checks: [{ status: "failed" }, { status: "failed" }],
+        interactions: [],
+      },
+    });
+    expect(result).toContain("Unknown interaction result");
+    expect(result).toContain("unavailable coverage");
+    expect(result).toContain("no reliable negative result");
+  });
+
+  test("summarizes semantic tool failures and retriable classification", () => {
+    expect(
+      summarizeToolResult("drug-interaction", {
+        ok: false,
+        error: "OpenFDA unavailable",
+        retriable: true,
+      }),
+    ).toBe("OpenFDA unavailable (retriable)");
+  });
+
+  test("unwraps another medical tool result", () => {
     const result = summarizeToolResult("drug-labeling", {
-      brandName: "Lipitor",
+      ok: true,
+      data: { brandName: "Lipitor" },
     });
     expect(result).toBe("Label found for Lipitor");
   });
@@ -2323,6 +2479,7 @@ describe("createStepEventHandler", () => {
     const toolResults = events.filter((e) => e.eventType === "tool_result");
     expect(toolResults.length).toBe(1);
     expect(toolResults[0].success).toBe(true);
+    expect(toolResults[0].toolResultStatus).toBe("success");
     expect(toolResults[0].toolName).toBe("drug-interaction");
     expect(typeof toolResults[0].durationMs).toBe("number");
     expect(toolResults[0].resultSummary).not.toBeNull();
@@ -2355,7 +2512,99 @@ describe("createStepEventHandler", () => {
     const toolResults = events.filter((e) => e.eventType === "tool_result");
     expect(toolResults.length).toBe(1);
     expect(toolResults[0].success).toBe(false);
+    expect(toolResults[0].toolResultStatus).toBe("failed");
     expect(toolResults[0].errorType).toBe("UnknownError");
+  });
+
+  test("treats ok false envelopes as failed and preserves retriable", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler(
+      "cardiologist",
+      "job-semantic",
+      emit,
+    );
+
+    handler({
+      toolResults: [
+        {
+          payload: {
+            toolName: "drug-interaction",
+            result: { ok: false, error: "API unavailable", retriable: true },
+            isError: false,
+          },
+        },
+      ],
+    });
+
+    const event = events.find((item) => item.eventType === "tool_result")!;
+    expect(event.success).toBe(false);
+    expect(event.toolResultStatus).toBe("failed");
+    expect(event.retriable).toBe(true);
+    expect(event.message).toContain("failed");
+  });
+
+  test("marks partial coverage without describing complete success", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler("cardiologist", "job-partial", emit);
+
+    handler({
+      toolResults: [
+        {
+          payload: {
+            toolName: "drug-interaction",
+            result: {
+              ok: true,
+              data: {
+                interactionStatus: "found",
+                coverage: "partial",
+                checks: [{ status: "checked" }, { status: "failed" }],
+                interactions: [{}],
+              },
+            },
+            isError: false,
+          },
+        },
+      ],
+    });
+
+    const event = events.find((item) => item.eventType === "tool_result")!;
+    expect(event.success).toBe(false);
+    expect(event.toolResultStatus).toBe("partial");
+    expect(event.message).toContain("partial coverage");
+  });
+
+  test("marks unavailable source coverage as failed", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler(
+      "cardiologist",
+      "job-unavailable",
+      emit,
+    );
+
+    handler({
+      toolResults: [
+        {
+          payload: {
+            toolName: "drug-interaction",
+            result: {
+              ok: true,
+              data: {
+                interactionStatus: "unknown",
+                coverage: "unavailable",
+                checks: [{ status: "failed" }, { status: "failed" }],
+                interactions: [],
+              },
+            },
+            isError: false,
+          },
+        },
+      ],
+    });
+
+    const event = events.find((item) => item.eventType === "tool_result")!;
+    expect(event.success).toBe(false);
+    expect(event.toolResultStatus).toBe("failed");
+    expect(event.resultSummary).toContain("no reliable negative result");
   });
 
   test("errorType is set for classified AppError errors", () => {

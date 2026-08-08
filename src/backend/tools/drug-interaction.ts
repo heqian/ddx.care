@@ -4,7 +4,6 @@ import { fetchJSON as baseFetchJSON } from "./utils/fetch";
 import type { ToolResult } from "./utils/types";
 import {
   APITimeoutError,
-  PermanentAPIError,
   RateLimitError,
   isRetriableError,
 } from "../utils/errors";
@@ -28,6 +27,8 @@ interface RxNavDrugGroup {
 
 const RXNAV_BASE = "https://rxnav.nlm.nih.gov/REST";
 const FDA_BASE = "https://api.fda.gov";
+export const FDA_LABEL_LIMITATION =
+  "FDA label-text matching is supporting evidence only. Absence of a literal drug mention is not proof that no interaction exists and is not comprehensive clinical clearance.";
 
 async function fetchJSON(
   url: string,
@@ -51,7 +52,149 @@ function toErrorResult(error: unknown): ToolResult<never> {
   };
 }
 
-async function lookupRxcui(drugName: string): Promise<string | undefined> {
+export const interactionStatusSchema = z.enum([
+  "found",
+  "none_found",
+  "unknown",
+]);
+
+export const interactionCoverageSchema = z.enum([
+  "complete",
+  "partial",
+  "unavailable",
+]);
+
+export const drugInteractionCheckSchema = z.discriminatedUnion("status", [
+  z.object({
+    input: z.string(),
+    resolvedName: z.string(),
+    status: z.literal("checked"),
+  }),
+  z.object({
+    input: z.string(),
+    status: z.literal("unresolved"),
+    errorCode: z.literal("drug_not_resolved"),
+  }),
+  z.object({
+    input: z.string(),
+    resolvedName: z.string().optional(),
+    status: z.literal("failed"),
+    errorCode: z.enum([
+      "rxnav_unavailable",
+      "rxnav_rate_limited",
+      "rxnav_timeout",
+      "openfda_unavailable",
+      "openfda_rate_limited",
+      "openfda_timeout",
+      "label_not_found",
+    ]),
+  }),
+]);
+
+export const interactionSourceSchema = z.object({
+  name: z.literal("OpenFDA Drug Labels"),
+  limitation: z.literal(FDA_LABEL_LIMITATION),
+});
+
+const interactionSchema = z.object({
+  drug: z.string(),
+  interactsWith: z.string(),
+  severity: z.string().optional(),
+  description: z.string().optional(),
+  source: z.string().optional(),
+});
+
+export const drugInteractionDataSchema = z
+  .object({
+    interactionStatus: interactionStatusSchema,
+    coverage: interactionCoverageSchema,
+    checks: z.array(drugInteractionCheckSchema).min(2),
+    interactions: z.array(interactionSchema),
+    source: interactionSourceSchema,
+  })
+  .superRefine((data, context) => {
+    const checkedCount = data.checks.filter(
+      (check) => check.status === "checked",
+    ).length;
+    const expectedCoverage =
+      checkedCount === data.checks.length
+        ? "complete"
+        : checkedCount === 0
+          ? "unavailable"
+          : "partial";
+
+    if (data.coverage !== expectedCoverage) {
+      context.addIssue({
+        code: "custom",
+        path: ["coverage"],
+        message: `Coverage must be ${expectedCoverage} for this check ledger`,
+      });
+    }
+
+    const expectedStatus =
+      data.interactions.length > 0
+        ? "found"
+        : data.coverage === "complete"
+          ? "none_found"
+          : "unknown";
+
+    if (data.interactionStatus !== expectedStatus) {
+      context.addIssue({
+        code: "custom",
+        path: ["interactionStatus"],
+        message: `Interaction status must be ${expectedStatus} for these findings and coverage`,
+      });
+    }
+  });
+
+export type DrugInteractionData = z.infer<typeof drugInteractionDataSchema>;
+type DrugInteractionCheck = z.infer<typeof drugInteractionCheckSchema>;
+
+type DrugIdentityOutcome =
+  | { status: "resolved"; rxcui: string; resolvedName: string }
+  | { status: "unresolved" }
+  | {
+      status: "failed";
+      errorCode: "rxnav_unavailable" | "rxnav_rate_limited" | "rxnav_timeout";
+    };
+
+type LabelOutcome =
+  | { status: "checked"; label: FdaLabelResult }
+  | {
+      status: "failed";
+      errorCode:
+        | "openfda_unavailable"
+        | "openfda_rate_limited"
+        | "openfda_timeout"
+        | "label_not_found";
+    };
+
+function sourceErrorCode(
+  source: "rxnav",
+  error: unknown,
+): "rxnav_unavailable" | "rxnav_rate_limited" | "rxnav_timeout";
+function sourceErrorCode(
+  source: "openfda",
+  error: unknown,
+): "openfda_unavailable" | "openfda_rate_limited" | "openfda_timeout";
+function sourceErrorCode(
+  source: "rxnav" | "openfda",
+  error: unknown,
+):
+  | "rxnav_unavailable"
+  | "rxnav_rate_limited"
+  | "rxnav_timeout"
+  | "openfda_unavailable"
+  | "openfda_rate_limited"
+  | "openfda_timeout" {
+  if (error instanceof APITimeoutError) return `${source}_timeout`;
+  if (error instanceof RateLimitError) return `${source}_rate_limited`;
+  return `${source}_unavailable`;
+}
+
+async function lookupDrugIdentity(
+  drugName: string,
+): Promise<DrugIdentityOutcome> {
   try {
     const url = `${RXNAV_BASE}/drugs.json?name=${encodeURIComponent(drugName)}`;
     const result = await baseFetchJSON(url, { errorPrefix: "RxNav API" });
@@ -60,15 +203,21 @@ async function lookupRxcui(drugName: string): Promise<string | undefined> {
       for (const cg of drugGroup.conceptGroup) {
         if (cg.conceptProperties?.length) {
           for (const cp of cg.conceptProperties) {
-            if (cp.rxcui) return cp.rxcui;
+            if (cp.rxcui) {
+              return {
+                status: "resolved",
+                rxcui: cp.rxcui,
+                resolvedName: cp.name || drugName,
+              };
+            }
           }
         }
       }
     }
-  } catch {
-    // RxCUI lookup is best-effort; fall back to name-based search
+    return { status: "unresolved" };
+  } catch (error) {
+    return { status: "failed", errorCode: sourceErrorCode("rxnav", error) };
   }
-  return undefined;
 }
 
 interface FdaLabelResult {
@@ -81,6 +230,22 @@ interface FdaLabelResult {
   contraindications?: string[];
   warnings?: string[];
   boxed_warning?: string[];
+}
+
+async function fetchDrugLabel(rxcui: string): Promise<LabelOutcome> {
+  try {
+    const url = `${FDA_BASE}/drug/label.json?search=openfda.rxcui:${rxcui}&limit=1`;
+    const result = await baseFetchJSON(url, {
+      errorPrefix: "OpenFDA API",
+      ignore404: true,
+    });
+    const label: FdaLabelResult | undefined = result?.results?.[0];
+    return label
+      ? { status: "checked", label }
+      : { status: "failed", errorCode: "label_not_found" };
+  } catch (error) {
+    return { status: "failed", errorCode: sourceErrorCode("openfda", error) };
+  }
 }
 
 export const drugLookupTool = createTool({
@@ -179,7 +344,7 @@ export const drugLookupTool = createTool({
 export const drugInteractionTool = createTool({
   id: "drug-interaction",
   description:
-    "Check drug-drug interactions between two or more medications by searching FDA drug labeling data. Provide drug names (generic or brand). Returns interaction details including severity and descriptions from official FDA labels. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
+    "Check drug-drug interactions between two or more medications using literal matches in FDA label text. Returns interactionStatus (found, none_found, or unknown), aggregate coverage (complete, partial, or unavailable), one check ledger entry per input, findings, and a source limitation. none_found is only valid with complete coverage; an empty findings array with incomplete coverage is unknown. FDA label matching is supporting evidence, not comprehensive interaction clearance. On internal failure, returns { ok: false, error: string, retriable: boolean }.",
   inputSchema: z.object({
     drugNames: z
       .array(z.string().max(100))
@@ -192,87 +357,79 @@ export const drugInteractionTool = createTool({
   outputSchema: z.union([
     z.object({
       ok: z.literal(true),
-      data: z.object({
-        interactions: z.array(
-          z.object({
-            drug: z.string(),
-            interactsWith: z.string(),
-            severity: z.string().optional(),
-            description: z.string().optional(),
-            source: z.string().optional(),
-          }),
-        ),
-        noInteractionsFound: z.boolean().optional(),
-      }),
+      data: drugInteractionDataSchema,
     }),
     errorResultSchema,
   ]),
-  execute: async ({
-    drugNames,
-  }): Promise<
-    ToolResult<{
-      interactions: Array<{
-        drug: string;
-        interactsWith: string;
-        severity?: string;
-        description?: string;
-        source?: string;
-      }>;
-      noInteractionsFound?: boolean;
-    }>
-  > => {
+  execute: async ({ drugNames }): Promise<ToolResult<DrugInteractionData>> => {
     try {
-      const interactions: Array<{
-        drug: string;
-        interactsWith: string;
-        severity?: string;
-        description?: string;
-        source?: string;
-      }> = [];
-
-      const labelCache = new Map<string, FdaLabelResult | null>();
-
-      // Memoize RxCUI lookups per drug name so the N×N interaction loop
-      // makes at most one RxNorm call per unique drug (not N²).
-      const rxcuiCache = new Map<string, string | undefined>();
-      const lookupRxcuiMemoized = async (
+      const interactions: DrugInteractionData["interactions"] = [];
+      const identityCache = new Map<string, Promise<DrugIdentityOutcome>>();
+      const lookupIdentityMemoized = async (
         drugName: string,
-      ): Promise<string | undefined> => {
+      ): Promise<DrugIdentityOutcome> => {
         const key = drugName.toLowerCase();
-        if (rxcuiCache.has(key)) return rxcuiCache.get(key);
-        const rxcui = await lookupRxcui(drugName);
-        rxcuiCache.set(key, rxcui);
-        return rxcui;
+        const cached = identityCache.get(key);
+        if (cached) return cached;
+        const identity = lookupDrugIdentity(drugName);
+        identityCache.set(key, identity);
+        return identity;
       };
 
-      for (const drugName of drugNames) {
-        const rxcui = await lookupRxcuiMemoized(drugName);
+      const identities = await Promise.all(
+        drugNames.map((drugName) => lookupIdentityMemoized(drugName)),
+      );
+      const labelCache = new Map<string, Promise<LabelOutcome>>();
+      const labels = await Promise.all(
+        identities.map(async (identity) => {
+          if (identity.status !== "resolved") return null;
+          const cached = labelCache.get(identity.rxcui);
+          if (cached) return cached;
+          const outcome = fetchDrugLabel(identity.rxcui);
+          labelCache.set(identity.rxcui, outcome);
+          return outcome;
+        }),
+      );
 
-        let labelUrl: string;
-        if (rxcui) {
-          labelUrl = `${FDA_BASE}/drug/label.json?search=openfda.rxcui:${rxcui}&limit=1`;
-        } else {
-          labelUrl = `${FDA_BASE}/drug/label.json?search=openfda.generic_name:${encodeURIComponent(drugName)}+openfda.brand_name:${encodeURIComponent(drugName)}&limit=1`;
-        }
-
-        let label: FdaLabelResult | null;
-        if (labelCache.has(drugName.toLowerCase())) {
-          label = labelCache.get(drugName.toLowerCase()) ?? null;
-        } else {
-          try {
-            const result = await baseFetchJSON(labelUrl, {
-              errorPrefix: "OpenFDA API",
-              ignore404: true,
-            });
-            const first = result?.results?.[0];
-            label = first ?? null;
-          } catch {
-            label = null;
+      const checks: DrugInteractionCheck[] = drugNames.map(
+        (drugName, index) => {
+          const identity = identities[index];
+          if (identity.status === "unresolved") {
+            return {
+              input: drugName,
+              status: "unresolved",
+              errorCode: "drug_not_resolved",
+            };
           }
-          labelCache.set(drugName.toLowerCase(), label);
-        }
+          if (identity.status === "failed") {
+            return {
+              input: drugName,
+              status: "failed",
+              errorCode: identity.errorCode,
+            };
+          }
+          const label = labels[index];
+          if (!label || label.status === "failed") {
+            return {
+              input: drugName,
+              resolvedName: identity.resolvedName,
+              status: "failed",
+              errorCode: label?.errorCode ?? "openfda_unavailable",
+            };
+          }
+          return {
+            input: drugName,
+            resolvedName: identity.resolvedName,
+            status: "checked",
+          };
+        },
+      );
 
-        if (!label) continue;
+      for (let index = 0; index < drugNames.length; index++) {
+        const drugName = drugNames[index];
+        const labelOutcome = labels[index];
+        if (!labelOutcome || labelOutcome.status !== "checked") continue;
+        const label = labelOutcome.label;
 
         const interactionText = label.drug_interactions?.join(" ") ?? "";
         const contraindicationText = label.contraindications?.join(" ") ?? "";
@@ -283,15 +440,18 @@ export const drugInteractionTool = createTool({
         const contraindicationOnly = contraindicationText;
         const warningOnly = warningText;
 
-        const otherDrugs = drugNames.filter(
-          (n) => n.toLowerCase() !== drugName.toLowerCase(),
-        );
-
-        for (const otherDrug of otherDrugs) {
+        for (let otherIndex = 0; otherIndex < drugNames.length; otherIndex++) {
+          if (otherIndex === index) continue;
+          const otherDrug = drugNames[otherIndex];
           const otherLower = otherDrug.toLowerCase();
           const otherVariants = [otherLower];
-          const otherRxcui = await lookupRxcuiMemoized(otherDrug);
-          if (otherRxcui) otherVariants.push(otherRxcui);
+          const otherIdentity = identities[otherIndex];
+          if (otherIdentity.status === "resolved") {
+            otherVariants.push(
+              otherIdentity.rxcui,
+              otherIdentity.resolvedName.toLowerCase(),
+            );
+          }
 
           let matched = false;
 
@@ -359,11 +519,33 @@ export const drugInteractionTool = createTool({
         return true;
       });
 
+      const checkedCount = checks.filter(
+        (check) => check.status === "checked",
+      ).length;
+      const coverage =
+        checkedCount === checks.length
+          ? ("complete" as const)
+          : checkedCount === 0
+            ? ("unavailable" as const)
+            : ("partial" as const);
+      const interactionStatus =
+        deduped.length > 0
+          ? ("found" as const)
+          : coverage === "complete"
+            ? ("none_found" as const)
+            : ("unknown" as const);
+
       return {
         ok: true as const,
         data: {
+          interactionStatus,
+          coverage,
+          checks,
           interactions: deduped,
-          noInteractionsFound: deduped.length === 0,
+          source: {
+            name: "OpenFDA Drug Labels",
+            limitation: FDA_LABEL_LIMITATION,
+          },
         },
       };
     } catch (error) {

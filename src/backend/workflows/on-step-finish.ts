@@ -1,4 +1,8 @@
-import type { ProgressEvent, ProgressEventType } from "../progress-store";
+import type {
+  ProgressEvent,
+  ProgressEventType,
+  ToolResultStatus,
+} from "../progress-store";
 import { logger } from "../utils/logger";
 import { formatToolArgs } from "./diagnostic-workflow";
 import { formatToolLabel } from "../tools/tool-labels";
@@ -25,6 +29,36 @@ interface StepToolResult {
     result: unknown;
     isError?: boolean;
   };
+}
+
+function classifyToolResult(
+  result: unknown,
+  isTransportError: boolean,
+): { status: ToolResultStatus; retriable?: boolean } {
+  if (isTransportError) return { status: "failed" };
+  if (typeof result !== "object" || result === null || Array.isArray(result)) {
+    return { status: "success" };
+  }
+
+  const envelope = result as Record<string, unknown>;
+  if (envelope.ok === false) {
+    return {
+      status: "failed",
+      ...(typeof envelope.retriable === "boolean" && {
+        retriable: envelope.retriable,
+      }),
+    };
+  }
+  if (
+    envelope.ok === true &&
+    typeof envelope.data === "object" &&
+    envelope.data !== null
+  ) {
+    const coverage = (envelope.data as Record<string, unknown>).coverage;
+    if (coverage === "partial") return { status: "partial" };
+    if (coverage === "unavailable") return { status: "failed" };
+  }
+  return { status: "success" };
 }
 
 export function createStepEventHandler(
@@ -58,7 +92,11 @@ export function createStepEventHandler(
     }
 
     for (const tr of toolResults) {
-      const isError = tr.payload.isError === true;
+      const classification = classifyToolResult(
+        tr.payload.result,
+        tr.payload.isError === true,
+      );
+      const isError = classification.status === "failed";
       const resultSummary = summarizeToolResult(
         tr.payload.toolName,
         tr.payload.result,
@@ -69,7 +107,11 @@ export function createStepEventHandler(
       const eventExtra: Partial<ProgressEvent> & { errorType?: string } = {
         agentId,
         toolName: tr.payload.toolName,
-        success: !isError,
+        success: classification.status === "success",
+        toolResultStatus: classification.status,
+        ...(classification.retriable !== undefined && {
+          retriable: classification.retriable,
+        }),
         durationMs,
         resultSummary,
         ...(cached && { cached: true }),
@@ -85,16 +127,17 @@ export function createStepEventHandler(
 
       emit(
         "tool_result",
-        `${agentId}: ${formatToolLabel(tr.payload.toolName)}${isError ? " failed" : " completed"}`,
+        `${agentId}: ${formatToolLabel(tr.payload.toolName)} ${classification.status === "partial" ? "completed with partial coverage" : classification.status === "failed" ? "failed" : "completed"}`,
         eventExtra,
       );
       logger.toolResult(
         agentId,
         jobId,
         tr.payload.toolName,
-        !isError,
+        classification.status,
         durationMs,
         resultSummary,
+        classification.retriable,
       );
     }
 

@@ -15,6 +15,8 @@ export type ProgressEventType =
   | "cmo_final"
   | "general";
 
+export type ToolResultStatus = "success" | "partial" | "failed";
+
 export interface ProgressEvent {
   time: string;
   message: string;
@@ -23,6 +25,8 @@ export interface ProgressEvent {
   toolName?: string;
   toolArgs?: string | null;
   success?: boolean;
+  toolResultStatus?: ToolResultStatus;
+  retriable?: boolean;
   durationMs?: number;
   resultSummary?: string | null;
   errorType?: string;

@@ -1,5 +1,6 @@
 import { test, expect, describe, beforeEach, afterEach, vi } from "bun:test";
 import { resetToolCache } from "../src/backend/tools/utils/tool-cache";
+import { clinicianReviewedDrugInteractionCases } from "./drug-interaction-corpus";
 
 const originalFetch = globalThis.fetch;
 
@@ -114,7 +115,12 @@ describe("drug-interaction tool execute", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.interactions.length).toBeGreaterThanOrEqual(1);
-    expect(result.data.noInteractionsFound).toBe(false);
+    expect(result.data.interactionStatus).toBe("found");
+    expect(result.data.coverage).toBe("complete");
+    expect(result.data.checks).toEqual([
+      { input: "aspirin", resolvedName: "aspirin", status: "checked" },
+      { input: "warfarin", resolvedName: "warfarin", status: "checked" },
+    ]);
   });
 
   test("drugInteractionTool handles API error gracefully", async () => {
@@ -122,8 +128,6 @@ describe("drug-interaction tool execute", () => {
       "../src/backend/tools/drug-interaction"
     );
 
-    // When all API calls fail, the tool gracefully returns empty interactions
-    // (RxCUI lookup and FDA label fetch both catch errors internally)
     globalThis.fetch = vi
       .fn()
       .mockRejectedValue(new Error("Network error")) as any;
@@ -134,7 +138,21 @@ describe("drug-interaction tool execute", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Unexpected error: ${result.error}`);
     expect(result.data.interactions).toEqual([]);
-    expect(result.data.noInteractionsFound).toBe(true);
+    expect(result.data.interactionStatus).toBe("unknown");
+    expect(result.data.coverage).toBe("unavailable");
+    expect(result.data.checks).toEqual([
+      {
+        input: "aspirin",
+        status: "failed",
+        errorCode: "rxnav_unavailable",
+      },
+      {
+        input: "warfarin",
+        status: "failed",
+        errorCode: "rxnav_unavailable",
+      },
+    ]);
+    expect(JSON.stringify(result.data.checks)).not.toContain("http");
   });
 
   test("drugInteractionTool handles non-200 HTTP response gracefully", async () => {
@@ -142,8 +160,6 @@ describe("drug-interaction tool execute", () => {
       "../src/backend/tools/drug-interaction"
     );
 
-    // When FDA API returns non-200, fetchJSON throws but the inner catch
-    // swallows it, so the tool returns empty interactions gracefully
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 503,
@@ -156,7 +172,11 @@ describe("drug-interaction tool execute", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Unexpected error: ${result.error}`);
     expect(result.data.interactions).toEqual([]);
-    expect(result.data.noInteractionsFound).toBe(true);
+    expect(result.data.interactionStatus).toBe("unknown");
+    expect(result.data.coverage).toBe("unavailable");
+    expect(result.data.checks.every((check) => check.status === "failed")).toBe(
+      true,
+    );
   });
 
   test("drugInteractionTool handles empty interaction list", async () => {
@@ -211,8 +231,241 @@ describe("drug-interaction tool execute", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.interactions).toEqual([]);
-    expect(result.data.noInteractionsFound).toBe(true);
+    expect(result.data.interactionStatus).toBe("none_found");
+    expect(result.data.coverage).toBe("complete");
+    expect(result.data.source.name).toBe("OpenFDA Drug Labels");
+    expect(result.data.source.limitation).toContain(
+      "not proof that no interaction exists",
+    );
   });
+
+  test("drugInteractionTool marks unresolved drugs as partial coverage", async () => {
+    const { drugInteractionTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes("/drugs.json")) {
+        const name = new URL(url).searchParams.get("name") ?? "";
+        return {
+          ok: true,
+          status: 200,
+          json: async () =>
+            name === "unknown-drug"
+              ? { drugGroup: { conceptGroup: [] } }
+              : {
+                  drugGroup: {
+                    conceptGroup: [
+                      {
+                        tty: "SCD",
+                        conceptProperties: [
+                          { rxcui: "123", name: "Aspirin", tty: "SCD" },
+                        ],
+                      },
+                    ],
+                  },
+                },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ results: [{ drug_interactions: [] }] }),
+      };
+    }) as any;
+
+    const result = await drugInteractionTool.execute({
+      drugNames: ["aspirin", "unknown-drug"],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.interactionStatus).toBe("unknown");
+    expect(result.data.coverage).toBe("partial");
+    expect(result.data.checks).toEqual([
+      { input: "aspirin", resolvedName: "Aspirin", status: "checked" },
+      {
+        input: "unknown-drug",
+        status: "unresolved",
+        errorCode: "drug_not_resolved",
+      },
+    ]);
+  });
+
+  test("drugInteractionTool preserves findings with partial coverage", async () => {
+    const { drugInteractionTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes("/drugs.json")) {
+        const name = new URL(url).searchParams.get("name") ?? "";
+        const concepts: Record<string, { rxcui: string; name: string }> = {
+          aspirin: { rxcui: "111", name: "Aspirin" },
+          warfarin: { rxcui: "222", name: "Warfarin" },
+        };
+        const concept = concepts[name];
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            drugGroup: {
+              conceptGroup: concept
+                ? [
+                    {
+                      tty: "SCD",
+                      conceptProperties: [{ ...concept, tty: "SCD" }],
+                    },
+                  ]
+                : [],
+            },
+          }),
+        };
+      }
+      const rxcui = new URL(url).searchParams.get("search") ?? "";
+      if (rxcui.includes("111")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            results: [
+              {
+                drug_interactions: [
+                  "Aspirin used with warfarin may increase bleeding.",
+                ],
+              },
+            ],
+          }),
+        };
+      }
+      return {
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+      };
+    }) as any;
+
+    const result = await drugInteractionTool.execute({
+      drugNames: ["aspirin", "warfarin", "unknown-drug"],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.interactionStatus).toBe("found");
+    expect(result.data.coverage).toBe("partial");
+    expect(result.data.interactions).toHaveLength(1);
+    expect(result.data.checks.map((check) => check.status)).toEqual([
+      "checked",
+      "failed",
+      "unresolved",
+    ]);
+  });
+
+  test("drug interaction schema rejects unsafe negative status combinations", async () => {
+    const { drugInteractionDataSchema, FDA_LABEL_LIMITATION } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+    const source = {
+      name: "OpenFDA Drug Labels" as const,
+      limitation: FDA_LABEL_LIMITATION,
+    };
+
+    const partialNegative = drugInteractionDataSchema.safeParse({
+      interactionStatus: "none_found",
+      coverage: "partial",
+      checks: [
+        { input: "aspirin", resolvedName: "Aspirin", status: "checked" },
+        {
+          input: "unknown",
+          status: "unresolved",
+          errorCode: "drug_not_resolved",
+        },
+      ],
+      interactions: [],
+      source,
+    });
+    const unavailableNegative = drugInteractionDataSchema.safeParse({
+      interactionStatus: "none_found",
+      coverage: "unavailable",
+      checks: [
+        {
+          input: "aspirin",
+          status: "failed",
+          errorCode: "rxnav_unavailable",
+        },
+        {
+          input: "warfarin",
+          status: "failed",
+          errorCode: "rxnav_unavailable",
+        },
+      ],
+      interactions: [],
+      source,
+    });
+
+    expect(partialNegative.success).toBe(false);
+    expect(unavailableNegative.success).toBe(false);
+  });
+
+  for (const regressionCase of clinicianReviewedDrugInteractionCases) {
+    test(`clinician-reviewed interaction regression: ${regressionCase.id}`, async () => {
+      const { drugInteractionTool } = await import(
+        "../src/backend/tools/drug-interaction"
+      );
+
+      globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+        if (url.includes("/drugs.json")) {
+          const name = new URL(url).searchParams.get("name") ?? "";
+          const index = regressionCase.drugNames.indexOf(name);
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              drugGroup: {
+                conceptGroup: [
+                  {
+                    tty: "SCD",
+                    conceptProperties: [
+                      {
+                        rxcui: regressionCase.rxcuis[index],
+                        name,
+                        tty: "SCD",
+                      },
+                    ],
+                  },
+                ],
+              },
+            }),
+          };
+        }
+
+        const search = new URL(url).searchParams.get("search") ?? "";
+        const index = regressionCase.rxcuis.findIndex((rxcui) =>
+          search.includes(rxcui),
+        );
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            results: [
+              {
+                drug_interactions: [regressionCase.labelInteractionText[index]],
+              },
+            ],
+          }),
+        };
+      }) as any;
+
+      const result = await drugInteractionTool.execute({
+        drugNames: regressionCase.drugNames,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+      expect(result.data.coverage).toBe("complete");
+      expect(result.data.interactionStatus).toBe(regressionCase.expectedStatus);
+    });
+  }
 
   test("drugInteractionTool memoizes RxCUI lookups (no N² RxNorm calls)", async () => {
     const { drugInteractionTool } = await import(

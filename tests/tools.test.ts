@@ -258,6 +258,38 @@ describe("Agent factory", () => {
     expect(agent).toBeDefined();
     expect(agent.id).toBe("cardiologist");
   });
+
+  test("specialist and CMO instructions preserve interaction coverage warnings", async () => {
+    const { specialists } = await import("../src/backend/agents/index");
+    const { chiefMedicalOfficer } = await import(
+      "../src/backend/agents/chief-medical-officer"
+    );
+    const specialistInstructions = String(
+      await specialists.cardiologist.getInstructions(),
+    );
+    const cmoInstructions = String(await chiefMedicalOfficer.getInstructions());
+
+    for (const instructions of [specialistInstructions, cmoInstructions]) {
+      expect(instructions).toContain("interactionStatus");
+      expect(instructions).toContain("partial");
+      expect(instructions).toContain("unavailable");
+      expect(instructions).toContain("not comprehensive interaction clearance");
+    }
+    expect(cmoInstructions).toContain("Do not convert unknown into none_found");
+  });
+
+  test("drug interaction description explains safe negative semantics", async () => {
+    const { drugInteractionTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+
+    expect(drugInteractionTool.description).toContain(
+      "none_found is only valid with complete coverage",
+    );
+    expect(drugInteractionTool.description).toContain(
+      "not comprehensive interaction clearance",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

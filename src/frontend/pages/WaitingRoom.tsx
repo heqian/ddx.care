@@ -81,7 +81,12 @@ export function deriveToolHistory(
           const actualIdx = history.length - 1 - runningIdx;
           history[actualIdx] = {
             ...history[actualIdx],
-            status: p.success === false ? "error" : "success",
+            status:
+              p.toolResultStatus === "partial"
+                ? "partial"
+                : p.toolResultStatus === "failed" || p.success === false
+                  ? "error"
+                  : "success",
             durationMs: p.durationMs,
             resultSummary: p.resultSummary,
             ...(p.cached && { cached: true }),
@@ -199,7 +204,12 @@ export function WaitingRoom({
             let durationText = "";
             let cachedText = "";
             if (isToolResult) {
-              statusIcon = p.success ? " ✓" : " ✗";
+              statusIcon =
+                p.toolResultStatus === "partial"
+                  ? " !"
+                  : p.toolResultStatus === "failed" || p.success === false
+                    ? " ✗"
+                    : " ✓";
               if (p.durationMs !== undefined) {
                 durationText = ` (${(p.durationMs / 1000).toFixed(1)}s)`;
               }

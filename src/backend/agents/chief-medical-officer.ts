@@ -146,6 +146,9 @@ You have access to a limited set of medical reference tools for evidence verific
 
 ### Tool Usage Rules
 - Check drug interactions before recommending medication changes for patients on polypharmacy (3+ drugs).
+- Inspect drug-interaction ok, interactionStatus, coverage, checks, and source limitation. Never infer no interaction from an empty findings array; only none_found with complete coverage is a negative label-text result.
+- Preserve unresolved-drug, partial-coverage, and unavailable-coverage warnings in synthesis, including when positive findings are also present. Do not convert unknown into none_found.
+- FDA label-text matching is supporting evidence, not comprehensive interaction clearance. Do not treat none_found as permission to prescribe without clinical verification.
 - Do not call tools you do not need — use clinical judgment to decide which tools are relevant.
 - Delegate specialist-domain analysis to the appropriate specialists. Use tools only for verification during synthesis.`,
 });

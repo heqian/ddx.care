@@ -702,6 +702,27 @@ describe("AgentStatusCard", () => {
     expect(getByText(container, "1 failed")).toBeTruthy();
   });
 
+  test("shows partial count when completed with incomplete tool coverage", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Cardiologist",
+        agentId: "cardiologist",
+        description: "Heart specialist",
+        status: "completed",
+        toolHistory: [
+          {
+            toolName: "drug-interaction",
+            toolArgs: null,
+            status: "partial",
+            durationMs: 900,
+          },
+        ],
+      }),
+    );
+    expect(getByText(container, "1 partial")).toBeTruthy();
+  });
+
   test("shows fallback label for unknown tool", () => {
     resetBody();
     const { container } = render(
@@ -2182,6 +2203,31 @@ describe("deriveToolHistory", () => {
     expect(history!.length).toBe(1);
     expect(history![0].status).toBe("error");
     expect(history![0].durationMs).toBe(500);
+  });
+
+  test("updates running entry to partial from explicit result status", () => {
+    const map = deriveToolHistory([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Checking interactions",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolName: "drug-interaction",
+        toolArgs: "aspirin + warfarin",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Cardiologist: Partial interaction coverage",
+        eventType: "tool_result",
+        agentId: "cardiologist",
+        toolName: "drug-interaction",
+        success: false,
+        toolResultStatus: "partial",
+        durationMs: 500,
+      },
+    ]);
+
+    expect(map.get("cardiologist")![0].status).toBe("partial");
   });
 
   test("tracks multiple tools per specialist", () => {

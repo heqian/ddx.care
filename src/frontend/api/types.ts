@@ -1,4 +1,7 @@
-import type { ProgressEventType } from "../../backend/progress-store";
+import type {
+  ProgressEventType,
+  ToolResultStatus,
+} from "../../backend/progress-store";
 import type {
   DiagnosisReport,
   ReportOutcome,
@@ -29,7 +32,7 @@ export interface SpecialistConsulted {
 
 export type Diagnosis = DiagnosisReport["diagnoses"][number];
 
-export type ToolStatus = "running" | "success" | "error";
+export type ToolStatus = "running" | "success" | "partial" | "error";
 
 export interface ToolHistoryEntry {
   toolName: string;
@@ -48,6 +51,8 @@ export interface ProgressEvent {
   toolName?: string;
   toolArgs?: string | null;
   success?: boolean;
+  toolResultStatus?: ToolResultStatus;
+  retriable?: boolean;
   durationMs?: number;
   resultSummary?: string | null;
   errorType?: string;

@@ -170,7 +170,7 @@ describe("Logger — Specialized Methods", () => {
       "cardiologist",
       "job-1",
       "drug-interaction",
-      true,
+      "success",
       1200,
       "2 interactions found",
     );
@@ -178,7 +178,8 @@ describe("Logger — Specialized Methods", () => {
     expect(output).toContain("tool_result");
     expect(output).toContain('"agentId":"cardiologist"');
     expect(output).toContain('"toolName":"drug-interaction"');
-    expect(output).toContain('"success":"true"');
+    expect(output).toContain('"success":true');
+    expect(output).toContain('"status":"success"');
     expect(output).toContain('"durationMs":1200');
     expect(output).toContain('"resultSummary":"2 interactions found"');
   });
@@ -188,12 +189,15 @@ describe("Logger — Specialized Methods", () => {
       "neurologist",
       "job-2",
       "drug-interaction",
-      false,
+      "failed",
       0,
       "API error",
+      true,
     );
     const output = logSpy.mock.calls[0][0] as string;
-    expect(output).toContain('"success":"false"');
+    expect(output).toContain('"success":false');
+    expect(output).toContain('"status":"failed"');
+    expect(output).toContain('"retriable":true');
     expect(output).toContain('"durationMs":0');
     expect(output).toContain('"resultSummary":"API error"');
   });
@@ -203,12 +207,27 @@ describe("Logger — Specialized Methods", () => {
       "oncologist",
       "job-3",
       "clinical-trials-search",
-      true,
+      "success",
       500,
       null,
     );
     const output = logSpy.mock.calls[0][0] as string;
     expect(output).toContain('"resultSummary":null');
+  });
+
+  test("toolResult() logs partial coverage without input names", () => {
+    logger.toolResult(
+      "cardiologist",
+      "job-4",
+      "drug-interaction",
+      "partial",
+      250,
+      "1 interaction found (partial coverage; 2 of 3 drugs checked)",
+    );
+    const output = logSpy.mock.calls[0][0] as string;
+    expect(output).toContain('"success":false');
+    expect(output).toContain('"status":"partial"');
+    expect(output).not.toContain("warfarin");
   });
 });
 

@@ -5,6 +5,7 @@ import {
   AUDIT_LOG_MAX_FILES,
   AUDIT_LOG_REDACT_TOOL_ARGS,
 } from "../config";
+import type { ToolResultStatus } from "../progress-store";
 
 type LogLevel = "info" | "warn" | "error";
 
@@ -153,15 +154,18 @@ export const logger = {
     agentId: string,
     jobId: string,
     toolName: string,
-    success: boolean,
+    status: ToolResultStatus,
     durationMs: number,
     resultSummary: string | null,
+    retriable?: boolean,
   ): void {
     this.info("tool_result", {
       agentId,
       jobId,
       toolName,
-      success: String(success),
+      success: status === "success",
+      status,
+      ...(retriable !== undefined && { retriable }),
       durationMs,
       resultSummary,
     });

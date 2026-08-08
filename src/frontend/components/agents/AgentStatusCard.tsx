@@ -1,5 +1,9 @@
 import { AgentIcon } from "./AgentIcon";
-import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import {
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  XCircleIcon,
+} from "@heroicons/react/24/outline";
 import { formatToolLabel } from "../../../backend/tools/tool-labels";
 import type { ToolHistoryEntry } from "../../api/types";
 
@@ -25,6 +29,10 @@ function ToolHistoryItem({
     icon = (
       <CheckCircleIcon className="inline w-3.5 h-3.5 text-emerald-500 align-middle" />
     );
+  } else if (entry.status === "partial") {
+    icon = (
+      <ExclamationTriangleIcon className="inline w-3.5 h-3.5 text-amber-500 align-middle" />
+    );
   } else {
     icon = (
       <XCircleIcon className="inline w-3.5 h-3.5 text-red-500 align-middle" />
@@ -40,7 +48,9 @@ function ToolHistoryItem({
             ? "text-primary/80"
             : entry.status === "success"
               ? "text-emerald-600 dark:text-emerald-400"
-              : "text-red-600 dark:text-red-400"
+              : entry.status === "partial"
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-red-600 dark:text-red-400"
         }
       >
         {label}
@@ -103,6 +113,9 @@ export function AgentStatusCard({
   const visibleHistory = toolHistory?.slice(-MAX_VISIBLE_TOOLS) ?? [];
   const hasMore = (toolHistory?.length ?? 0) > MAX_VISIBLE_TOOLS;
   const errorCount = visibleHistory.filter((e) => e.status === "error").length;
+  const partialCount = visibleHistory.filter(
+    (e) => e.status === "partial",
+  ).length;
   const cachedCount = visibleHistory.filter((e) => e.cached).length;
 
   return (
@@ -150,7 +163,11 @@ export function AgentStatusCard({
           <p className="text-xs truncate text-emerald-600 dark:text-emerald-400">
             {visibleHistory.length} tool{visibleHistory.length === 1 ? "" : "s"}{" "}
             used
-            {errorCount > 0 ? ` — ${errorCount} failed` : " — all successful"}
+            {errorCount > 0
+              ? ` — ${errorCount} failed`
+              : partialCount > 0
+                ? ` — ${partialCount} partial`
+                : " — all successful"}
             {cachedCount > 0 && (
               <span className="text-amber-500 dark:text-amber-400 ml-1">
                 ({cachedCount} cached)
