@@ -2,19 +2,27 @@
 
 ### Requirement: Concurrency slot release is guarded against double-decrement
 
-The `finishWorkflow()` method on the rate limiter SHALL maintain a `Set<string>` of job IDs that have already released their concurrency slot. If `finishWorkflow()` is called for a job ID already present in the set, the call SHALL be a no-op and SHALL NOT decrement the active workflow count.
+The concurrency limiter SHALL maintain the exact set of job IDs that currently own workflow capacity. Reserving capacity SHALL add a specific job ID atomically if capacity is available. Releasing capacity SHALL remove that job ID only if it currently owns a reservation. Pruning rate-limit history SHALL NOT clear active workflow ownership.
 
-#### Scenario: Normal single finishWorkflow call
-- **WHEN** a workflow completes and `finishWorkflow(jobId)` is called for the first time
-- **THEN** the active workflow count decrements by 1 and the job ID is recorded in the released set
+#### Scenario: Workflow reserves and releases capacity normally
+- **WHEN** a validated diagnosis reserves capacity for a job and that workflow later settles
+- **THEN** the job ID is removed exactly once and active workflow count decreases by one
 
-#### Scenario: Duplicate finishWorkflow call from cancel path
-- **WHEN** `finishWorkflow(jobId)` is called a second time (e.g., from both the DELETE handler and the workflow `.finally()` block)
-- **THEN** the call returns immediately without modifying the active workflow count, and the active count reflects only one release
+#### Scenario: Duplicate release for the same job
+- **WHEN** release is requested more than once for a settled job ID
+- **THEN** every request after the first is a no-op and cannot affect another workflow
 
-#### Scenario: Released set does not leak memory indefinitely
-- **WHEN** the released set contains many job IDs from completed workflows
-- **THEN** the `prune()` method (called every `RATE_LIMIT_PRUNE_INTERVAL_MS`) SHALL clear the released set alongside clearing expired rate-limit entries
+#### Scenario: Release requested for an unknown job
+- **WHEN** release is requested for a job ID that does not own capacity
+- **THEN** active workflow ownership remains unchanged
+
+#### Scenario: Rate-limit pruning runs during active work
+- **WHEN** rate-limit history is pruned while workflows are running
+- **THEN** all active job reservations remain present and counted
+
+#### Scenario: Capacity is full
+- **WHEN** the number of active job IDs equals the configured workflow limit
+- **THEN** no additional job can reserve capacity until an owning workflow settles
 
 ### Requirement: progressStore.complete() does not overwrite failed job status
 

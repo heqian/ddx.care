@@ -9,12 +9,10 @@ export class RateLimiter {
   private windowMs: number;
   private clients = new Map<string, RateLimitEntry>();
   private insertionOrder: string[] = [];
-  private activeCount = 0;
+  private activeJobIds = new Set<string>();
   private maxConcurrent: number;
   private maxEntries: number;
   private hasLoggedReset = false;
-  private releasedJobIds = new Set<string>();
-  private maxReleasedIds: number;
 
   constructor(opts: {
     maxRequests: number;
@@ -26,7 +24,6 @@ export class RateLimiter {
     this.windowMs = opts.windowMs;
     this.maxConcurrent = opts.maxConcurrent;
     this.maxEntries = opts.maxEntries ?? Infinity;
-    this.maxReleasedIds = opts.maxConcurrent * 10;
   }
 
   private evictOldest(): void {
@@ -84,32 +81,22 @@ export class RateLimiter {
   }
 
   get activeWorkflows(): number {
-    return this.activeCount;
+    return this.activeJobIds.size;
   }
 
-  canStartWorkflow(): boolean {
-    return this.activeCount < this.maxConcurrent;
+  tryStartWorkflow(jobId: string): boolean {
+    if (
+      this.activeJobIds.has(jobId) ||
+      this.activeJobIds.size >= this.maxConcurrent
+    ) {
+      return false;
+    }
+    this.activeJobIds.add(jobId);
+    return true;
   }
 
-  startWorkflow(): void {
-    this.activeCount++;
-  }
-
-  finishWorkflow(jobId?: string): void {
-    if (jobId && this.releasedJobIds.has(jobId)) {
-      return;
-    }
-    if (this.activeCount <= 0) {
-      return;
-    }
-    if (jobId) {
-      this.releasedJobIds.add(jobId);
-      if (this.releasedJobIds.size > this.maxReleasedIds) {
-        const oldest = this.releasedJobIds.values().next().value;
-        if (oldest) this.releasedJobIds.delete(oldest);
-      }
-    }
-    this.activeCount--;
+  finishWorkflow(jobId: string): boolean {
+    return this.activeJobIds.delete(jobId);
   }
 
   prune(): void {
@@ -127,6 +114,5 @@ export class RateLimiter {
       }
     }
     this.insertionOrder = remaining;
-    this.releasedJobIds.clear();
   }
 }

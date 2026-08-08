@@ -92,10 +92,10 @@ export class JobStore extends EventTarget {
       `UPDATE jobs SET progress = json_insert(progress, '$[#]', json(?)) WHERE id = ?`,
     );
     this.completeStmt = this.db.prepare(
-      `UPDATE jobs SET status = ?, result = ? WHERE id = ?`,
+      `UPDATE jobs SET status = ?, result = ? WHERE id = ? AND status = 'pending'`,
     );
     this.failStmt = this.db.prepare(
-      `UPDATE jobs SET status = ?, error = ? WHERE id = ?`,
+      `UPDATE jobs SET status = ?, error = ? WHERE id = ? AND status = 'pending'`,
     );
     this.scrubStmt = this.db.prepare(
       `UPDATE jobs SET result = NULL, progress = '[]' WHERE createdAt < ?`,
@@ -145,8 +145,14 @@ export class JobStore extends EventTarget {
       });
       return;
     }
+    if (current?.status !== "pending") return;
     const validatedResult = reportOutcomeSchema.parse(result);
-    this.completeStmt.run("completed", JSON.stringify(validatedResult), jobId);
+    const update = this.completeStmt.run(
+      "completed",
+      JSON.stringify(validatedResult),
+      jobId,
+    );
+    if (update.changes === 0) return;
 
     this.dispatchEvent(
       new CustomEvent(`progress-${jobId}`, {
@@ -156,7 +162,8 @@ export class JobStore extends EventTarget {
   }
 
   fail(jobId: string, error: string): void {
-    this.failStmt.run("failed", error, jobId);
+    const update = this.failStmt.run("failed", error, jobId);
+    if (update.changes === 0) return;
 
     this.dispatchEvent(
       new CustomEvent(`progress-${jobId}`, {

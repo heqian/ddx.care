@@ -2,27 +2,35 @@
 
 ### Requirement: Cancel diagnosis endpoint
 
-A `DELETE /v1/diagnose/:jobId` endpoint SHALL be available to cancel a running diagnostic workflow. The endpoint SHALL locate the job's `AbortController`, call `.abort()` on it, mark the job as `failed("Cancelled by user")` in the progress store, and decrement the concurrent workflow counter via `rateLimiter.finishWorkflow()`.
+A `DELETE /v1/diagnose/:jobId` endpoint SHALL request cancellation of a running diagnostic workflow. For a pending job, the endpoint SHALL abort its controller, mark the persisted job as cancelled or failed with the public reason "Cancelled by user", and return a successful cancellation response. The endpoint SHALL NOT release workflow capacity; capacity SHALL remain owned by the job until its workflow promise settles.
 
 #### Scenario: Cancel a running workflow
-- **WHEN** a client sends `DELETE /v1/diagnose/<jobId>` for a job that is `pending`
-- **THEN** the server aborts the workflow, marks the job as `failed` with error "Cancelled by user", and returns `200 OK` with `{ "status": "cancelled" }`
+- **WHEN** a client sends `DELETE /v1/diagnose/<jobId>` for a pending job
+- **THEN** the server requests abort, records cancellation, returns `200 OK` with `{ "status": "cancelled" }`, and continues counting the job until settlement
+
+#### Scenario: Cancelled workflow settles
+- **WHEN** the cancelled workflow promise reaches its terminal `finally` path
+- **THEN** the job's capacity reservation is released exactly once
 
 #### Scenario: Cancel a completed job
-- **WHEN** a client sends `DELETE /v1/diagnose/<jobId>` for a job that is already `completed`
-- **THEN** the server returns `200 OK` with `{ "status": "already_completed" }` and does not modify the job
+- **WHEN** a client sends DELETE for a completed job
+- **THEN** the server returns `200 OK` with `{ "status": "already_completed" }` and does not modify capacity
+
+#### Scenario: Cancel a failed or already-cancelled job
+- **WHEN** a client repeats DELETE for a failed or cancelled job
+- **THEN** the server returns its terminal status idempotently and does not modify capacity
 
 #### Scenario: Cancel a non-existent job
-- **WHEN** a client sends `DELETE /v1/diagnose/<unknownId>` for a job that does not exist
+- **WHEN** a client sends DELETE for a job that does not exist
 - **THEN** the server returns `404 Not Found` with `{ "error": "Job not found" }`
 
-#### Scenario: Cancel releases concurrency slot
-- **WHEN** a running workflow is cancelled via the endpoint
-- **THEN** `rateLimiter.activeWorkflows` decreases by 1, allowing a new workflow to start
+#### Scenario: Cancel does not admit replacement work prematurely
+- **WHEN** the server is at capacity and one active job receives a cancellation request but has not settled
+- **THEN** a replacement diagnosis is rejected until the cancelled workflow settles and releases its reservation
 
 ### Requirement: AbortController map for running workflows
 
-The server SHALL maintain a `Map<string, AbortController>` that stores the `AbortController` for each running workflow. When a workflow starts, its `AbortController` SHALL be added to the map. When a workflow completes, fails, or is cancelled, the `AbortController` SHALL be removed from the map.
+The server SHALL maintain a `Map<string, AbortController>` that stores the `AbortController` for each running workflow. When a workflow starts, its `AbortController` SHALL be added to the map. The controller SHALL remain available after a cancellation request and SHALL be removed when the workflow promise settles.
 
 #### Scenario: AbortController stored on workflow start
 - **WHEN** a workflow begins execution for a given `jobId`

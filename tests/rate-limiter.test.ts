@@ -90,26 +90,27 @@ describe("RateLimiter — IP Rate Limiting", () => {
 });
 
 describe("RateLimiter — Concurrent Workflow Limiting", () => {
-  test("canStartWorkflow returns true under limit", () => {
+  test("tryStartWorkflow reserves capacity under the limit", () => {
     const limiter = new RateLimiter({
       maxRequests: 100,
       windowMs: 60_000,
       maxConcurrent: 3,
     });
-    expect(limiter.canStartWorkflow()).toBe(true);
+    expect(limiter.tryStartWorkflow("job-1")).toBe(true);
+    expect(limiter.activeWorkflows).toBe(1);
   });
 
-  test("canStartWorkflow returns false at capacity", () => {
+  test("tryStartWorkflow returns false at capacity", () => {
     const limiter = new RateLimiter({
       maxRequests: 100,
       windowMs: 60_000,
       maxConcurrent: 2,
     });
 
-    limiter.startWorkflow();
-    limiter.startWorkflow();
-
-    expect(limiter.canStartWorkflow()).toBe(false);
+    expect(limiter.tryStartWorkflow("job-1")).toBe(true);
+    expect(limiter.tryStartWorkflow("job-2")).toBe(true);
+    expect(limiter.tryStartWorkflow("job-3")).toBe(false);
+    expect(limiter.activeWorkflows).toBe(2);
   });
 
   test("finishWorkflow frees capacity", () => {
@@ -119,30 +120,23 @@ describe("RateLimiter — Concurrent Workflow Limiting", () => {
       maxConcurrent: 1,
     });
 
-    limiter.startWorkflow();
-    expect(limiter.canStartWorkflow()).toBe(false);
+    limiter.tryStartWorkflow("job-1");
+    expect(limiter.tryStartWorkflow("job-2")).toBe(false);
 
-    limiter.finishWorkflow();
-    expect(limiter.canStartWorkflow()).toBe(true);
+    expect(limiter.finishWorkflow("job-1")).toBe(true);
+    expect(limiter.tryStartWorkflow("job-2")).toBe(true);
   });
 
-  test("finishWorkflow does not go below zero", () => {
+  test("finishWorkflow for an unknown job is a no-op", () => {
     const limiter = new RateLimiter({
       maxRequests: 100,
       windowMs: 60_000,
       maxConcurrent: 5,
     });
 
-    // Call finish without start — should not go negative
-    limiter.finishWorkflow();
-    limiter.finishWorkflow();
-
-    // Should still allow starting
-    expect(limiter.canStartWorkflow()).toBe(true);
-
-    // Start and check we have correct count
-    limiter.startWorkflow();
-    expect(limiter.canStartWorkflow()).toBe(true);
+    limiter.tryStartWorkflow("job-1");
+    expect(limiter.finishWorkflow("unknown-job")).toBe(false);
+    expect(limiter.activeWorkflows).toBe(1);
   });
 
   test("second finishWorkflow with same jobId is a no-op", () => {
@@ -152,78 +146,46 @@ describe("RateLimiter — Concurrent Workflow Limiting", () => {
       maxConcurrent: 2,
     });
 
-    limiter.startWorkflow();
-    limiter.startWorkflow();
+    limiter.tryStartWorkflow("job-1");
+    limiter.tryStartWorkflow("job-2");
     expect(limiter.activeWorkflows).toBe(2);
 
-    limiter.finishWorkflow("job-1");
+    expect(limiter.finishWorkflow("job-1")).toBe(true);
     expect(limiter.activeWorkflows).toBe(1);
 
     // Second call with same jobId — should be no-op
-    limiter.finishWorkflow("job-1");
+    expect(limiter.finishWorkflow("job-1")).toBe(false);
     expect(limiter.activeWorkflows).toBe(1);
 
     // Different jobId still works
-    limiter.finishWorkflow("job-2");
+    expect(limiter.finishWorkflow("job-2")).toBe(true);
     expect(limiter.activeWorkflows).toBe(0);
   });
 
-  test("finishWorkflow without jobId guards against underflow", () => {
+  test("a job ID cannot reserve capacity twice", () => {
     const limiter = new RateLimiter({
       maxRequests: 100,
       windowMs: 60_000,
       maxConcurrent: 2,
     });
 
-    limiter.startWorkflow();
+    expect(limiter.tryStartWorkflow("job-1")).toBe(true);
     expect(limiter.activeWorkflows).toBe(1);
-
-    limiter.finishWorkflow();
-    expect(limiter.activeWorkflows).toBe(0);
-
-    // Second call without jobId should not go below zero
-    limiter.finishWorkflow();
-    expect(limiter.activeWorkflows).toBe(0);
+    expect(limiter.tryStartWorkflow("job-1")).toBe(false);
+    expect(limiter.activeWorkflows).toBe(1);
   });
 
-  test("prune clears releasedJobIds set", () => {
+  test("prune does not mutate active workflow ownership", () => {
     const limiter = new RateLimiter({
       maxRequests: 100,
       windowMs: 60_000,
       maxConcurrent: 2,
     });
 
-    limiter.startWorkflow();
-    limiter.finishWorkflow("job-1");
-    expect(limiter.activeWorkflows).toBe(0);
-
-    // After prune, the set should be cleared so the jobId can be reused
+    limiter.tryStartWorkflow("job-1");
     limiter.prune();
-
-    limiter.startWorkflow();
-    limiter.finishWorkflow("job-1");
-    expect(limiter.activeWorkflows).toBe(0); // Should decrement again
-  });
-
-  test("releasedJobIds is capped at maxConcurrent * 10", () => {
-    const limiter = new RateLimiter({
-      maxRequests: 100,
-      windowMs: 60_000,
-      maxConcurrent: 1,
-    });
-
-    for (let i = 0; i < 15; i++) {
-      limiter.startWorkflow();
-      limiter.finishWorkflow(`job-${i}`);
-    }
-
-    expect(limiter.activeWorkflows).toBe(0);
-
-    // After exceeding the cap, old entries are evicted.
-    // Releasing job-0 again should succeed (it was evicted from the set).
-    limiter.startWorkflow();
-    limiter.finishWorkflow("job-0");
-    expect(limiter.activeWorkflows).toBe(0);
+    expect(limiter.activeWorkflows).toBe(1);
+    expect(limiter.finishWorkflow("job-1")).toBe(true);
   });
 });
 

@@ -102,6 +102,23 @@ describe("JobStore — Job Lifecycle", () => {
     expect(job!.result).toBeUndefined();
   });
 
+  test("fail does not overwrite an existing terminal status", () => {
+    store.createJob("job-cancel-idempotent");
+    store.fail("job-cancel-idempotent", "Cancelled by user");
+    store.fail("job-cancel-idempotent", "Diagnosis cancelled by user");
+
+    expect(store.getJob("job-cancel-idempotent")?.error).toBe(
+      "Cancelled by user",
+    );
+
+    store.createJob("job-completed-idempotent");
+    store.complete("job-completed-idempotent", availableOutcome);
+    store.fail("job-completed-idempotent", "Late failure");
+
+    expect(store.getJob("job-completed-idempotent")?.status).toBe("completed");
+    expect(store.getJob("job-completed-idempotent")?.error).toBeUndefined();
+  });
+
   test("complete works normally after fail+prune cycle (fresh job)", () => {
     store.createJob("job-fresh");
     store.complete("job-fresh", generationFailedOutcome);

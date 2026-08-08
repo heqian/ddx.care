@@ -28,11 +28,11 @@ On server startup, before accepting connections, the system SHALL call `progress
 
 The `rateLimiter.record(ip)` call SHALL be executed immediately after `rateLimiter.check(ip)` returns `{allowed: true}` and BEFORE request body parsing or Zod validation. This ensures that ALL requests that pass the rate-limit check — whether valid or malformed — consume a rate-limit slot, preventing bypass via rapid invalid payloads.
 
-The concurrent-workflow slot (`startWorkflow()` / `finishWorkflow()`) is managed separately: `startWorkflow()` SHALL only be called after successful validation, and `finishWorkflow()` SHALL be called on all early-exit paths (413, 400, validation failure) to release the slot.
+Concurrent workflow capacity is managed separately. `tryStartWorkflow(jobId)` SHALL only be called after successful parsing and schema validation, so invalid requests never own workflow capacity.
 
 #### Scenario: Malformed JSON request consumes rate limit but not workflow slot
 - **WHEN** a client sends `POST /v1/diagnose` with invalid JSON body
-- **THEN** the response is `400 Bad Request`, the client's rate-limit counter IS incremented, and the concurrent-workflow slot is freed
+- **THEN** the response is `400 Bad Request`, the client's rate-limit counter IS incremented, and no concurrent-workflow slot is reserved
 
 #### Scenario: Valid request consumes both rate limit and workflow slot
 - **WHEN** a client sends `POST /v1/diagnose` with a valid JSON body that passes Zod validation
@@ -40,7 +40,7 @@ The concurrent-workflow slot (`startWorkflow()` / `finishWorkflow()`) is managed
 
 #### Scenario: Oversized payload consumes rate limit but not workflow slot
 - **WHEN** a client sends `POST /v1/diagnose` with a `Content-Length` exceeding `MAX_PAYLOAD_BYTES`
-- **THEN** the response is `413 Payload Too Large`, the rate-limit counter IS incremented, and the concurrent-workflow slot is freed
+- **THEN** the response is `413 Payload Too Large`, the rate-limit counter IS incremented, and no concurrent-workflow slot is reserved
 
 #### Scenario: Rapid invalid payloads trigger rate limit
 - **WHEN** a client sends `RATE_LIMIT_MAX_REQUESTS` consecutive invalid `POST /v1/diagnose` requests within the rate-limit window

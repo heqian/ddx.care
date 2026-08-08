@@ -28,7 +28,7 @@ The `DELETE /v1/diagnose/:jobId` endpoint SHALL verify the HMAC token when `WS_T
 
 #### Scenario: Valid token cancels the job
 - **WHEN** a client sends `DELETE /v1/diagnose/:jobId?token=<valid-hmac>` and `WS_TOKEN_SECRET` is set
-- **THEN** the workflow is aborted, the job is marked as failed, and the concurrency slot is freed
+- **THEN** cancellation is requested, the job is marked as failed, and its concurrency slot remains owned until the workflow promise settles
 
 #### Scenario: Missing or invalid token prevents cancellation
 - **WHEN** a client sends `DELETE /v1/diagnose/:jobId` without a valid `token` and `WS_TOKEN_SECRET` is set

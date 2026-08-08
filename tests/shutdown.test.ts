@@ -11,15 +11,15 @@ describe("RateLimiter — activeWorkflows tracking", () => {
     expect(limiter.activeWorkflows).toBe(0);
   });
 
-  test("activeWorkflows increments on startWorkflow", () => {
+  test("activeWorkflows increments when jobs reserve capacity", () => {
     const limiter = new RateLimiter({
       maxRequests: 5,
       windowMs: 60_000,
       maxConcurrent: 3,
     });
-    limiter.startWorkflow();
+    limiter.tryStartWorkflow("job-1");
     expect(limiter.activeWorkflows).toBe(1);
-    limiter.startWorkflow();
+    limiter.tryStartWorkflow("job-2");
     expect(limiter.activeWorkflows).toBe(2);
   });
 
@@ -29,11 +29,11 @@ describe("RateLimiter — activeWorkflows tracking", () => {
       windowMs: 60_000,
       maxConcurrent: 3,
     });
-    limiter.startWorkflow();
-    limiter.startWorkflow();
-    limiter.finishWorkflow();
+    limiter.tryStartWorkflow("job-1");
+    limiter.tryStartWorkflow("job-2");
+    limiter.finishWorkflow("job-1");
     expect(limiter.activeWorkflows).toBe(1);
-    limiter.finishWorkflow();
+    limiter.finishWorkflow("job-2");
     expect(limiter.activeWorkflows).toBe(0);
   });
 
@@ -43,23 +43,21 @@ describe("RateLimiter — activeWorkflows tracking", () => {
       windowMs: 60_000,
       maxConcurrent: 3,
     });
-    limiter.finishWorkflow();
+    limiter.finishWorkflow("unknown-job");
     expect(limiter.activeWorkflows).toBe(0);
   });
 });
 
-describe("RateLimiter — canStartWorkflow", () => {
+describe("RateLimiter — tryStartWorkflow", () => {
   test("allows workflows up to maxConcurrent", () => {
     const limiter = new RateLimiter({
       maxRequests: 5,
       windowMs: 60_000,
       maxConcurrent: 2,
     });
-    expect(limiter.canStartWorkflow()).toBe(true);
-    limiter.startWorkflow();
-    expect(limiter.canStartWorkflow()).toBe(true);
-    limiter.startWorkflow();
-    expect(limiter.canStartWorkflow()).toBe(false);
+    expect(limiter.tryStartWorkflow("job-1")).toBe(true);
+    expect(limiter.tryStartWorkflow("job-2")).toBe(true);
+    expect(limiter.tryStartWorkflow("job-3")).toBe(false);
   });
 
   test("allows new workflow after one finishes", () => {
@@ -68,10 +66,10 @@ describe("RateLimiter — canStartWorkflow", () => {
       windowMs: 60_000,
       maxConcurrent: 1,
     });
-    limiter.startWorkflow();
-    expect(limiter.canStartWorkflow()).toBe(false);
-    limiter.finishWorkflow();
-    expect(limiter.canStartWorkflow()).toBe(true);
+    expect(limiter.tryStartWorkflow("job-1")).toBe(true);
+    expect(limiter.tryStartWorkflow("job-2")).toBe(false);
+    limiter.finishWorkflow("job-1");
+    expect(limiter.tryStartWorkflow("job-2")).toBe(true);
   });
 });
 
@@ -101,13 +99,13 @@ describe("Shutdown wait-loop pattern", () => {
       windowMs: 60_000,
       maxConcurrent: 3,
     });
-    limiter.startWorkflow();
+    limiter.tryStartWorkflow("job-1");
 
     const timeout = 5_000;
     const start = Date.now();
 
     // Simulate an async workflow finishing after 200ms
-    setTimeout(() => limiter.finishWorkflow(), 200);
+    setTimeout(() => limiter.finishWorkflow("job-1"), 200);
 
     while (limiter.activeWorkflows > 0) {
       if (Date.now() - start > timeout) break;
@@ -126,7 +124,7 @@ describe("Shutdown wait-loop pattern", () => {
       windowMs: 60_000,
       maxConcurrent: 3,
     });
-    limiter.startWorkflow();
+    limiter.tryStartWorkflow("job-1");
 
     const timeout = 500; // Short timeout for test speed
     const start = Date.now();
@@ -166,16 +164,16 @@ describe("Shutdown wait-loop pattern", () => {
       windowMs: 60_000,
       maxConcurrent: 3,
     });
-    limiter.startWorkflow();
-    limiter.startWorkflow();
-    limiter.startWorkflow();
+    limiter.tryStartWorkflow("job-1");
+    limiter.tryStartWorkflow("job-2");
+    limiter.tryStartWorkflow("job-3");
 
     expect(limiter.activeWorkflows).toBe(3);
 
     // Finish one at a time
-    setTimeout(() => limiter.finishWorkflow(), 100);
-    setTimeout(() => limiter.finishWorkflow(), 200);
-    setTimeout(() => limiter.finishWorkflow(), 300);
+    setTimeout(() => limiter.finishWorkflow("job-1"), 100);
+    setTimeout(() => limiter.finishWorkflow("job-2"), 200);
+    setTimeout(() => limiter.finishWorkflow("job-3"), 300);
 
     const timeout = 5_000;
     const start = Date.now();

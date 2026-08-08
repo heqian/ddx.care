@@ -433,7 +433,7 @@ describe("API Endpoints", () => {
       // Reset rate limit state for this test
       const savedReset = rateLimiter["hasLoggedReset"];
       rateLimiter["clients"].clear();
-      rateLimiter["activeCount"] = 0;
+      rateLimiter["activeJobIds"].clear();
       rateLimiter["hasLoggedReset"] = true;
 
       const startRes = await fetch(`${BASE}/v1/diagnose`, {
@@ -443,8 +443,7 @@ describe("API Endpoints", () => {
       });
       expect(startRes.status).toBe(400);
 
-      // The workflow slot should have been released (finishWorkflow called),
-      // so the concurrent workflow count should be back to 0.
+      // Invalid input never reserves workflow capacity.
       expect(rateLimiter.activeWorkflows).toBe(0);
 
       // Reset hasLoggedReset to avoid double-warning
@@ -457,7 +456,7 @@ describe("API Endpoints", () => {
       // Reset rate limit state for a clean test
       const savedReset = rateLimiter["hasLoggedReset"];
       rateLimiter["clients"].clear();
-      rateLimiter["activeCount"] = 0;
+      rateLimiter["activeJobIds"].clear();
       rateLimiter["hasLoggedReset"] = true;
 
       // Pre-fill the rate limit window to exhaust the per-IP quota
@@ -488,7 +487,7 @@ describe("API Endpoints", () => {
 
       // Cleanup: reset rate limiter state for subsequent tests
       rateLimiter["clients"].clear();
-      rateLimiter["activeCount"] = 0;
+      rateLimiter["activeJobIds"].clear();
       rateLimiter["hasLoggedReset"] = savedReset;
     });
   });
@@ -681,7 +680,7 @@ describe("API Endpoints", () => {
       const { rateLimiter } = await import("../src/backend/api/routes");
       const savedReset = rateLimiter["hasLoggedReset"];
       rateLimiter["clients"].clear();
-      rateLimiter["activeCount"] = 0;
+      rateLimiter["activeJobIds"].clear();
       rateLimiter["hasLoggedReset"] = true;
       return { rateLimiter, savedReset };
     }
@@ -702,7 +701,7 @@ describe("API Endpoints", () => {
       expect(entry?.timestamps?.length ?? 0).toBe(1);
 
       rateLimiter["clients"].clear();
-      rateLimiter["activeCount"] = 0;
+      rateLimiter["activeJobIds"].clear();
       rateLimiter["hasLoggedReset"] = savedReset;
     });
 
@@ -721,7 +720,7 @@ describe("API Endpoints", () => {
       expect(entry?.timestamps?.length ?? 0).toBe(1);
 
       rateLimiter["clients"].clear();
-      rateLimiter["activeCount"] = 0;
+      rateLimiter["activeJobIds"].clear();
       rateLimiter["hasLoggedReset"] = savedReset;
     });
 
@@ -744,7 +743,7 @@ describe("API Endpoints", () => {
       expect(entry!.timestamps.length).toBe(1);
 
       rateLimiter["clients"].clear();
-      rateLimiter["activeCount"] = 0;
+      rateLimiter["activeJobIds"].clear();
       rateLimiter["hasLoggedReset"] = savedReset;
     });
 
@@ -782,7 +781,7 @@ describe("API Endpoints", () => {
       expect(limitedRes.status).toBe(429);
 
       rateLimiter["clients"].clear();
-      rateLimiter["activeCount"] = 0;
+      rateLimiter["activeJobIds"].clear();
       rateLimiter["hasLoggedReset"] = savedReset;
     });
   });

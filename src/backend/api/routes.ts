@@ -9,6 +9,8 @@ import * as abortStore from "../utils/abort-controller-store";
 import { getCacheStats } from "../tools/utils/tool-cache";
 import { TOOL_CACHE_ENABLED } from "../config";
 import { reportOutcomeSchema } from "../../shared/report-outcome";
+import type { ReportOutcome } from "../../shared/report-outcome";
+import type { JobEntry } from "../progress-store";
 import {
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
@@ -109,6 +111,38 @@ interface RouteRequest extends Request {
   params: Record<string, string>;
 }
 
+interface DiagnosisInput {
+  medicalHistory: string;
+  conversationTranscript: string;
+  labResults: string;
+}
+
+interface WorkflowRun {
+  start(options: { inputData: DiagnosisInput }): Promise<unknown>;
+}
+
+interface RouteJobStore {
+  createJob(jobId: string): void;
+  getJob(jobId: string): JobEntry | undefined;
+  complete(jobId: string, result: ReportOutcome): void;
+  fail(jobId: string, error: string): void;
+  healthCheck(): boolean;
+}
+
+interface RouteAbortStore {
+  set(jobId: string, controller: AbortController): void;
+  get(jobId: string): AbortController | undefined;
+  remove(jobId: string): void;
+}
+
+export interface RouteDependencies {
+  rateLimiter?: RateLimiter;
+  progressStore?: RouteJobStore;
+  abortStore?: RouteAbortStore;
+  createWorkflowRun?: (jobId: string) => Promise<WorkflowRun>;
+  generateJobId?: () => string;
+}
+
 export function createRoutes(
   server: {
     upgrade(req: Request, options: { data: unknown }): boolean;
@@ -117,7 +151,20 @@ export function createRoutes(
     ): { address: string; family: string; port: number } | null;
   },
   appHtml: unknown,
+  dependencies: RouteDependencies = {},
 ) {
+  const routeRateLimiter = dependencies.rateLimiter ?? rateLimiter;
+  const routeProgressStore = dependencies.progressStore ?? progressStore;
+  const routeAbortStore = dependencies.abortStore ?? abortStore;
+  const createWorkflowRun =
+    dependencies.createWorkflowRun ??
+    (async (jobId: string) => {
+      const workflow = mastra.getWorkflow("diagnosticWorkflow");
+      return workflow.createRun({ runId: jobId });
+    });
+  const generateJobId =
+    dependencies.generateJobId ?? (() => crypto.randomUUID());
+
   function getClientIp(req: Request): string {
     // X-Real-IP is explicitly set by Caddy via `header_up` and is always the
     // original client's IP, regardless of intermediate proxy chains.
@@ -145,7 +192,7 @@ export function createRoutes(
         const startTime = Date.now();
         const ip = getClientIp(req);
 
-        const ipCheck = rateLimiter.check(ip);
+        const ipCheck = routeRateLimiter.check(ip);
         if (!ipCheck.allowed) {
           const retryAfter = Math.ceil(ipCheck.retryAfterMs / 1000);
           logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, {
@@ -164,24 +211,8 @@ export function createRoutes(
         // Record immediately after check() succeeds so all requests (valid or
         // malformed) count against the per-IP limit. This prevents bypass via
         // rapid invalid payloads. The concurrent-workflow slot is managed
-        // separately (startWorkflow only on successful validation).
-        rateLimiter.record(ip);
-
-        if (!rateLimiter.canStartWorkflow()) {
-          logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, {
-            ip,
-            reason: "at_capacity",
-          });
-          return withCors(
-            Response.json(
-              { error: "Server is at capacity. Please try again later." },
-              { status: 429, headers: { "Retry-After": "30" } },
-            ),
-            req,
-          );
-        }
-
-        rateLimiter.startWorkflow();
+        // separately (tryStartWorkflow only after successful validation).
+        routeRateLimiter.record(ip);
 
         let body: unknown;
         const contentLength = parseInt(
@@ -189,7 +220,6 @@ export function createRoutes(
           10,
         );
         if (contentLength > MAX_PAYLOAD_BYTES) {
-          rateLimiter.finishWorkflow();
           logger.request("POST", "/v1/diagnose", 413, Date.now() - startTime, {
             ip,
             contentLength,
@@ -202,7 +232,6 @@ export function createRoutes(
         try {
           body = await req.json();
         } catch {
-          rateLimiter.finishWorkflow();
           logger.request("POST", "/v1/diagnose", 400, Date.now() - startTime, {
             ip,
           });
@@ -214,7 +243,6 @@ export function createRoutes(
 
         const parsed = diagnoseSchema.safeParse(body);
         if (!parsed.success) {
-          rateLimiter.finishWorkflow();
           const issues = parsed.error.issues
             .map((i) => `${i.path.join(".")}: ${i.message}`)
             .join("; ");
@@ -234,68 +262,125 @@ export function createRoutes(
         const { medicalHistory, conversationTranscript, labResults } =
           parsed.data;
 
-        const jobId = crypto.randomUUID();
-        progressStore.createJob(jobId);
-        logger.workflowStart(jobId);
-        logger.request("POST", "/v1/diagnose", 202, Date.now() - startTime, {
-          ip,
-          jobId,
-        });
+        const jobId = generateJobId();
+        if (!routeRateLimiter.tryStartWorkflow(jobId)) {
+          logger.request("POST", "/v1/diagnose", 429, Date.now() - startTime, {
+            ip,
+            reason: "at_capacity",
+          });
+          return withCors(
+            Response.json(
+              { error: "Server is at capacity. Please try again later." },
+              { status: 429, headers: { "Retry-After": "30" } },
+            ),
+            req,
+          );
+        }
 
-        const workflow = mastra.getWorkflow("diagnosticWorkflow");
-        const run = await workflow.createRun({ runId: jobId });
+        let jobCreated = false;
+        let controllerRegistered = false;
+        try {
+          routeProgressStore.createJob(jobId);
+          jobCreated = true;
+          logger.workflowStart(jobId);
 
-        const ac = new AbortController();
-        abortStore.set(jobId, ac);
+          const run = await createWorkflowRun(jobId);
+          const ac = new AbortController();
+          routeAbortStore.set(jobId, ac);
+          controllerRegistered = true;
 
-        run
-          .start({
+          const workflowPromise = run.start({
             inputData: {
               medicalHistory,
               conversationTranscript,
               labResults,
             },
-          })
-          .then((result) => {
-            // Mastra resolves (rather than rejects) when a workflow step throws:
-            // the run result carries status "failed" with an error object, and
-            // no report. Surface that as a failed job so the frontend shows the
-            // Diagnosis Failed / Retry UI instead of a completed job with no
-            // report data.
-            const runResult = result as {
-              status?: string;
-              result?: unknown;
-              error?: { message?: string };
-            };
-            if (runResult?.status === "failed") {
-              const message =
-                runResult.error?.message ?? "Diagnosis workflow failed";
-              logger.workflowFail(jobId, Date.now() - startTime, message);
-              progressStore.fail(jobId, message);
-              return;
-            }
-            const outcome = reportOutcomeSchema.parse(runResult.result);
-            const specialistCount =
-              outcome.status === "available"
-                ? outcome.report.specialistsConsulted.length
-                : 0;
-            logger.workflowComplete(
-              jobId,
-              Date.now() - startTime,
-              specialistCount,
-            );
-            progressStore.complete(jobId, outcome);
-          })
-          .catch((error) => {
-            const message =
-              error instanceof Error ? error.message : "Unknown error";
-            logger.workflowFail(jobId, Date.now() - startTime, message);
-            progressStore.fail(jobId, message);
-          })
-          .finally(() => {
-            abortStore.remove(jobId);
-            rateLimiter.finishWorkflow(jobId);
           });
+
+          void workflowPromise
+            .then((result) => {
+              // Mastra resolves (rather than rejects) when a workflow step throws:
+              // the run result carries status "failed" with an error object, and
+              // no report. Surface that as a failed job so the frontend shows the
+              // Diagnosis Failed / Retry UI instead of a completed job with no
+              // report data.
+              const runResult = result as {
+                status?: string;
+                result?: unknown;
+                error?: { message?: string };
+              };
+              if (runResult?.status === "failed") {
+                const message =
+                  runResult.error?.message ?? "Diagnosis workflow failed";
+                logger.workflowFail(jobId, Date.now() - startTime, message);
+                routeProgressStore.fail(jobId, message);
+                return;
+              }
+              const outcome = reportOutcomeSchema.parse(runResult.result);
+              const specialistCount =
+                outcome.status === "available"
+                  ? outcome.report.specialistsConsulted.length
+                  : 0;
+              logger.workflowComplete(
+                jobId,
+                Date.now() - startTime,
+                specialistCount,
+              );
+              routeProgressStore.complete(jobId, outcome);
+            })
+            .catch((error) => {
+              const message =
+                error instanceof Error ? error.message : "Unknown error";
+              logger.workflowFail(jobId, Date.now() - startTime, message);
+              routeProgressStore.fail(jobId, message);
+            })
+            .finally(() => {
+              try {
+                routeAbortStore.remove(jobId);
+              } finally {
+                routeRateLimiter.finishWorkflow(jobId);
+              }
+            });
+
+          logger.request("POST", "/v1/diagnose", 202, Date.now() - startTime, {
+            ip,
+            jobId,
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Unknown startup error";
+          logger.workflowFail(jobId, Date.now() - startTime, message);
+          if (controllerRegistered) {
+            try {
+              routeAbortStore.remove(jobId);
+            } catch (cleanupError) {
+              logger.error("workflow_controller_cleanup_failed", {
+                jobId,
+                error:
+                  cleanupError instanceof Error
+                    ? cleanupError.message
+                    : "Unknown cleanup error",
+              });
+            }
+          }
+          try {
+            if (jobCreated) {
+              routeProgressStore.fail(
+                jobId,
+                "Diagnosis workflow failed to start",
+              );
+            }
+          } finally {
+            routeRateLimiter.finishWorkflow(jobId);
+          }
+          return withCors(
+            Response.json(
+              { error: "Failed to start diagnosis" },
+              { status: 500 },
+            ),
+            req,
+          );
+        }
 
         return withCors(
           Response.json(
@@ -320,7 +405,7 @@ export function createRoutes(
         }
         const tokenError = verifyJobToken(req, jobId);
         if (tokenError) return tokenError;
-        const entry = progressStore.getJob(jobId);
+        const entry = routeProgressStore.getJob(jobId);
 
         if (!entry) {
           logger.request(
@@ -347,13 +432,24 @@ export function createRoutes(
           return withCors(Response.json({ status: "already_completed" }), req);
         }
 
-        const ac = abortStore.get(jobId);
+        if (entry.status === "failed") {
+          const status =
+            entry.error === "Cancelled by user" ? "cancelled" : "failed";
+          logger.request(
+            "DELETE",
+            "/v1/diagnose/:jobId",
+            200,
+            Date.now() - start,
+            { jobId, status },
+          );
+          return withCors(Response.json({ status }), req);
+        }
+
+        const ac = routeAbortStore.get(jobId);
         if (ac) {
           ac.abort();
-          abortStore.remove(jobId);
         }
-        progressStore.fail(jobId, "Cancelled by user");
-        rateLimiter.finishWorkflow(jobId);
+        routeProgressStore.fail(jobId, "Cancelled by user");
 
         logger.request(
           "DELETE",
@@ -379,7 +475,7 @@ export function createRoutes(
         }
         const tokenError = verifyJobToken(req, jobId);
         if (tokenError) return tokenError;
-        const entry = progressStore.getJob(jobId);
+        const entry = routeProgressStore.getJob(jobId);
 
         if (!entry) {
           logger.request("GET", "/v1/status/:jobId", 404, Date.now() - start, {
@@ -404,8 +500,8 @@ export function createRoutes(
       GET: (req: Request) => {
         const start = Date.now();
         const uptime = process.uptime();
-        const activeWorkflows = rateLimiter.activeWorkflows;
-        const dbOk = progressStore.healthCheck();
+        const activeWorkflows = routeRateLimiter.activeWorkflows;
+        const dbOk = routeProgressStore.healthCheck();
         const toolCache = TOOL_CACHE_ENABLED
           ? { enabled: true as const, ...getCacheStats() }
           : { enabled: false as const };
