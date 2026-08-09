@@ -9,6 +9,7 @@ import {
   SPECIALIST_MODEL,
   ORCHESTRATOR_MODEL,
   DIAGNOSIS_TIMEOUT_MS,
+  PENDING_JOB_TIMEOUT_MS,
   MAX_DIAGNOSIS_ROUNDS,
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
@@ -72,6 +73,14 @@ describe("Config — Constants", () => {
 
   test("DIAGNOSIS_TIMEOUT_MS defaults to 15 minutes", () => {
     expect(DIAGNOSIS_TIMEOUT_MS).toBe(15 * 60 * 1000);
+  });
+
+  test("PENDING_JOB_TIMEOUT_MS defaults to DIAGNOSIS_TIMEOUT_MS + 120000", () => {
+    expect(PENDING_JOB_TIMEOUT_MS).toBe(DIAGNOSIS_TIMEOUT_MS + 120_000);
+  });
+
+  test("JOB_TTL_MS >= DIAGNOSIS_TIMEOUT_MS by default", () => {
+    expect(JOB_TTL_MS).toBeGreaterThanOrEqual(DIAGNOSIS_TIMEOUT_MS);
   });
 });
 
@@ -155,6 +164,105 @@ describe("Config — validateConfig", () => {
       } else {
         delete process.env.MOCK_LLM;
       }
+    }
+  });
+});
+
+describe("Config — retention/timeout relationship validation", () => {
+  async function importFreshConfig(env: Record<string, string>) {
+    const originals: Record<string, string | undefined> = {};
+    for (const [key, value] of Object.entries(env)) {
+      originals[key] = process.env[key];
+      process.env[key] = value;
+    }
+    try {
+      return await import(
+        `../src/backend/config?t=${Date.now()}-${Math.random()}`
+      );
+    } finally {
+      for (const [key, value] of Object.entries(originals)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  test("rejects JOB_TTL_MS < DIAGNOSIS_TIMEOUT_MS", async () => {
+    const savedMock = process.env.MOCK_LLM;
+    process.env.MOCK_LLM = "1";
+    try {
+      const mod = await importFreshConfig({
+        JOB_TTL_MS: "300000",
+        DIAGNOSIS_TIMEOUT_MS: "900000",
+      });
+      expect(() => mod.validateConfig()).toThrow("JOB_TTL_MS");
+      expect(() => mod.validateConfig()).toThrow("300000");
+      expect(() => mod.validateConfig()).toThrow("900000");
+    } finally {
+      if (savedMock === undefined) delete process.env.MOCK_LLM;
+      else process.env.MOCK_LLM = savedMock;
+    }
+  });
+
+  test("rejects PENDING_JOB_TIMEOUT_MS < DIAGNOSIS_TIMEOUT_MS", async () => {
+    const savedMock = process.env.MOCK_LLM;
+    process.env.MOCK_LLM = "1";
+    try {
+      const mod = await importFreshConfig({
+        PENDING_JOB_TIMEOUT_MS: "60000",
+        DIAGNOSIS_TIMEOUT_MS: "900000",
+      });
+      expect(() => mod.validateConfig()).toThrow("PENDING_JOB_TIMEOUT_MS");
+      expect(() => mod.validateConfig()).toThrow("60000");
+      expect(() => mod.validateConfig()).toThrow("900000");
+    } finally {
+      if (savedMock === undefined) delete process.env.MOCK_LLM;
+      else process.env.MOCK_LLM = savedMock;
+    }
+  });
+
+  test("accepts JOB_TTL_MS equal to DIAGNOSIS_TIMEOUT_MS", async () => {
+    const savedMock = process.env.MOCK_LLM;
+    process.env.MOCK_LLM = "1";
+    try {
+      const mod = await importFreshConfig({
+        JOB_TTL_MS: "900000",
+        DIAGNOSIS_TIMEOUT_MS: "900000",
+      });
+      expect(() => mod.validateConfig()).not.toThrow();
+    } finally {
+      if (savedMock === undefined) delete process.env.MOCK_LLM;
+      else process.env.MOCK_LLM = savedMock;
+    }
+  });
+
+  test("accepts PENDING_JOB_TIMEOUT_MS equal to DIAGNOSIS_TIMEOUT_MS", async () => {
+    const savedMock = process.env.MOCK_LLM;
+    process.env.MOCK_LLM = "1";
+    try {
+      const mod = await importFreshConfig({
+        PENDING_JOB_TIMEOUT_MS: "900000",
+        DIAGNOSIS_TIMEOUT_MS: "900000",
+      });
+      expect(() => mod.validateConfig()).not.toThrow();
+    } finally {
+      if (savedMock === undefined) delete process.env.MOCK_LLM;
+      else process.env.MOCK_LLM = savedMock;
+    }
+  });
+
+  test("PENDING_JOB_TIMEOUT_MS defaults to DIAGNOSIS_TIMEOUT_MS + 120000", async () => {
+    const savedMock = process.env.MOCK_LLM;
+    process.env.MOCK_LLM = "1";
+    try {
+      const mod = await importFreshConfig({
+        DIAGNOSIS_TIMEOUT_MS: "900000",
+      });
+      expect(mod.PENDING_JOB_TIMEOUT_MS).toBe(900_000 + 120_000);
+      expect(() => mod.validateConfig()).not.toThrow();
+    } finally {
+      if (savedMock === undefined) delete process.env.MOCK_LLM;
+      else process.env.MOCK_LLM = savedMock;
     }
   });
 });

@@ -1,5 +1,6 @@
 import { Database, type Statement } from "bun:sqlite";
 import { logger } from "./utils/logger";
+import * as abortStore from "./utils/abort-controller-store";
 import {
   reportOutcomeSchema,
   type ReportOutcome,
@@ -98,9 +99,11 @@ export class JobStore extends EventTarget {
       `UPDATE jobs SET status = ?, error = ? WHERE id = ? AND status = 'pending'`,
     );
     this.scrubStmt = this.db.prepare(
-      `UPDATE jobs SET result = NULL, progress = '[]' WHERE createdAt < ?`,
+      `UPDATE jobs SET result = NULL, progress = '[]', error = NULL WHERE status IN ('completed', 'failed') AND createdAt < ?`,
     );
-    this.cleanupStmt = this.db.prepare(`DELETE FROM jobs WHERE createdAt < ?`);
+    this.cleanupStmt = this.db.prepare(
+      `DELETE FROM jobs WHERE status IN ('completed', 'failed') AND createdAt < ?`,
+    );
   }
 
   createJob(jobId: string): void {
@@ -198,6 +201,35 @@ export class JobStore extends EventTarget {
     const cutoff = Date.now() - ttlMs;
     this.scrubStmt.run(cutoff);
     this.cleanupStmt.run(cutoff);
+  }
+
+  /**
+   * Find pending jobs whose `createdAt` exceeds `timeoutMs`, abort their
+   * workflow (if still running) via `abortStore`, and mark them failed with
+   * "Diagnosis timed out". Replaces silent TTL deletion for active work so
+   * capacity, status, and cancellation remain consistent.
+   */
+  timeoutPending(timeoutMs: number): void {
+    const cutoff = Date.now() - timeoutMs;
+    const stmt = this.db.prepare(
+      `SELECT id FROM jobs WHERE status = 'pending' AND createdAt < ?`,
+    );
+    const rows = stmt.all(cutoff) as { id: string }[];
+    for (const { id } of rows) {
+      const controller = abortStore.get(id);
+      if (controller) {
+        try {
+          controller.abort();
+        } catch (error) {
+          logger.warn("pending_timeout_abort_failed", {
+            jobId: id,
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      }
+      this.fail(id, "Diagnosis timed out");
+      logger.warn("pending_job_timed_out", { jobId: id, timeoutMs });
+    }
   }
 
   markStalePending(): void {

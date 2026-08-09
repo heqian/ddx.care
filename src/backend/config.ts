@@ -20,6 +20,10 @@ export const DIAGNOSIS_TIMEOUT_MS = parseInt(
   process.env.DIAGNOSIS_TIMEOUT_MS ?? String(15 * 60 * 1000),
   10,
 );
+export const PENDING_JOB_TIMEOUT_MS = parseInt(
+  process.env.PENDING_JOB_TIMEOUT_MS ?? String(DIAGNOSIS_TIMEOUT_MS + 120_000),
+  10,
+);
 export const MAX_DIAGNOSIS_ROUNDS = parseInt(
   process.env.MAX_DIAGNOSIS_ROUNDS ?? "3",
   10,
@@ -196,6 +200,21 @@ export function validateConfig() {
   if (Number.isNaN(JOB_TTL_MS) || JOB_TTL_MS <= 0) {
     throw new Error(
       `Invalid JOB_TTL_MS: ${process.env.JOB_TTL_MS}. Must be a positive number.`,
+    );
+  }
+  if (JOB_TTL_MS < DIAGNOSIS_TIMEOUT_MS) {
+    throw new Error(
+      `JOB_TTL_MS (${JOB_TTL_MS}) must be greater than or equal to DIAGNOSIS_TIMEOUT_MS (${DIAGNOSIS_TIMEOUT_MS}) so terminal results remain retrievable after a workflow that runs to its full timeout. Raise JOB_TTL_MS to at least ${DIAGNOSIS_TIMEOUT_MS}.`,
+    );
+  }
+  if (Number.isNaN(PENDING_JOB_TIMEOUT_MS) || PENDING_JOB_TIMEOUT_MS <= 0) {
+    throw new Error(
+      `Invalid PENDING_JOB_TIMEOUT_MS: ${process.env.PENDING_JOB_TIMEOUT_MS}. Must be a positive number.`,
+    );
+  }
+  if (PENDING_JOB_TIMEOUT_MS < DIAGNOSIS_TIMEOUT_MS) {
+    throw new Error(
+      `PENDING_JOB_TIMEOUT_MS (${PENDING_JOB_TIMEOUT_MS}) must be greater than or equal to DIAGNOSIS_TIMEOUT_MS (${DIAGNOSIS_TIMEOUT_MS}) so a workflow running to its full timeout is not failed prematurely. Raise PENDING_JOB_TIMEOUT_MS to at least ${DIAGNOSIS_TIMEOUT_MS}.`,
     );
   }
   if (Number.isNaN(TOOL_CACHE_TTL_MS) || TOOL_CACHE_TTL_MS < 0) {

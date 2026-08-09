@@ -1,5 +1,6 @@
 import { test, expect, describe, beforeEach } from "bun:test";
 import { JobStore, type ProgressEvent } from "../src/backend/progress-store";
+import * as abortStore from "../src/backend/utils/abort-controller-store";
 import {
   createGenerationFailedReportOutcome,
   type AvailableReportOutcome,
@@ -405,8 +406,9 @@ describe("JobStore — WAL Mode", () => {
 });
 
 describe("JobStore — Cleanup", () => {
-  test("cleanupExpired removes old jobs", () => {
+  test("cleanupExpired removes old terminal jobs", () => {
     store.createJob("old-job");
+    store.fail("old-job", "done");
     // Manually update createdAt to be very old
     const db = (store as any).db;
     db.exec(
@@ -457,6 +459,7 @@ describe("JobStore — Cleanup", () => {
       toolName: "drug-interaction",
       toolArgs: "aspirin + warfarin",
     });
+    store.fail("scrub-2", "Provider error");
 
     const db = (store as any).db;
     db.exec(
@@ -508,6 +511,166 @@ describe("JobStore — Cleanup", () => {
     // Now clean up
     store.cleanupExpired(50_000);
     expect(store.getJob("scrub-verify")).toBeUndefined();
+  });
+
+  test("cleanupExpired does not delete or scrub pending jobs", () => {
+    store.createJob("pending-old");
+    store.emitMessage("pending-old", "active workflow data");
+
+    const db = (store as any).db;
+    db.exec(
+      `UPDATE jobs SET createdAt = ${Date.now() - 100_000} WHERE id = 'pending-old'`,
+    );
+
+    store.cleanupExpired(50_000);
+
+    const job = store.getJob("pending-old");
+    expect(job).toBeDefined();
+    expect(job!.status).toBe("pending");
+    expect(job!.progress).toHaveLength(1);
+    expect(job!.progress[0].message).toBe("active workflow data");
+  });
+
+  test("scrubStmt nulls error column for expired terminal jobs", () => {
+    store.createJob("error-scrub");
+    store.fail("error-scrub", "Provider error with PHI details");
+
+    const db = (store as any).db;
+    db.exec(
+      `UPDATE jobs SET createdAt = ${Date.now() - 100_000} WHERE id = 'error-scrub'`,
+    );
+
+    // Run only the scrub statement to inspect the row before deletion
+    const cutoff = Date.now() - 50_000;
+    (store as any).scrubStmt.run(cutoff);
+
+    const row = db
+      .query("SELECT * FROM jobs WHERE id = 'error-scrub'")
+      .get() as any;
+    expect(row).toBeDefined();
+    expect(row.error).toBeNull();
+    expect(row.result).toBeNull();
+    expect(row.progress).toBe("[]");
+
+    store.cleanupExpired(50_000);
+    expect(store.getJob("error-scrub")).toBeUndefined();
+  });
+
+  test("scrubStmt does not affect pending jobs even if expired by createdAt", () => {
+    store.createJob("pending-scrub-safe");
+    store.emitMessage("pending-scrub-safe", "active workflow data");
+
+    const db = (store as any).db;
+    db.exec(
+      `UPDATE jobs SET createdAt = ${Date.now() - 100_000} WHERE id = 'pending-scrub-safe'`,
+    );
+
+    const cutoff = Date.now() - 50_000;
+    (store as any).scrubStmt.run(cutoff);
+
+    const row = db
+      .query("SELECT * FROM jobs WHERE id = 'pending-scrub-safe'")
+      .get() as any;
+    expect(row.status).toBe("pending");
+    expect(row.progress).not.toBe("[]");
+  });
+});
+
+describe("JobStore — timeoutPending", () => {
+  test("aborts and fails an old pending job", () => {
+    store.createJob("stuck-job");
+
+    const controller = new AbortController();
+    let aborted = false;
+    controller.signal.addEventListener("abort", () => {
+      aborted = true;
+    });
+    abortStore.set("stuck-job", controller);
+
+    const db = (store as any).db;
+    db.exec(
+      `UPDATE jobs SET createdAt = ${Date.now() - 200_000} WHERE id = 'stuck-job'`,
+    );
+
+    store.timeoutPending(100_000);
+
+    expect(aborted).toBe(true);
+    const job = store.getJob("stuck-job");
+    expect(job!.status).toBe("failed");
+    expect(job!.error).toBe("Diagnosis timed out");
+
+    abortStore.remove("stuck-job");
+  });
+
+  test("does not affect pending jobs within the timeout", () => {
+    store.createJob("fresh-pending");
+
+    store.timeoutPending(100_000);
+
+    const job = store.getJob("fresh-pending");
+    expect(job).toBeDefined();
+    expect(job!.status).toBe("pending");
+  });
+
+  test("does not affect terminal jobs even if old", () => {
+    store.createJob("old-completed");
+    store.complete("old-completed", availableOutcome);
+
+    const db = (store as any).db;
+    db.exec(
+      `UPDATE jobs SET createdAt = ${Date.now() - 200_000} WHERE id = 'old-completed'`,
+    );
+
+    store.timeoutPending(100_000);
+
+    const job = store.getJob("old-completed");
+    expect(job!.status).toBe("completed");
+    expect(job!.result).toEqual(availableOutcome);
+  });
+
+  test("fails pending job even when no controller is registered", () => {
+    store.createJob("no-controller");
+
+    const db = (store as any).db;
+    db.exec(
+      `UPDATE jobs SET createdAt = ${Date.now() - 200_000} WHERE id = 'no-controller'`,
+    );
+
+    expect(() => store.timeoutPending(100_000)).not.toThrow();
+
+    const job = store.getJob("no-controller");
+    expect(job!.status).toBe("failed");
+    expect(job!.error).toBe("Diagnosis timed out");
+  });
+
+  test("handles empty store gracefully", () => {
+    expect(() => store.timeoutPending(100_000)).not.toThrow();
+  });
+});
+
+describe("JobStore — Startup sequence", () => {
+  test("startup cleanup removes expired terminal jobs before serving", () => {
+    // Simulate jobs left from a previous run (before downtime)
+    store.createJob("expired-completed");
+    store.complete("expired-completed", availableOutcome);
+    store.createJob("expired-failed");
+    store.fail("expired-failed", "Provider error");
+    store.createJob("fresh-completed");
+    store.complete("fresh-completed", availableOutcome);
+
+    const db = (store as any).db;
+    db.exec(
+      `UPDATE jobs SET createdAt = 0 WHERE id IN ('expired-completed', 'expired-failed')`,
+    );
+
+    // Mirror index.ts startup: markStalePending() then cleanupExpired(JOB_TTL_MS)
+    store.markStalePending();
+    store.cleanupExpired(60_000);
+
+    expect(store.getJob("expired-completed")).toBeUndefined();
+    expect(store.getJob("expired-failed")).toBeUndefined();
+    expect(store.getJob("fresh-completed")).toBeDefined();
+    expect(store.getJob("fresh-completed")!.status).toBe("completed");
   });
 });
 

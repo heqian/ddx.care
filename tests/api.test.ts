@@ -961,6 +961,30 @@ describe("API Endpoints", () => {
     });
   });
 
+  describe("TTL protects pending jobs", () => {
+    test("pending job older than JOB_TTL_MS remains accessible after cleanup", async () => {
+      const { progressStore } = await import("../src/backend/progress-store");
+      const { JOB_TTL_MS } = await import("../src/backend/config");
+      const jobId = "00000000-0000-4000-a000-000000000099";
+      progressStore.createJob(jobId);
+
+      // Age the job well beyond JOB_TTL_MS
+      const db = (progressStore as any).db;
+      db.exec(`UPDATE jobs SET createdAt = 0 WHERE id = '${jobId}'`);
+
+      // TTL cleanup must NOT delete pending jobs
+      progressStore.cleanupExpired(JOB_TTL_MS);
+
+      const statusRes = await fetch(`${BASE}/v1/status/${jobId}`);
+      expect(statusRes.status).toBe(200);
+      const body = (await statusRes.json()) as { status: string };
+      expect(body.status).toBe("pending");
+
+      // Cleanup: fail the job so it doesn't linger as a dangling pending job
+      progressStore.fail(jobId, "Test cleanup");
+    });
+  });
+
   afterAll(() => {
     if (_savedMockLlm !== undefined) {
       process.env.MOCK_LLM = _savedMockLlm;

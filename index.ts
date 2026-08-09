@@ -18,6 +18,7 @@ import {
   MAX_PAYLOAD_BYTES,
   AUDIT_LOG_PATH,
   AUDIT_LOG_RETENTION_HOURS,
+  PENDING_JOB_TIMEOUT_MS,
   validateConfig,
 } from "./src/backend/config";
 import { logger, getAuditLogger } from "./src/backend/utils/logger";
@@ -33,6 +34,9 @@ const specialistCount = validateSpecialistIntegrity();
 logger.info("specialist_registry_validated", { specialistCount });
 
 progressStore.markStalePending();
+// Remove terminal jobs that expired during downtime before serving requests,
+// so PHI-derived results/errors are not exposed past the retention boundary.
+progressStore.cleanupExpired(JOB_TTL_MS);
 
 if (ORPHADATA_ENABLED) {
   initializeOrphadataCache().catch(() => {});
@@ -44,6 +48,7 @@ if (TOOL_CACHE_ENABLED) {
 
 const cleanupTimer = setInterval(() => {
   progressStore.cleanupExpired(JOB_TTL_MS);
+  progressStore.timeoutPending(PENDING_JOB_TIMEOUT_MS);
 }, CLEANUP_INTERVAL_MS);
 
 const pruneTimer = setInterval(() => {

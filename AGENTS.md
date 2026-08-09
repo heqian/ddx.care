@@ -117,16 +117,17 @@ Shared utilities:
 - `JobStore` class (extends `EventTarget`) — SQLite-backed (`bun:sqlite`) job persistence.
 - Stores job status (`pending` | `completed` | `failed`), progress events (JSON array), and a schema-validated `ReportOutcome` result for completed jobs. Both `available` and `generation_failed` are completed jobs; cancellation, timeout, and unrecoverable workflow errors are failed jobs.
 - Pub/sub via `CustomEvent` dispatch for real-time WebSocket updates.
-- TTL-based cleanup: `cleanupExpired()` called every 5 minutes, removes jobs older than 60 minutes.
-- `markStalePending()` called on startup, marks all `pending` jobs as `failed("Server restarted — job interrupted")`.
+- TTL-based cleanup: `cleanupExpired()` called every 5 minutes, scrubs (`result`, `progress`, `error`) and removes **terminal** jobs (`completed`, `failed`) older than `JOB_TTL_MS`. Pending jobs are never TTL-deleted; they are governed by `timeoutPending()`.
+- `timeoutPending(PENDING_JOB_TIMEOUT_MS)` called every cleanup interval, aborts and fails pending jobs older than the timeout (`failed("Diagnosis timed out")`), releasing capacity via the workflow's `finally`.
+- `markStalePending()` called on startup, marks all `pending` jobs as `failed("Server restarted — job interrupted")`. `cleanupExpired(JOB_TTL_MS)` also runs once on startup to remove terminal jobs that expired during downtime.
 - Singleton exported as `progressStore`.
 
 #### Configuration (`src/backend/config.ts`)
 
 All constants centralized here, read from environment variables with defaults:
-- `PORT` (3000), `ALLOWED_ORIGINS` (`*`), `TRUSTED_ORIGINS` (empty/dev-only), `JOB_TTL_MS` (60min), `CLEANUP_INTERVAL_MS` (5min), `RATE_LIMIT_PRUNE_INTERVAL_MS` (10min)
+- `PORT` (3000), `ALLOWED_ORIGINS` (`*`), `TRUSTED_ORIGINS` (empty/dev-only), `JOB_TTL_MS` (60min, terminal jobs only), `PENDING_JOB_TIMEOUT_MS` (DIAGNOSIS_TIMEOUT_MS + 120s), `CLEANUP_INTERVAL_MS` (5min), `RATE_LIMIT_PRUNE_INTERVAL_MS` (10min)
 - `SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL` (both `ollama-cloud/gemma4:31b`)
-- `DIAGNOSIS_TIMEOUT_MS` (900s / 15 min), `MAX_DIAGNOSIS_ROUNDS` (3)
+- `DIAGNOSIS_TIMEOUT_MS` (900s / 15 min), `MAX_DIAGNOSIS_ROUNDS` (3). `validateConfig()` rejects `JOB_TTL_MS` or `PENDING_JOB_TIMEOUT_MS` below `DIAGNOSIS_TIMEOUT_MS`.
 - `RATE_LIMIT_MAX_REQUESTS` (5), `RATE_LIMIT_WINDOW_MS` (60s / 1 min), `MAX_CONCURRENT_WORKFLOWS` (3)
 - `MAX_INPUT_FIELD_LENGTH` (50,000 chars), `MAX_PAYLOAD_BYTES` (1MB)
 - `MOCK_LLM`, `LOG_FORMAT`, `SPECIALIST_CONTEXT_MODE`, `SPECIALIST_CONTEXT_MAX_CHARS`, `CMO_CONTEXT_MAX_CHARS`
@@ -214,7 +215,8 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `ALLOWED_ORIGINS` | `*` | CORS + WebSocket origin whitelist (comma-separated, used when `TRUSTED_ORIGINS` is not set) |
 | `TRUSTED_ORIGNS` | (empty) | Production CORS + WebSocket origin whitelist (comma-separated). When set, `ALLOWED_ORIGINS` is ignored |
 | `WS_TOKEN_SECRET` | (empty) | HMAC secret for WebSocket + REST endpoint authentication. When empty, tokens are not required (dev mode). Set for production — secures WebSocket, `GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId`, and HTTP polling fallback. |
-| `JOB_TTL_MS` | `3600000` (60 min) | Job TTL before cleanup |
+| `JOB_TTL_MS` | `3600000` (60 min) | Terminal-job (completed/failed) TTL before scrub + delete. Must be >= `DIAGNOSIS_TIMEOUT_MS`. Pending jobs are not affected; see `PENDING_JOB_TIMEOUT_MS`. |
+| `PENDING_JOB_TIMEOUT_MS` | `1020000` (17 min) | Max lifetime of a pending job before it is aborted and failed (`Diagnosis timed out`). Defaults to `DIAGNOSIS_TIMEOUT_MS + 120000`. Must be >= `DIAGNOSIS_TIMEOUT_MS`. |
 | `SPECIALIST_MODEL` | `ollama-cloud/gemma4:31b` | Override specialist agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `ORCHESTRATOR_MODEL` | `ollama-cloud/gemma4:31b` | Override CMO agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max CMO consultation rounds |
@@ -247,9 +249,9 @@ ddx.care is explicitly labeled "RESEARCH PROOF-OF-CONCEPT ONLY. NOT a medical de
 
 ### Job Data (SQLite `jobs` table)
 
-- **TTL**: Jobs persist for `JOB_TTL_MS` (default 60 min). Reduce this for sensitive deployments (e.g., `JOB_TTL_MS=300000` for 5-minute retention).
-- **Scrub-before-delete**: `cleanupExpired()` nulls the `result` column and resets `progress` to `'[]'` before the `DELETE`, reducing recoverability from disk images where SQLite has not yet reclaimed pages.
-- **In-memory only**: The `jobs` SQLite database is file-backed but transient — data is lost on server restart. `markStalePending()` on startup marks all pending jobs as failed.
+- **TTL**: Terminal jobs (completed/failed) persist for `JOB_TTL_MS` (default 60 min) and are then scrubbed and deleted. Pending jobs are never TTL-deleted; they are governed by `PENDING_JOB_TIMEOUT_MS` (default `DIAGNOSIS_TIMEOUT_MS + 120s`). For sensitive deployments, reduce `JOB_TTL_MS` (e.g., `JOB_TTL_MS=300000` for 5-minute **terminal** retention) — this only affects results after a diagnosis finishes, not active workflows. Both `JOB_TTL_MS` and `PENDING_JOB_TIMEOUT_MS` must be >= `DIAGNOSIS_TIMEOUT_MS`; `validateConfig()` enforces this.
+- **Scrub-before-delete**: `cleanupExpired()` nulls the `result` and `error` columns and resets `progress` to `'[]'` before the `DELETE`, reducing recoverability from disk images where SQLite has not yet reclaimed pages. Applies only to terminal jobs.
+- **In-memory only**: The `jobs` SQLite database is file-backed but transient — data is lost on server restart. `markStalePending()` on startup marks all pending jobs as failed. `cleanupExpired(JOB_TTL_MS)` also runs once on startup to remove terminal jobs that expired during downtime.
 
 ### Audit Log
 
