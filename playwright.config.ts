@@ -29,6 +29,7 @@ export default defineConfig({
       RATE_LIMIT_MAX_REQUESTS: "200",
       RATE_LIMIT_WINDOW_MS: "60000",
       MAX_CONCURRENT_WORKFLOWS: "50",
+      WS_TOKEN_SECRET: "e2e-job-context-secret",
     },
   },
 });

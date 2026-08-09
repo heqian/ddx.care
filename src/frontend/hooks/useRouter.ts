@@ -3,22 +3,25 @@ import { useState, useCallback, useEffect } from "react";
 export type Route =
   | { screen: "input" }
   | { screen: "waiting"; jobId: string }
-  | { screen: "results"; jobId: string; token?: string };
+  | { screen: "results"; jobId: string };
+
+function parseJobRoute(path: string, prefix: string): string | null {
+  const parts = path.slice(prefix.length).split("/");
+  if (parts.length !== 1 || !parts[0]) return null;
+  try {
+    return decodeURIComponent(parts[0]);
+  } catch {
+    return null;
+  }
+}
 
 export function parsePath(path: string): Route {
   if (path.startsWith("/results/")) {
-    const rest = path.slice("/results/".length);
-    if (rest) {
-      const [jobId, token] = rest.split("/");
-      if (jobId) {
-        return token
-          ? { screen: "results", jobId, token }
-          : { screen: "results", jobId };
-      }
-    }
+    const jobId = parseJobRoute(path, "/results/");
+    if (jobId) return { screen: "results", jobId };
   }
   if (path.startsWith("/waiting/")) {
-    const jobId = path.slice("/waiting/".length);
+    const jobId = parseJobRoute(path, "/waiting/");
     if (jobId) return { screen: "waiting", jobId };
   }
   return { screen: "input" };
@@ -27,11 +30,9 @@ export function parsePath(path: string): Route {
 export function routeToPath(route: Route): string {
   switch (route.screen) {
     case "waiting":
-      return `/waiting/${route.jobId}`;
+      return `/waiting/${encodeURIComponent(route.jobId)}`;
     case "results":
-      return route.token
-        ? `/results/${route.jobId}/${route.token}`
-        : `/results/${route.jobId}`;
+      return `/results/${encodeURIComponent(route.jobId)}`;
     default:
       return "/";
   }
@@ -42,19 +43,22 @@ export function useRouter() {
     parsePath(window.location.pathname),
   );
 
-  const navigate = useCallback((next: Route) => {
-    const path = routeToPath(next);
-    window.history.pushState(next, "", path);
-    setRoute(next);
-  }, []);
+  const navigate = useCallback(
+    (next: Route, options?: { replace?: boolean }) => {
+      const path = routeToPath(next);
+      if (options?.replace) {
+        window.history.replaceState(next, "", path);
+      } else {
+        window.history.pushState(next, "", path);
+      }
+      setRoute(next);
+    },
+    [],
+  );
 
   useEffect(() => {
-    const onPopState = (e: PopStateEvent) => {
-      if (e.state && typeof e.state === "object" && "screen" in e.state) {
-        setRoute(e.state as Route);
-      } else {
-        setRoute(parsePath(window.location.pathname));
-      }
+    const onPopState = () => {
+      setRoute(parsePath(window.location.pathname));
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);

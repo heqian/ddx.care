@@ -101,5 +101,32 @@ export function jobIdFromUrl(url: string): string | undefined {
   return url.split(/\/(?:waiting|results)\//)[1]?.split(/[?/]/)[0];
 }
 
+export interface BrowserJobCredential {
+  jobId: string;
+  token: string;
+  expiresAt: number;
+}
+
+export async function jobCredential(
+  page: Page,
+  jobId: string,
+): Promise<BrowserJobCredential> {
+  const credential = await page.evaluate((id) => {
+    const raw = sessionStorage.getItem("ddx_job_credentials");
+    if (!raw) return null;
+    return JSON.parse(raw).jobs?.[id] ?? null;
+  }, jobId);
+  if (!credential) throw new Error(`Missing browser credential for ${jobId}`);
+  return credential;
+}
+
+export async function authenticatedStatusUrl(
+  page: Page,
+  jobId: string,
+): Promise<string> {
+  const { token } = await jobCredential(page, jobId);
+  return `${baseUrl}/v1/status/${jobId}?token=${encodeURIComponent(token)}`;
+}
+
 /** Base URL of the running E2E server. */
 export const baseUrl = `http://localhost:${process.env.PORT || 3999}`;

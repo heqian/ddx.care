@@ -1452,6 +1452,102 @@ describe("useJobStream", () => {
     expect(result.current.status?.progress?.[1].message).toBe("Step 2");
     expect(result.current.status?.progress?.[2].message).toBe("Step 3");
   });
+
+  test("resets state and ignores obsolete responses when the job changes", async () => {
+    const { result, rerender } = renderHook(
+      ({ jobId, generation }) => useJobStream(jobId, "secret", generation),
+      { initialProps: { jobId: "job-a", generation: 1 } },
+    );
+    await hookAct(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const oldSocket = MockWebSocket.instances[0];
+    await hookAct(async () => {
+      oldSocket.simulateMessage({
+        type: "failed",
+        jobId: "job-a",
+        error: "old failure",
+      });
+    });
+    expect(result.current.status?.jobId).toBe("job-a");
+
+    rerender({ jobId: "job-b", generation: 2 });
+    await hookAct(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(oldSocket.closed).toBe(true);
+    expect(result.current.status).toBeNull();
+
+    const currentSocket = MockWebSocket.instances[1];
+    await hookAct(async () => {
+      oldSocket.simulateMessage({
+        type: "failed",
+        jobId: "job-a",
+        error: "obsolete",
+      });
+      currentSocket.simulateMessage({
+        type: "failed",
+        jobId: "job-a",
+        error: "mismatched",
+      });
+      currentSocket.simulateMessage({
+        type: "failed",
+        jobId: "job-b",
+        error: "current failure",
+      });
+    });
+    expect(result.current.status).toMatchObject({
+      jobId: "job-b",
+      status: "failed",
+      error: "current failure",
+    });
+  });
+
+  test("does not let progress regress a terminal stream state", async () => {
+    const { result } = renderHook(() => useJobStream("job-terminal"));
+    await hookAct(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const socket = MockWebSocket.instances[0];
+    await hookAct(async () => {
+      socket.simulateMessage({
+        type: "failed",
+        jobId: "job-terminal",
+        error: "terminal",
+      });
+      socket.simulateMessage({
+        type: "progress",
+        jobId: "job-terminal",
+        event: { time: "2024-01-01T00:00:00Z", message: "late progress" },
+      });
+    });
+
+    expect(result.current.status?.status).toBe("failed");
+    expect(result.current.status?.progress).toEqual([]);
+  });
+
+  test("aborts an obsolete reconnect status request", async () => {
+    vi.useFakeTimers();
+    const originalFetch = globalThis.fetch;
+    let requestSignal: AbortSignal | undefined;
+    globalThis.fetch = vi.fn((_url, init) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    }) as typeof fetch;
+
+    const { unmount } = renderHook(() => useJobStream("job-abort", "token"));
+    await hookAct(async () => vi.advanceTimersByTime(10));
+    await hookAct(async () => {
+      MockWebSocket.instances[0].simulateClose(1006, "Abnormal");
+      vi.advanceTimersByTime(1000);
+    });
+    expect(requestSignal?.aborted).toBe(false);
+
+    unmount();
+    expect(requestSignal?.aborted).toBe(true);
+    globalThis.fetch = originalFetch;
+    vi.useRealTimers();
+  });
 });
 
 // ---------------------------------------------------------------------------

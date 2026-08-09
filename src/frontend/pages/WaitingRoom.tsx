@@ -6,7 +6,7 @@ import { ProgressPhases } from "../components/diagnosis/ProgressPhases";
 import type { SpecialistStatus } from "../components/agents/AgentStatusCard";
 import type { ToolHistoryEntry } from "../api/types";
 import { useJobStream } from "../hooks/useJobStream";
-import { cancelDiagnosis, getAgents } from "../api/client";
+import { getAgents } from "../api/client";
 import type { AgentInfo, StatusResponse, ProgressEvent } from "../api/types";
 
 interface WaitingRoomProps {
@@ -15,6 +15,10 @@ interface WaitingRoomProps {
   onComplete: (result: StatusResponse) => void;
   onCancel: () => void;
   onRetry: () => void;
+  retrying?: boolean;
+  generation?: number;
+  onStatus?: (status: StatusResponse, generation: number) => void;
+  onStreamError?: (error: Error | null, generation: number) => void;
 }
 
 const CALLING_RE = /^Calling specialist (\w+)\.\.\.$/;
@@ -104,10 +108,20 @@ export function WaitingRoom({
   onComplete,
   onCancel,
   onRetry,
+  retrying = false,
+  generation = 0,
+  onStatus,
+  onStreamError,
 }: WaitingRoomProps) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agentsError, setAgentsError] = useState(false);
-  const { status, error } = useJobStream(jobId, token);
+  const { status, error } = useJobStream(
+    jobId,
+    token,
+    generation,
+    onStatus,
+    onStreamError,
+  );
   const isTerminal =
     status?.status === "failed" || status?.status === "completed";
   const progressRef = useRef<HTMLDivElement>(null);
@@ -146,11 +160,8 @@ export function WaitingRoom({
   const hasProgress = status?.progress && status.progress.length > 0;
 
   const handleCancelClick = useCallback(() => {
-    if (jobId) {
-      cancelDiagnosis(jobId, token).catch(() => {});
-    }
     onCancel();
-  }, [jobId, token, onCancel]);
+  }, [onCancel]);
 
   return (
     <div className="space-y-8">
@@ -298,10 +309,11 @@ export function WaitingRoom({
         {showRetry && (
           <button
             onClick={onRetry}
+            disabled={retrying}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors"
           >
             <ArrowPathIcon className="h-4 w-4" />
-            Retry Diagnosis
+            {retrying ? "Retrying..." : "Retry Diagnosis"}
           </button>
         )}
         {isTerminal && (

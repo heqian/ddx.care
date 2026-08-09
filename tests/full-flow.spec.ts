@@ -5,6 +5,7 @@ import {
   submitCase,
   baseUrl,
   jobIdFromUrl,
+  authenticatedStatusUrl,
 } from "./e2e/helpers";
 import { specialistIds } from "../src/backend/agents/manifest";
 
@@ -356,8 +357,9 @@ test.describe("Full diagnosis flow", () => {
     expect(jobId).toBeTruthy();
 
     // Fetch the completed job status via API to inspect progress event structure
-    const baseUrl = `http://localhost:${process.env.PORT || 3999}`;
-    const statusRes = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+    const statusRes = await page.request.get(
+      await authenticatedStatusUrl(page, jobId!),
+    );
     expect(statusRes.ok()).toBe(true);
     const statusData = await statusRes.json();
     expect(statusData.status).toBe("completed");
@@ -437,7 +439,9 @@ test.describe("Full diagnosis flow", () => {
     const jobId = jobIdFromUrl(page.url());
     expect(jobId).toBeTruthy();
 
-    const statusRes = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+    const statusRes = await page.request.get(
+      await authenticatedStatusUrl(page, jobId!),
+    );
     expect(statusRes.ok()).toBe(true);
     const statusData = await statusRes.json();
     expect(statusData.status).toBe("completed");

@@ -178,6 +178,20 @@ describe("getJobStatus", () => {
     expect(fetchCall[0]).toBe("/v1/status/job-1");
   });
 
+  test("forwards an AbortSignal to status requests", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ jobId: "job-1", status: "pending" }),
+    }) as any;
+    const controller = new AbortController();
+
+    await getJobStatus("job-1", "token", controller.signal);
+
+    expect((globalThis.fetch as any).mock.calls[0][1].signal).toBe(
+      controller.signal,
+    );
+  });
+
   test.each([
     ["available", availableOutcome],
     ["generation_failed", generationFailedOutcome],

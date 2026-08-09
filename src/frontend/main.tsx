@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AppShell } from "./components/layout/AppShell";
 import { ConsentGate, useConsent } from "./components/layout/ConsentGate";
@@ -9,54 +9,67 @@ import { ResultsView } from "./pages/ResultsView";
 import { useAutoLogout } from "./hooks/useAutoLogout";
 import { useRouter, type Route } from "./hooks/useRouter";
 import { Spinner } from "./components/ui/Spinner";
-import { submitDiagnosis, getJobStatus, type ApiError } from "./api/client";
-import type { StatusResponse, DiagnoseRequest } from "./api/types";
+import {
+  cancelDiagnosis,
+  getJobStatus,
+  submitDiagnosis,
+  type ApiError,
+} from "./api/client";
+import type { DiagnoseRequest, StatusResponse } from "./api/types";
+import { jobContextReducer, type JobAuthorizationState } from "./job-context";
+import {
+  clearSensitiveSessionData,
+  getJobCredential,
+  removeJobCredential,
+  storeJobCredential,
+} from "./job-credentials";
+
+function routeJobId(route: Route): string | null {
+  return route.screen === "input" ? null : route.jobId;
+}
+
+function UnavailableJob({
+  authorization,
+  onReset,
+}: {
+  authorization: Exclude<JobAuthorizationState, "available">;
+  onReset: () => void;
+}) {
+  return (
+    <div className="max-w-md mx-auto text-center py-16 space-y-4">
+      <h1 className="text-xl font-display">Case Access Unavailable</h1>
+      <p className="text-slate-700 dark:text-slate-300 text-sm">
+        {authorization === "expired"
+          ? "Authorization for this case has expired. Start a new case to continue."
+          : "This case is not available in the current browser session."}
+      </p>
+      <button
+        onClick={onReset}
+        className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors"
+      >
+        New Case
+      </button>
+    </div>
+  );
+}
 
 function App() {
   const { route, navigate } = useRouter();
   const { accepted, grant, revoke } = useConsent();
-  const [jobResult, setJobResult] = useState<StatusResponse | null>(null);
-  const lastPayload = useRef<DiagnoseRequest | null>(null);
-  const [retrying, setRetrying] = useState(false);
-  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
-  const [wsToken, setWsToken] = useState<string>("");
+  const [jobs, dispatch] = useReducer(jobContextReducer, {});
+  const jobsRef = useRef(jobs);
+  const routeRef = useRef(route);
+  jobsRef.current = jobs;
+  routeRef.current = route;
 
-  // When navigating to results via router (deep link / back button), fetch the result
-  const _jobId =
-    route.screen === "waiting" || route.screen === "results"
-      ? route.jobId
-      : null;
-
-  const fetchDeepLink = useCallback(() => {
-    if (route.screen === "results" && route.jobId && !jobResult) {
-      setDeepLinkError(null);
-      getJobStatus(route.jobId, route.token)
-        .then((res) => {
-          if (res.status === "completed" || res.status === "failed") {
-            setJobResult(res);
-          }
-        })
-        .catch((err: ApiError) => {
-          if (err.status === 403) {
-            setDeepLinkError(
-              "This link has expired or you are not authorized to view these results.",
-            );
-          } else {
-            setDeepLinkError("Could not load results for this case.");
-          }
-        });
-    }
-  }, [route, jobResult]);
-
-  useEffect(() => {
-    fetchDeepLink();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
+  const activeJobId = routeJobId(route);
+  const activeContext = activeJobId ? jobs[activeJobId] : undefined;
   const hasPatientData = route.screen !== "input";
 
   const handleReset = useCallback(() => {
-    setJobResult(null);
-    navigate({ screen: "input" });
+    clearSensitiveSessionData();
+    dispatch({ type: "clear" });
+    navigate({ screen: "input" }, { replace: true });
   }, [navigate]);
 
   const { showWarning, extendSession } = useAutoLogout(
@@ -65,61 +78,216 @@ function App() {
   );
 
   useEffect(() => {
+    if (!activeJobId) return;
+    const lookup = getJobCredential(activeJobId);
+    if (lookup.status === "available") {
+      const existing = jobsRef.current[activeJobId];
+      if (
+        !existing ||
+        existing.token !== lookup.credential.token ||
+        existing.expiresAt !== lookup.credential.expiresAt
+      ) {
+        dispatch({
+          type: "register",
+          ...lookup.credential,
+          payload: existing?.payload,
+        });
+      }
+      dispatch({ type: "streamStarted", jobId: activeJobId });
+      return;
+    }
+    dispatch({
+      type: "authorizationChanged",
+      jobId: activeJobId,
+      authorization: lookup.status,
+    });
+  }, [activeJobId]);
+
+  useEffect(() => {
+    if (
+      route.screen !== "results" ||
+      !activeContext ||
+      activeContext.authorization !== "available" ||
+      activeContext.status?.status === "completed" ||
+      activeContext.status?.status === "failed"
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const { jobId, token, generation } = activeContext;
+    getJobStatus(jobId, token, controller.signal)
+      .then((status) => {
+        dispatch({ type: "statusReceived", jobId, generation, status });
+      })
+      .catch((value: ApiError) => {
+        if (controller.signal.aborted) return;
+        if (value.status === 403) {
+          removeJobCredential(jobId);
+          dispatch({
+            type: "authorizationChanged",
+            jobId,
+            authorization: "expired",
+          });
+          return;
+        }
+        dispatch({
+          type: "streamError",
+          jobId,
+          generation,
+          error: "Could not load results for this case.",
+        });
+      });
+    return () => controller.abort();
+  }, [
+    route.screen,
+    activeContext?.jobId,
+    activeContext?.token,
+    activeContext?.generation,
+    activeContext?.authorization,
+    activeContext?.status?.status,
+  ]);
+
+  useEffect(() => {
     if (!hasPatientData) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
+    const handler = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasPatientData]);
 
   const handleSubmit = useCallback(
-    (newJobId: string, payload: DiagnoseRequest, token?: string) => {
-      lastPayload.current = payload;
-      setJobResult(null);
-      setWsToken(token ?? "");
-      navigate({ screen: "waiting", jobId: newJobId });
+    (jobId: string, payload: DiagnoseRequest, token: string) => {
+      const credential = storeJobCredential(jobId, token);
+      dispatch({ type: "register", ...credential, payload });
+      navigate({ screen: "waiting", jobId });
     },
     [navigate],
   );
 
-  const handleComplete = useCallback(
-    (result: StatusResponse) => {
-      setJobResult(result);
-      const jid = route.screen === "waiting" ? route.jobId : result.jobId;
-      navigate({ screen: "results", jobId: jid, token: wsToken || undefined });
+  const handleStatus = useCallback(
+    (status: StatusResponse, generation: number) => {
+      dispatch({
+        type: "statusReceived",
+        jobId: status.jobId,
+        generation,
+        status,
+      });
     },
-    [navigate, route, wsToken],
+    [],
   );
 
-  const handleCancel = useCallback(() => {
-    setJobResult(null);
-    navigate({ screen: "input" });
+  const handleStreamError = useCallback(
+    (error: Error | null, generation: number) => {
+      const current = routeRef.current;
+      if (current.screen !== "waiting") return;
+      dispatch({
+        type: "streamError",
+        jobId: current.jobId,
+        generation,
+        error: error?.message ?? null,
+      });
+    },
+    [],
+  );
+
+  const handleComplete = useCallback(
+    (status: StatusResponse) => {
+      const current = routeRef.current;
+      if (
+        current.screen !== "waiting" ||
+        current.jobId !== status.jobId ||
+        status.status !== "completed"
+      ) {
+        return;
+      }
+      navigate({ screen: "results", jobId: status.jobId }, { replace: true });
+    },
+    [navigate],
+  );
+
+  const leaveJob = useCallback(() => {
+    const current = routeRef.current;
+    if (current.screen !== "input") {
+      removeJobCredential(current.jobId);
+      dispatch({ type: "remove", jobId: current.jobId });
+    }
+    navigate({ screen: "input" }, { replace: true });
   }, [navigate]);
 
+  const handleCancel = useCallback(() => {
+    const current = routeRef.current;
+    if (current.screen === "waiting") {
+      const context = jobsRef.current[current.jobId];
+      if (context?.authorization === "available") {
+        void cancelDiagnosis(current.jobId, context.token).catch(() => {});
+      }
+    }
+    leaveJob();
+  }, [leaveJob]);
+
   const handleRetry = useCallback(async () => {
-    if (!lastPayload.current) {
-      handleCancel();
+    const sourceRoute = routeRef.current;
+    if (sourceRoute.screen === "input") return;
+    const source = jobsRef.current[sourceRoute.jobId];
+    if (!source?.payload || source.retrying) {
+      leaveJob();
       return;
     }
-    setRetrying(true);
+
+    dispatch({
+      type: "retryingChanged",
+      jobId: source.jobId,
+      retrying: true,
+    });
     try {
-      const { jobId: newJobId, token } = await submitDiagnosis(
-        lastPayload.current,
-      );
-      setJobResult(null);
-      setWsToken(token);
-      navigate({ screen: "waiting", jobId: newJobId });
+      const response = await submitDiagnosis(source.payload);
+      const current = routeRef.current;
+      if (
+        current.screen !== sourceRoute.screen ||
+        current.jobId !== sourceRoute.jobId
+      ) {
+        return;
+      }
+      const credential = storeJobCredential(response.jobId, response.token);
+      dispatch({
+        type: "register",
+        ...credential,
+        payload: source.payload,
+      });
+      navigate({ screen: "waiting", jobId: response.jobId });
     } catch {
-      handleCancel();
+      const current = routeRef.current;
+      if (
+        current.screen === sourceRoute.screen &&
+        current.jobId === sourceRoute.jobId
+      ) {
+        dispatch({
+          type: "streamError",
+          jobId: source.jobId,
+          generation: source.generation,
+          error: "Could not retry this case.",
+        });
+      }
     } finally {
-      setRetrying(false);
+      dispatch({
+        type: "retryingChanged",
+        jobId: source.jobId,
+        retrying: false,
+      });
     }
-  }, [handleCancel, navigate]);
+  }, [leaveJob, navigate]);
 
   if (!accepted) {
     return <ConsentGate onAccept={grant} onDecline={revoke} />;
   }
+
+  const authorization = activeContext?.authorization;
+  const availableContext =
+    activeContext?.authorization === "available" ? activeContext : null;
+  const routeStatus =
+    availableContext?.status?.jobId === activeJobId
+      ? availableContext.status
+      : null;
 
   return (
     <AppShell>
@@ -139,54 +307,72 @@ function App() {
       )}
 
       {route.screen === "input" && <InputDashboard onSubmit={handleSubmit} />}
-      {route.screen === "waiting" && (
+      {route.screen !== "input" &&
+        authorization &&
+        authorization !== "available" && (
+          <UnavailableJob authorization={authorization} onReset={handleReset} />
+        )}
+      {route.screen === "waiting" && availableContext && (
         <WaitingRoom
           jobId={route.jobId}
-          token={wsToken}
+          token={availableContext.token}
+          generation={availableContext.generation}
+          onStatus={handleStatus}
+          onStreamError={handleStreamError}
           onComplete={handleComplete}
           onCancel={handleCancel}
-          onRetry={retrying ? handleCancel : handleRetry}
+          onRetry={handleRetry}
+          retrying={availableContext.retrying}
         />
       )}
       {route.screen === "results" &&
-        jobResult &&
-        jobResult.status !== "failed" && (
+        availableContext &&
+        routeStatus?.status === "completed" && (
           <ResultsView
-            result={jobResult}
+            result={routeStatus}
             onNewCase={handleReset}
             onRetry={handleRetry}
-            retrying={retrying}
+            retrying={availableContext.retrying}
           />
         )}
-      {route.screen === "results" && jobResult?.status === "failed" && (
+      {route.screen === "results" &&
+        availableContext &&
+        routeStatus?.status === "failed" && (
+          <div className="max-w-md mx-auto text-center py-16 space-y-4">
+            <p className="text-slate-700 dark:text-slate-300 text-sm">
+              {routeStatus.error ||
+                "An error occurred while processing this case."}
+            </p>
+            <button
+              onClick={handleReset}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors"
+            >
+              New Case
+            </button>
+          </div>
+        )}
+      {route.screen === "results" &&
+        availableContext &&
+        routeStatus?.status !== "completed" &&
+        routeStatus?.status !== "failed" &&
+        !availableContext.streamError && (
+          <div className="flex flex-col items-center justify-center py-24 space-y-4">
+            <Spinner size="lg" />
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Loading results...
+            </p>
+          </div>
+        )}
+      {route.screen === "results" && availableContext?.streamError && (
         <div className="max-w-md mx-auto text-center py-16 space-y-4">
           <p className="text-slate-700 dark:text-slate-300 text-sm">
-            {jobResult.error || "An error occurred while processing this case."}
-          </p>
-          <button
-            onClick={handleReset}
-            className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors"
-          >
-            New Case
-          </button>
-        </div>
-      )}
-      {route.screen === "results" && !jobResult && !deepLinkError && (
-        <div className="flex flex-col items-center justify-center py-24 space-y-4">
-          <Spinner size="lg" />
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Loading results...
-          </p>
-        </div>
-      )}
-      {route.screen === "results" && !jobResult && deepLinkError && (
-        <div className="max-w-md mx-auto text-center py-16 space-y-4">
-          <p className="text-slate-700 dark:text-slate-300 text-sm">
-            {deepLinkError}
+            {availableContext.streamError}
           </p>
           <div className="flex justify-center gap-3">
             <button
-              onClick={fetchDeepLink}
+              onClick={() =>
+                dispatch({ type: "streamStarted", jobId: route.jobId })
+              }
               className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors"
             >
               Retry

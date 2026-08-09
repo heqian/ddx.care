@@ -28,11 +28,9 @@ describe("parsePath", () => {
     });
   });
 
-  test("parses results route with jobId and token", () => {
+  test("rejects legacy token-bearing results routes", () => {
     expect(parsePath("/results/xyz-456/abc-token")).toEqual({
-      screen: "results",
-      jobId: "xyz-456",
-      token: "abc-token",
+      screen: "input",
     });
   });
 
@@ -70,10 +68,10 @@ describe("routeToPath", () => {
     );
   });
 
-  test("converts results route with token to results path", () => {
-    expect(
-      routeToPath({ screen: "results", jobId: "xyz-456", token: "abc" }),
-    ).toBe("/results/xyz-456/abc");
+  test("encodes job IDs without adding capability data", () => {
+    expect(routeToPath({ screen: "results", jobId: "job/id" })).toBe(
+      "/results/job%2Fid",
+    );
   });
 });
 
@@ -93,12 +91,8 @@ describe("parsePath ↔ routeToPath round-trip", () => {
     expect(parsePath(routeToPath(route))).toEqual(route);
   });
 
-  test("round-trips for results route with token", () => {
-    const route = {
-      screen: "results" as const,
-      jobId: "test-job-id",
-      token: "test-token",
-    };
+  test("round-trips an encoded results job ID", () => {
+    const route = { screen: "results" as const, jobId: "test/job id" };
     expect(parsePath(routeToPath(route))).toEqual(route);
   });
 });

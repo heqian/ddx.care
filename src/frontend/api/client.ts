@@ -46,11 +46,12 @@ export async function submitDiagnosis(
 export async function getJobStatus(
   jobId: string,
   token?: string,
+  signal?: AbortSignal,
 ): Promise<StatusResponse> {
   const url = token
     ? `/v1/status/${jobId}?token=${encodeURIComponent(token)}`
     : `/v1/status/${jobId}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal });
   if (!res.ok) {
     await handleResponseText(res);
   }

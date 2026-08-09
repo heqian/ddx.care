@@ -6,7 +6,8 @@ import {
   waitForResults,
   waitForWaitingRoom,
   jobIdFromUrl,
-  baseUrl,
+  authenticatedStatusUrl,
+  jobCredential,
 } from "./e2e/helpers";
 
 test.describe("Error states & edge paths", () => {
@@ -36,7 +37,7 @@ test.describe("Error states & edge paths", () => {
     ).toBeVisible();
   });
 
-  test("deep-link to a non-existent job shows the error screen", async ({
+  test("deep-link without same-session credentials shows missing context", async ({
     page,
   }) => {
     // A well-formed v4 UUID that the server has never created.
@@ -45,9 +46,10 @@ test.describe("Error states & edge paths", () => {
     await acceptConsent(page);
 
     await expect(
-      page.getByText("Could not load results for this case."),
+      page.getByText(
+        "This case is not available in the current browser session.",
+      ),
     ).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New Case" })).toBeVisible();
   });
 
@@ -114,6 +116,7 @@ test.describe("Error states & edge paths", () => {
 
     const jobId = jobIdFromUrl(page.url());
     expect(jobId).toBeTruthy();
+    const statusUrl = await authenticatedStatusUrl(page, jobId!);
 
     await page.getByRole("button", { name: "Cancel" }).click();
 
@@ -121,20 +124,28 @@ test.describe("Error states & edge paths", () => {
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible({
       timeout: 5_000,
     });
+    await expect
+      .poll(() =>
+        page.evaluate((id) => {
+          const raw = sessionStorage.getItem("ddx_job_credentials");
+          return raw ? Boolean(JSON.parse(raw).jobs?.[id]) : false;
+        }, jobId!),
+      )
+      .toBe(false);
 
     // The job is marked failed with the cancellation message. Poll because
     // the DELETE from the browser may still be in flight when we check.
     await expect
       .poll(
         async () => {
-          const res = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+          const res = await page.request.get(statusUrl);
           return (await res.json()).status;
         },
         { timeout: 5_000 },
       )
       .toBe("failed");
 
-    const finalRes = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+    const finalRes = await page.request.get(statusUrl);
     const finalData = await finalRes.json();
     expect(finalData.error).toContain("Cancelled");
   });
@@ -159,12 +170,54 @@ test.describe("Error states & edge paths", () => {
     ).toBeVisible();
 
     const failedJobId = jobIdFromUrl(page.url());
+    const failedCredential = await jobCredential(page, failedJobId!);
 
     // Retry must submit a brand-new job (new jobId in the waiting URL).
     await page.getByRole("button", { name: "Retry Diagnosis" }).click();
     await expect
       .poll(() => jobIdFromUrl(page.url()), { timeout: 10_000 })
       .not.toBe(failedJobId);
+    const retriedJobId = jobIdFromUrl(page.url());
+    const retriedCredential = await jobCredential(page, retriedJobId!);
+    expect(retriedCredential.token).not.toBe(failedCredential.token);
+    expect(page.url()).not.toContain(retriedCredential.token);
+  });
+
+  test("retry is disabled and an obsolete response cannot navigate", async ({
+    page,
+  }) => {
+    await fillValidForm(page, {
+      medicalHistory: "E2E_MOCK_FAIL Hypertension history.",
+    });
+    await submitCase(page);
+    await expect(
+      page.getByRole("heading", { name: "Diagnosis Failed" }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    await page.route("**/v1/diagnose", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          jobId: "00000000-0000-4000-8000-000000000123",
+          status: "pending",
+          token: "obsolete-retry-token",
+        }),
+      });
+    });
+
+    const retry = page.getByRole("button", { name: "Retry Diagnosis" });
+    await retry.click();
+    await expect(
+      page.getByRole("button", { name: "Retrying..." }),
+    ).toBeDisabled();
+    await page.goBack();
+    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
+    await page.waitForTimeout(700);
+    expect(new URL(page.url()).pathname).toBe("/");
+    expect(page.url()).not.toContain("obsolete-retry-token");
   });
 
   test("report generation failure shows safety guidance without report content", async ({
@@ -202,7 +255,7 @@ test.describe("Error states & edge paths", () => {
 
     const jobId = jobIdFromUrl(page.url());
     const statusResponse = await page.request.get(
-      `${baseUrl}/v1/status/${jobId}`,
+      await authenticatedStatusUrl(page, jobId!),
     );
     const statusBody = await statusResponse.json();
     expect(statusBody.status).toBe("completed");
@@ -218,6 +271,7 @@ test.describe("Error states & edge paths", () => {
 
     const jobId = jobIdFromUrl(page.url());
     expect(jobId).toBeTruthy();
+    const statusUrl = await authenticatedStatusUrl(page, jobId!);
 
     // Cancel via the UI — returns to the input screen and marks the job
     // failed ("Cancelled by user"), unlike a report-generation failure, which
@@ -231,16 +285,20 @@ test.describe("Error states & edge paths", () => {
     await expect
       .poll(
         async () => {
-          const res = await page.request.get(`${baseUrl}/v1/status/${jobId}`);
+          const res = await page.request.get(statusUrl);
           return (await res.json()).status;
         },
         { timeout: 5_000 },
       )
       .toBe("failed");
 
-    // Deep-link to the cancelled job's results URL.
+    // Cancellation removes the capability, so the old route cannot recover it.
     await page.goto(`/results/${jobId}`);
-    await expect(page.getByText("Cancelled by user")).toBeVisible({
+    await expect(
+      page.getByText(
+        "This case is not available in the current browser session.",
+      ),
+    ).toBeVisible({
       timeout: 10_000,
     });
     await expect(page.getByRole("button", { name: "New Case" })).toBeVisible();

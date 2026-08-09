@@ -1,149 +1,188 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getJobStatus } from "../api/client";
 import type { StatusResponse, WsMessage } from "../api/types";
 import { reportOutcomeSchema } from "../../shared/report-outcome";
 
-export function useJobStream(jobId: string | null, token?: string) {
+type StatusHandler = (status: StatusResponse, generation: number) => void;
+type ErrorHandler = (error: Error | null, generation: number) => void;
+
+function isTerminal(status: StatusResponse | null): boolean {
+  return status?.status === "completed" || status?.status === "failed";
+}
+
+export function useJobStream(
+  jobId: string | null,
+  token?: string,
+  generation = 0,
+  onStatus?: StatusHandler,
+  onError?: ErrorHandler,
+) {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const statusRef = useRef<StatusResponse | null>(null);
+  const onStatusRef = useRef(onStatus);
+  const onErrorRef = useRef(onError);
+  onStatusRef.current = onStatus;
+  onErrorRef.current = onError;
 
   useEffect(() => {
+    statusRef.current = null;
+    setStatus(null);
+    setError(null);
     if (!jobId) return;
 
     let cancelled = false;
     let ws: WebSocket | null = null;
-    let fallbackInterval: number | null = null;
+    let retryTimer: number | null = null;
+    let pollTimer: number | null = null;
     let retryCount = 0;
+    let polling = false;
+    const controllers = new Set<AbortController>();
 
-    const connectWebSocket = () => {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
-      const wsUrl = `${protocol}//${window.location.host}/ws?jobId=${jobId}${tokenParam}`;
+    const publishStatus = (next: StatusResponse) => {
+      if (cancelled || next.jobId !== jobId) return;
+      if (isTerminal(statusRef.current) && !isTerminal(next)) return;
+      statusRef.current = next;
+      setStatus(next);
+      onStatusRef.current?.(next, generation);
+      setError(null);
+      onErrorRef.current?.(null, generation);
+    };
 
-      ws = new WebSocket(wsUrl);
+    const publishError = (value: unknown) => {
+      if (cancelled) return;
+      const next = value instanceof Error ? value : new Error("Polling failed");
+      setError(next);
+      onErrorRef.current?.(next, generation);
+    };
 
-      ws.onmessage = (event) => {
+    const fetchStatus = async () => {
+      const controller = new AbortController();
+      controllers.add(controller);
+      try {
+        return await getJobStatus(jobId, token, controller.signal);
+      } finally {
+        controllers.delete(controller);
+      }
+    };
+
+    const poll = async () => {
+      if (cancelled || !polling) return;
+      try {
+        const next = await fetchStatus();
         if (cancelled) return;
-
-        try {
-          const data = JSON.parse(event.data) as WsMessage;
-
-          setStatus((prev) => {
-            const current = prev || { jobId, status: "pending", progress: [] };
-
-            if (data.type === "progress") {
-              // Ensure we don't duplicate events if replaying
-              const exists = current.progress?.some(
-                (p) =>
-                  p.time === data.event.time &&
-                  p.message === data.event.message,
-              );
-              if (exists) return current;
-
-              return {
-                ...current,
-                progress: [...(current.progress || []), data.event],
-              };
-            }
-
-            if (data.type === "completed") {
-              return {
-                ...current,
-                status: "completed",
-                result: reportOutcomeSchema.parse(data.result),
-              };
-            }
-
-            if (data.type === "failed") {
-              return {
-                ...current,
-                status: "failed",
-                error: data.error,
-              };
-            }
-
-            return current;
-          });
-        } catch (e) {
-          console.error("Failed to parse WS message", e);
+        publishStatus(next);
+        if (next.status === "pending") {
+          pollTimer = window.setTimeout(poll, 3000);
+        } else {
+          polling = false;
         }
-      };
-
-      ws.onerror = () => {
-        // Fallback to polling if WS fails
-        if (cancelled) return;
-        console.warn("WebSocket error occurred.");
-        // Let onclose handle the fallback or reconnection
-      };
-
-      ws.onclose = (event) => {
-        if (cancelled) return;
-        if (event.code !== 1000) {
-          if (retryCount < 5) {
-            const delay = Math.pow(2, retryCount) * 1000;
-            retryCount++;
-            console.log(
-              `WebSocket closed. Reconnecting in ${delay}ms (attempt ${retryCount}/5)...`,
-            );
-            setTimeout(async () => {
-              if (cancelled) return;
-              try {
-                const statusResult = await getJobStatus(jobId!, token);
-                if (
-                  statusResult.status === "completed" ||
-                  statusResult.status === "failed"
-                ) {
-                  setStatus(statusResult);
-                  return;
-                }
-              } catch {
-                // Status check failed, proceed with reconnect anyway
-              }
-              if (!cancelled) connectWebSocket();
-            }, delay);
-          } else {
-            console.warn(
-              "WebSocket max retries reached. Falling back to HTTP polling.",
-            );
-            startPolling();
-          }
+      } catch (value) {
+        if (
+          cancelled ||
+          (value instanceof DOMException && value.name === "AbortError")
+        ) {
+          return;
         }
-      };
+        publishError(value);
+        pollTimer = window.setTimeout(poll, 3000);
+      }
     };
 
     const startPolling = () => {
-      if (fallbackInterval) return; // already polling
+      if (polling || cancelled) return;
+      polling = true;
+      void poll();
+    };
 
-      const poll = async () => {
+    const connectWebSocket = () => {
+      if (cancelled) return;
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
+      const wsUrl = `${protocol}//${window.location.host}/ws?jobId=${encodeURIComponent(jobId)}${tokenParam}`;
+
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = (event) => {
+        if (cancelled) return;
         try {
-          const result = await getJobStatus(jobId, token);
-          if (cancelled) return;
-          setStatus(result);
-          if (result.status !== "pending" && fallbackInterval) {
-            window.clearInterval(fallbackInterval);
+          const data = JSON.parse(event.data) as WsMessage;
+          if (data.jobId !== jobId) return;
+          const current = statusRef.current ?? {
+            jobId,
+            status: "pending" as const,
+            progress: [],
+          };
+          if (isTerminal(current) && data.type === "progress") return;
+
+          let next = current;
+          if (data.type === "progress") {
+            const exists = current.progress?.some(
+              (item) =>
+                item.time === data.event.time &&
+                item.message === data.event.message,
+            );
+            if (!exists) {
+              next = {
+                ...current,
+                progress: [...(current.progress ?? []), data.event],
+              };
+            }
+          } else if (data.type === "completed") {
+            next = {
+              ...current,
+              status: "completed",
+              result: reportOutcomeSchema.parse(data.result),
+            };
+          } else if (data.type === "failed") {
+            next = { ...current, status: "failed", error: data.error };
           }
-        } catch (e) {
-          if (cancelled) return;
-          setError(e instanceof Error ? e : new Error("Polling failed"));
+          if (next !== current) publishStatus(next);
+        } catch (value) {
+          console.error("Failed to parse WS message", value);
         }
       };
-
-      poll();
-      fallbackInterval = window.setInterval(poll, 3000);
+      ws.onerror = () => {
+        if (!cancelled) console.warn("WebSocket error occurred.");
+      };
+      ws.onclose = (event) => {
+        if (cancelled || event.code === 1000) return;
+        if (retryCount < 5) {
+          const delay = 2 ** retryCount * 1000;
+          retryCount += 1;
+          retryTimer = window.setTimeout(async () => {
+            if (cancelled) return;
+            try {
+              const next = await fetchStatus();
+              if (cancelled) return;
+              publishStatus(next);
+              if (isTerminal(next)) return;
+            } catch (value) {
+              if (
+                cancelled ||
+                (value instanceof DOMException && value.name === "AbortError")
+              ) {
+                return;
+              }
+            }
+            connectWebSocket();
+          }, delay);
+        } else {
+          startPolling();
+        }
+      };
     };
 
     connectWebSocket();
 
     return () => {
       cancelled = true;
-      if (ws) {
-        ws.close();
-      }
-      if (fallbackInterval) {
-        window.clearInterval(fallbackInterval);
-      }
+      ws?.close();
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
+      if (pollTimer !== null) window.clearTimeout(pollTimer);
+      for (const controller of controllers) controller.abort();
+      controllers.clear();
     };
-  }, [jobId, token]);
+  }, [jobId, token, generation]);
 
   return { status, error };
 }
