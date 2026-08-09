@@ -25,6 +25,7 @@ Default to using Bun instead of Node.js. You should NEVER use Python or any Pyth
 - `bun run test:e2e` — Run Playwright E2E tests (`bunx playwright test`)
 - `bun run test:all` — Run unit + frontend + E2E tests
 - `bun run test:integration` — Run integration tests against live APIs (`RUN_INTEGRATION=1`)
+- `bun run test:contract` — Run API contract tests against live external APIs (`RUN_CONTRACT=1`); verifies response field shapes haven't drifted from what the tools expect. Skipped by default. Runs in CI (`ci.yml`) on every PR and push.
 
 ## Bun APIs
 
@@ -285,6 +286,7 @@ Backend test files in `tests/`:
 - `api.test.ts` — API route handler tests
 - `tools.test.ts` — Medical tool execution tests
 - `api-integration.test.ts` — API integration tests (live API with `RUN_INTEGRATION=1`)
+- `api-contract.test.ts` — API contract tests (live API with `RUN_CONTRACT=1`); fetches one real record per external API and asserts the exact fields each tool reads. Catches API schema drift. Runs in CI on PRs and nightly.
 - `workflow.test.ts` — Diagnostic workflow, `limitConcurrency`, `withRetry`, `splitToList` tests
 - `progress-store.test.ts` — `JobStore` CRUD, pub/sub, cleanup, scrub-before-delete tests
 - `rate-limiter.test.ts` — Rate limiting, concurrent workflow cap, prune tests

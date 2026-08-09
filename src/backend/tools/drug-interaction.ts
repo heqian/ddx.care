@@ -192,6 +192,30 @@ function sourceErrorCode(
   return `${source}_unavailable`;
 }
 
+// RxNav term types (tty), in descending order of preference for FDA label
+// lookup. SCD (Semantic Clinical Drug) and SBD (Semantic Branded Drug) are
+// ingredient/strength-level rxcuis that OpenFDA indexes. BPCK/GPCK are
+// multi-drug packs and should be avoided — their rxcuis rarely appear in
+// label records and the pack name is a multi-ingredient description.
+const PREFERRED_TTY = ["SCD", "SBD", "GPCK", "BPCK"];
+
+// Heuristic: RxNav names multi-ingredient products with " / " (e.g.
+// "metformin 1000 MG / saxagliptin 5 MG") or " AND " (e.g.
+// "LISINOPRIL AND HYDROCHLOROTHIAZIDE"). Prefer single-ingredient entries so
+// that "metformin" resolves to plain metformin, not a combo drug.
+function isComboName(name: string): boolean {
+  return name.includes(" / ") || /\bAND\b/i.test(name);
+}
+
+function pickBestConcept(
+  group: RxNavConceptGroup | undefined,
+): RxNavConceptProperty | undefined {
+  const props = group?.conceptProperties?.filter((cp) => cp.rxcui) ?? [];
+  if (props.length === 0) return undefined;
+  // Prefer the first non-combo entry; fall back to the first entry.
+  return props.find((cp) => !isComboName(cp.name)) ?? props[0];
+}
+
 async function lookupDrugIdentity(
   drugName: string,
 ): Promise<DrugIdentityOutcome> {
@@ -200,17 +224,23 @@ async function lookupDrugIdentity(
     const result = await baseFetchJSON(url, { errorPrefix: "RxNav API" });
     const drugGroup: RxNavDrugGroup | undefined = result?.drugGroup;
     if (drugGroup?.conceptGroup) {
+      // Index the best concept property per tty so we can pick the most
+      // ingredient-level rxcui rather than the first pack rxcui returned.
+      const byTty = new Map<string, RxNavConceptProperty>();
       for (const cg of drugGroup.conceptGroup) {
-        if (cg.conceptProperties?.length) {
-          for (const cp of cg.conceptProperties) {
-            if (cp.rxcui) {
-              return {
-                status: "resolved",
-                rxcui: cp.rxcui,
-                resolvedName: cp.name || drugName,
-              };
-            }
-          }
+        const best = pickBestConcept(cg);
+        if (best && !byTty.has(best.tty)) {
+          byTty.set(best.tty, best);
+        }
+      }
+      for (const tty of PREFERRED_TTY) {
+        const cp = byTty.get(tty);
+        if (cp) {
+          return {
+            status: "resolved",
+            rxcui: cp.rxcui,
+            resolvedName: cp.name || drugName,
+          };
         }
       }
     }
@@ -232,16 +262,36 @@ interface FdaLabelResult {
   boxed_warning?: string[];
 }
 
-async function fetchDrugLabel(rxcui: string): Promise<LabelOutcome> {
+async function fetchDrugLabel(
+  rxcui: string,
+  resolvedName: string,
+): Promise<LabelOutcome> {
   try {
-    const url = `${FDA_BASE}/drug/label.json?search=openfda.rxcui:${rxcui}&limit=1`;
+    // Primary lookup: by rxcui. OpenFDA indexes ingredient/strength-level
+    // rxcuis (SCD/SBD), so this works for most drugs resolved via the
+    // preferred-tty ordering above.
+    const url = `${FDA_BASE}/drug/label.json?search=openfda.rxcui:${encodeURIComponent(rxcui)}&limit=1`;
     const result = await baseFetchJSON(url, {
       errorPrefix: "OpenFDA API",
       ignore404: true,
     });
     const label: FdaLabelResult | undefined = result?.results?.[0];
-    return label
-      ? { status: "checked", label }
+    if (label) return { status: "checked", label };
+
+    // Fallback: search by generic_name. Some rxcuis (especially branded
+    // formulations) are not indexed under openfda.rxcui, but the ingredient
+    // name will match. Derive the ingredient name from the resolved name by
+    // taking the first token (drops strength/form/brand qualifiers).
+    const ingredient = resolvedName.split(/\s+/)[0] || resolvedName;
+    const fallbackUrl = `${FDA_BASE}/drug/label.json?search=openfda.generic_name:${encodeURIComponent(ingredient)}&limit=1`;
+    const fallbackResult = await baseFetchJSON(fallbackUrl, {
+      errorPrefix: "OpenFDA API",
+      ignore404: true,
+    });
+    const fallbackLabel: FdaLabelResult | undefined =
+      fallbackResult?.results?.[0];
+    return fallbackLabel
+      ? { status: "checked", label: fallbackLabel }
       : { status: "failed", errorCode: "label_not_found" };
   } catch (error) {
     return { status: "failed", errorCode: sourceErrorCode("openfda", error) };
@@ -319,14 +369,23 @@ export const drugLookupTool = createTool({
       let rxcui: string | undefined;
       let name: string | undefined;
       if (drugGroup?.conceptGroup) {
+        // Prefer ingredient/strength-level rxcuis (SCD, then SBD) over
+        // multi-drug packs (GPCK, BPCK), and prefer non-combo entries within
+        // each tty so that "metformin" resolves to plain metformin rather
+        // than a metformin/saxagliptin combo.
+        const byTty = new Map<string, RxNavConceptProperty>();
         for (const cg of drugGroup.conceptGroup) {
-          if (cg.conceptProperties?.length) {
-            for (const cp of cg.conceptProperties) {
-              if (cp.rxcui) {
-                rxcui ??= cp.rxcui;
-                name ??= cp.name;
-              }
-            }
+          const best = pickBestConcept(cg);
+          if (best && !byTty.has(best.tty)) {
+            byTty.set(best.tty, best);
+          }
+        }
+        for (const tty of PREFERRED_TTY) {
+          const cp = byTty.get(tty);
+          if (cp) {
+            rxcui = cp.rxcui;
+            name = cp.name;
+            break;
           }
         }
       }
@@ -383,10 +442,11 @@ export const drugInteractionTool = createTool({
       const labels = await Promise.all(
         identities.map(async (identity) => {
           if (identity.status !== "resolved") return null;
-          const cached = labelCache.get(identity.rxcui);
+          const cacheKey = `${identity.rxcui}:${identity.resolvedName}`;
+          const cached = labelCache.get(cacheKey);
           if (cached) return cached;
-          const outcome = fetchDrugLabel(identity.rxcui);
-          labelCache.set(identity.rxcui, outcome);
+          const outcome = fetchDrugLabel(identity.rxcui, identity.resolvedName);
+          labelCache.set(cacheKey, outcome);
           return outcome;
         }),
       );

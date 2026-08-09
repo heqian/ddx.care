@@ -2399,9 +2399,9 @@ describe("summarizeToolResult", () => {
     expect(result).toBe("5 trials found");
   });
 
-  test("summarizes medlineplus-search with topics", () => {
+  test("summarizes medlineplus-search with results", () => {
     const result = summarizeToolResult("medlineplus-search", {
-      topics: [{}, {}],
+      results: [{}, {}],
     });
     expect(result).toBe("2 topics");
   });

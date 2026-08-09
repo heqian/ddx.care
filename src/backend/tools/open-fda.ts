@@ -52,10 +52,23 @@ interface FdaRecallRecord {
   recall_initiation_date?: string;
 }
 
+interface FdaSubstanceName {
+  name?: string;
+  preferred?: boolean;
+}
+
+interface FdaSubstanceCode {
+  code?: string;
+  code_system?: string;
+  type?: string;
+}
+
 interface FdaSubstanceRecord {
-  substance_id?: string;
-  substance_name?: string;
-  approval_id?: string;
+  uuid?: string;
+  unii?: string;
+  names?: FdaSubstanceName[];
+  codes?: FdaSubstanceCode[];
+  substance_class?: string;
 }
 
 interface FdaDrugShortageRecord {
@@ -93,6 +106,12 @@ interface FdaFoodEventRecord {
   }>;
 }
 
+interface FdaDeviceRecord {
+  generic_name?: string;
+  brand_name?: string;
+  device_report_product_code?: string;
+}
+
 interface FdaDeviceEventRecord {
   report_number?: string;
   event_type?: string;
@@ -102,15 +121,16 @@ interface FdaDeviceEventRecord {
   type_of_report?: string[];
   product_problem_flag?: string;
   source_type?: string[];
-  patient?: {
-    patient_problems?: string[];
-    sequence_number_treatment?: string[];
-    sequence_number_outcome?: string[];
-  };
+  device?: FdaDeviceRecord[];
   openfda?: {
     device_name?: string[];
     medical_specialty_description?: string[];
     regulation_number?: string[];
+  };
+  patient?: {
+    patient_problems?: string[];
+    sequence_number_treatment?: string[];
+    sequence_number_outcome?: string[];
   };
 }
 
@@ -333,7 +353,13 @@ export const drugLabelingTool = createTool({
     }>
   > => {
     try {
-      const url = `${FDA_BASE}/drug/label.json?search=openfda.generic_name:${encodeURIComponent(drugName)}+openfda.brand_name:${encodeURIComponent(drugName)}&limit=${limit}`;
+      // Search by generic_name (token match). OpenFDA's relevance ranking
+      // sometimes returns multi-ingredient combo drugs (e.g.
+      // "SITAGLIPTIN AND METFORMIN") before the plain drug. To surface the
+      // most relevant label, fetch a small surplus and prefer single-
+      // ingredient records whose generic_name is a close match to the query.
+      const fetchLimit = Math.min(limit + 4, 5);
+      const url = `${FDA_BASE}/drug/label.json?search=openfda.generic_name:${encodeURIComponent(drugName)}+openfda.brand_name:${encodeURIComponent(drugName)}&limit=${fetchLimit}`;
       const result = await fetchJSON(url);
 
       if (result.error) {
@@ -344,7 +370,8 @@ export const drugLabelingTool = createTool({
         };
       }
 
-      const results = (result.results ?? []).map((r: FdaDrugLabelRecord) => ({
+      const queryLower = drugName.toLowerCase();
+      const toResult = (r: FdaDrugLabelRecord) => ({
         id: r.id ?? undefined,
         brandName: r.openfda?.brand_name?.join(", ") ?? undefined,
         genericName: r.openfda?.generic_name?.join(", ") ?? undefined,
@@ -360,7 +387,29 @@ export const drugLabelingTool = createTool({
           undefined,
         drugInteractions: r.drug_interactions?.join(" ") ?? undefined,
         boxedWarning: r.boxed_warning?.join(" ") ?? undefined,
-      }));
+      });
+
+      const allResults: Array<{
+        id?: string;
+        brandName?: string;
+        genericName?: string;
+        indications?: string;
+        contraindications?: string;
+        warnings?: string;
+        adverseReactions?: string;
+        dosage?: string;
+        mechanismOfAction?: string;
+        pregnancyCategory?: string;
+        drugInteractions?: string;
+        boxedWarning?: string;
+      }> = (result.results ?? []).map(toResult);
+      // Prefer single-ingredient labels (no " AND " in generic_name) that
+      // contain the query token, then fall back to the rest in API order.
+      const isPlain = (g: string | undefined) =>
+        !!g && g.toLowerCase().includes(queryLower) && !/\bAND\b/.test(g);
+      const preferred = allResults.filter((r) => isPlain(r.genericName));
+      const rest = allResults.filter((r) => !isPlain(r.genericName));
+      const results = [...preferred, ...rest].slice(0, limit);
 
       return { ok: true as const, data: { results } };
     } catch (e) {
@@ -484,9 +533,11 @@ export const substanceToxicologyTool = createTool({
       data: z.object({
         results: z.array(
           z.object({
-            substanceId: z.string().optional(),
+            unii: z.string().optional(),
             substanceName: z.string().optional(),
-            approvalId: z.string().optional(),
+            substanceClass: z.string().optional(),
+            code: z.string().optional(),
+            codeSystem: z.string().optional(),
           }),
         ),
       }),
@@ -503,9 +554,11 @@ export const substanceToxicologyTool = createTool({
   }): Promise<
     ToolResult<{
       results: Array<{
-        substanceId?: string;
+        unii?: string;
         substanceName?: string;
-        approvalId?: string;
+        substanceClass?: string;
+        code?: string;
+        codeSystem?: string;
       }>;
     }>
   > => {
@@ -521,11 +574,25 @@ export const substanceToxicologyTool = createTool({
         };
       }
 
-      const results = (result.results ?? []).map((r: FdaSubstanceRecord) => ({
-        substanceId: r.substance_id ?? undefined,
-        substanceName: r.substance_name ?? undefined,
-        approvalId: r.approval_id ?? undefined,
-      }));
+      const results = (result.results ?? []).map((r: FdaSubstanceRecord) => {
+        // Prefer the "preferred" name, then the first display name, then the
+        // first name of any kind. The OpenFDA Substance Data System returns
+        // names in a `names` array where each entry has a `name` and optional
+        // `preferred`/`display_name` flags.
+        const preferredName =
+          r.names?.find((n) => n.preferred)?.name ??
+          r.names?.[0]?.name ??
+          undefined;
+        const primaryCode = r.codes?.find((c) => c.type === "PRIMARY") ??
+          r.codes?.[0] ?? { code: undefined, code_system: undefined };
+        return {
+          unii: r.unii ?? undefined,
+          substanceName: preferredName,
+          substanceClass: r.substance_class ?? undefined,
+          code: primaryCode.code ?? undefined,
+          codeSystem: primaryCode.code_system ?? undefined,
+        };
+      });
 
       return { ok: true as const, data: { results } };
     } catch (e) {
@@ -802,7 +869,13 @@ export const deviceAdverseEventsTool = createTool({
     }>
   > => {
     try {
-      const url = `${FDA_BASE}/device/event.json?search=openfda.device_name:${encodeURIComponent(deviceName)}&limit=${limit}`;
+      // OpenFDA device adverse event records do not populate the `openfda`
+      // object for device names (it is typically undefined or empty). The
+      // device name lives in the top-level `device` array under
+      // `generic_name` / `brand_name`. Search the `device.generic_name` field,
+      // which is a token match (e.g. "pacemaker" matches "ELECTRODE,
+      // PACEMAKER, PERMANENT").
+      const url = `${FDA_BASE}/device/event.json?search=device.generic_name:${encodeURIComponent(deviceName)}&limit=${limit}`;
       const result = await fetchJSON(url);
 
       if (result.error) {
@@ -813,17 +886,20 @@ export const deviceAdverseEventsTool = createTool({
         };
       }
 
-      const results = (result.results ?? []).map((r: FdaDeviceEventRecord) => ({
-        reportNumber: r.report_number ?? undefined,
-        eventType: r.event_type ?? undefined,
-        deviceName: r.openfda?.device_name?.join(", ") ?? undefined,
-        medicalSpecialty:
-          r.openfda?.medical_specialty_description?.join(", ") ?? undefined,
-        patientProblems: r.patient?.patient_problems ?? [],
-        eventLocation: r.event_location ?? undefined,
-        dateOfEvent: r.date_of_event ?? undefined,
-        dateReceived: r.date_received ?? undefined,
-      }));
+      const results = (result.results ?? []).map((r: FdaDeviceEventRecord) => {
+        const device = r.device?.[0];
+        return {
+          reportNumber: r.report_number ?? undefined,
+          eventType: r.event_type ?? undefined,
+          deviceName: device?.generic_name ?? device?.brand_name ?? undefined,
+          medicalSpecialty:
+            r.openfda?.medical_specialty_description?.join(", ") ?? undefined,
+          patientProblems: r.patient?.patient_problems ?? [],
+          eventLocation: r.event_location ?? undefined,
+          dateOfEvent: r.date_of_event ?? undefined,
+          dateReceived: r.date_received ?? undefined,
+        };
+      });
 
       return { ok: true as const, data: { results } };
     } catch (e) {

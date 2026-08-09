@@ -76,3 +76,63 @@ export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
     clearTimeout(timeoutId);
   }
 }
+
+/**
+ * Fetch a URL and return the response body as raw text.
+ * Mirrors fetchJSON's caching, timeout, and typed-error handling, but for
+ * endpoints that respond with non-JSON bodies (e.g. XML).
+ * Only HTTP 200 responses are cached; errors and non-2xx are never cached.
+ */
+export async function fetchText(url: string, options: FetchJSONOptions = {}) {
+  const { timeoutMs = 10000, errorPrefix = "API", ...fetchOptions } = options;
+
+  const cached = getCached(url);
+  if (cached !== null) {
+    logger.info("tool_cache_hit", { url });
+    markCacheHit(url);
+    return cached as string;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      ...fetchOptions,
+      signal: fetchOptions.signal ?? controller.signal,
+    });
+
+    if (!res.ok) {
+      if (res.status === 429) {
+        throw new RateLimitError(`${errorPrefix} rate limit exceeded (429)`);
+      }
+      if (res.status >= 400 && res.status < 500) {
+        throw new PermanentAPIError(
+          `${errorPrefix} error: ${res.status} ${res.statusText}`,
+          res.status,
+        );
+      }
+      throw new Error(`${errorPrefix} error: ${res.status} ${res.statusText}`);
+    }
+
+    const text = await res.text();
+    setCached(url, text);
+    return text;
+  } catch (error: unknown) {
+    if (
+      error instanceof APITimeoutError ||
+      error instanceof RateLimitError ||
+      error instanceof PermanentAPIError
+    ) {
+      throw error;
+    }
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new APITimeoutError(
+        `Request timeout after ${timeoutMs}ms for ${url}`,
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}

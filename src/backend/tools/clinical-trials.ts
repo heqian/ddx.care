@@ -128,7 +128,7 @@ export const clinicalTrialsSearchTool = createTool({
   > => {
     const statusFilter =
       status === "ALL" ? "" : `&filter.overallStatus=${status}`;
-    const url = `${CT_BASE}/studies?query.term=${encodeURIComponent(query)}${statusFilter}&pageSize=${pageSize}&fields=NCTId,BriefTitle,OverallStatus,Phase,StudyType,Condition,InterventionName,EligibilityCriteria,LeadSponsorName,StartDate,CompletionDate,EnrollmentCount,BriefSummary`;
+    const url = `${CT_BASE}/studies?query.term=${encodeURIComponent(query)}${statusFilter}&pageSize=${pageSize}&countTotal=true&fields=NCTId,BriefTitle,OverallStatus,Phase,StudyType,Condition,InterventionName,EligibilityCriteria,LeadSponsorName,StartDate,CompletionDate,EnrollmentCount,BriefSummary`;
 
     try {
       const result = await fetchJSON(url);

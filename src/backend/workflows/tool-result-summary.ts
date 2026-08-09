@@ -169,10 +169,10 @@ export function summarizeToolResult(
       break;
     }
     case "medlineplus-search": {
-      const topics = obj.topics;
-      if (Array.isArray(topics)) {
+      const results = obj.results;
+      if (Array.isArray(results)) {
         return truncateSummary(
-          `${topics.length} topic${topics.length === 1 ? "" : "s"}`,
+          `${results.length} topic${results.length === 1 ? "" : "s"}`,
         );
       }
       break;

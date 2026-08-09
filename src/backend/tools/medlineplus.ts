@@ -5,15 +5,60 @@ import {
   RateLimitError,
   PermanentAPIError,
 } from "../utils/errors";
-import { fetchJSON } from "./utils/fetch";
+import { fetchText } from "./utils/fetch";
 
-const MEDLINE_BASE = "https://connect.medlineplus.gov/service";
+const MEDLINE_BASE = "https://wsearch.nlm.nih.gov/ws/query";
 
-interface MedlinePlusEntry {
-  title?: string | { _value?: string };
-  summary?: string | { _value?: string };
-  link?: Array<{ href?: string }>;
-  id?: string;
+const MAX_RESULTS = 5;
+
+interface MedlinePlusResult {
+  title: string;
+  summary: string;
+  url: string;
+}
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function stripSpans(s: string): string {
+  return s.replace(/<span[^>]*>/g, "").replace(/<\/span>/g, "");
+}
+
+function stripTags(s: string): string {
+  return s.replace(/<[^>]+>/g, "");
+}
+
+function extractContent(body: string, name: string): string | undefined {
+  const match = body.match(
+    new RegExp(`<content name="${name}">([\\s\\S]*?)<\\/content>`),
+  );
+  if (!match?.[1]) return undefined;
+  return stripTags(stripSpans(decodeEntities(match[1]))).trim();
+}
+
+function parseMedlinePlusXml(xml: string): MedlinePlusResult[] {
+  const documents = [
+    ...xml.matchAll(/<document[^>]*url="([^"]+)"[^>]*>([\s\S]*?)<\/document>/g),
+  ];
+
+  const results: MedlinePlusResult[] = [];
+  for (const [, url, body] of documents) {
+    const title = extractContent(body, "title") ?? "";
+    const summary =
+      extractContent(body, "FullSummary") ??
+      extractContent(body, "snippet") ??
+      "";
+    results.push({ title, summary, url });
+    if (results.length >= MAX_RESULTS) break;
+  }
+  return results;
 }
 
 export const medlinePlusSearchTool = createTool({
@@ -47,29 +92,11 @@ export const medlinePlusSearchTool = createTool({
     }),
   ]),
   execute: async ({ condition }) => {
-    const url = `${MEDLINE_BASE}?mainSearchCriteria.v.cs=2.16.840.1.113883.6.103&mainSearchCriteria.v.dn=${encodeURIComponent(condition)}&knowledgeResponseType=application/json`;
+    const url = `${MEDLINE_BASE}?db=healthTopics&term=${encodeURIComponent(condition)}&retmax=${MAX_RESULTS}`;
 
     try {
-      const data = await fetchJSON(url);
-
-      const entries = data?.feed?.entry ?? [];
-      const entryArray = Array.isArray(entries)
-        ? entries
-        : entries
-          ? [entries]
-          : [];
-
-      const results = entryArray.map((entry: MedlinePlusEntry) => ({
-        title:
-          (typeof entry.title === "object"
-            ? entry.title?._value
-            : entry.title) ?? "",
-        summary:
-          (typeof entry.summary === "object"
-            ? entry.summary?._value
-            : entry.summary) ?? "",
-        url: entry.link?.[0]?.href ?? entry.id ?? undefined,
-      }));
+      const xml = await fetchText(url);
+      const results = parseMedlinePlusXml(xml);
 
       if (results.length > 0) {
         return { ok: true as const, data: { results } };

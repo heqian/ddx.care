@@ -9,12 +9,18 @@ const describeIntegration = process.env.RUN_INTEGRATION
 const RXNAV = "https://rxnav.nlm.nih.gov/REST";
 const FDA = "https://api.fda.gov";
 const CT = "https://clinicaltrials.gov/api/v2";
-const MEDLINE = "https://connect.medlineplus.gov/service";
+const MEDLINE = "https://wsearch.nlm.nih.gov/ws/query";
 
 async function fetchJSON(url: string) {
   const res = await fetch(url);
   expect(res.ok).toBe(true);
   return res.json();
+}
+
+async function fetchText(url: string) {
+  const res = await fetch(url);
+  expect(res.ok).toBe(true);
+  return res.text();
 }
 
 describeIntegration("RxNav Drug API", () => {
@@ -67,12 +73,27 @@ describeIntegration("OpenFDA API", () => {
     expect(data.results[0].recall_number).toBeTruthy();
   });
 
-  test("substance toxicology returns data", async () => {
+  test("substance toxicology returns data with real fields", async () => {
     const data = await fetchJSON(
       `${FDA}/other/substance.json?search=substance_name:ethylene+glycol&limit=1`,
     );
     expect(data.results).toBeInstanceOf(Array);
     expect(data.results.length).toBeGreaterThan(0);
+    const r = data.results[0];
+    expect(r.unii).toBeTruthy();
+    expect(r.names).toBeInstanceOf(Array);
+    expect(r.names.length).toBeGreaterThan(0);
+    expect(r.names[0].name).toBeTruthy();
+  });
+
+  test("device adverse events searchable by device.generic_name", async () => {
+    const data = await fetchJSON(
+      `${FDA}/device/event.json?search=device.generic_name:pacemaker&limit=1`,
+    );
+    expect(data.meta.results.total).toBeGreaterThan(0);
+    expect(data.results).toBeInstanceOf(Array);
+    expect(data.results[0].device).toBeInstanceOf(Array);
+    expect(data.results[0].device[0].generic_name).toBeTruthy();
   });
 });
 
@@ -87,12 +108,25 @@ describeIntegration("ClinicalTrials.gov API v2", () => {
       data.studies[0].protocolSection.identificationModule.nctId,
     ).toBeTruthy();
   });
+
+  test("countTotal=true returns totalCount", async () => {
+    const data = await fetchJSON(
+      `${CT}/studies?query.term=diabetes&pageSize=1&countTotal=true`,
+    );
+    expect(data.totalCount).toBeDefined();
+    expect(data.totalCount).toBeGreaterThan(0);
+  });
 });
 
-describeIntegration("MedlinePlus Connect API", () => {
-  test("returns health info for a condition", async () => {
-    const url = `${MEDLINE}?mainSearchCriteria.v.cs=2.16.840.1.113883.6.103&mainSearchCriteria.v.dn=diabetes&knowledgeResponseType=application/json`;
-    const data = await fetchJSON(url);
-    expect(data.feed).toBeDefined();
+describeIntegration("MedlinePlus Web Service", () => {
+  test("returns health topics for a condition text query", async () => {
+    const xml = await fetchText(
+      `${MEDLINE}?db=healthTopics&term=diabetes&retmax=3`,
+    );
+    expect(xml).toContain("<nlmSearchResult>");
+    expect(xml).toContain("<count>");
+    const count = Number(xml.match(/<count>(\d+)<\/count>/)?.[1] ?? 0);
+    expect(count).toBeGreaterThan(0);
+    expect(xml).toContain("<document");
   });
 });

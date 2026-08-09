@@ -286,13 +286,18 @@ describe("deviceAdverseEventsTool", () => {
             event_location: "HOSPITAL",
             date_of_event: "19920220",
             date_received: "19920310",
+            device: [
+              {
+                generic_name: "ELECTRODE, PACEMAKER, PERMANENT",
+                brand_name: "CAPSUREFIX",
+                device_report_product_code: "DTB",
+              },
+            ],
             patient: {
               patient_problems: ["Burn", "Infection"],
             },
             openfda: {
-              device_name: ["Pacemaker"],
               medical_specialty_description: ["Cardiovascular"],
-              regulation_number: ["870"],
             },
           },
         ],
@@ -307,7 +312,9 @@ describe("deviceAdverseEventsTool", () => {
     expect(result.data.results).toHaveLength(1);
     expect(result.data.results[0].reportNumber).toBe("10");
     expect(result.data.results[0].eventType).toBe("Injury");
-    expect(result.data.results[0].deviceName).toBe("Pacemaker");
+    expect(result.data.results[0].deviceName).toBe(
+      "ELECTRODE, PACEMAKER, PERMANENT",
+    );
     expect(result.data.results[0].medicalSpecialty).toBe("Cardiovascular");
     expect(result.data.results[0].patientProblems).toEqual([
       "Burn",
@@ -318,7 +325,35 @@ describe("deviceAdverseEventsTool", () => {
     expect(result.data.results[0].dateReceived).toBe("19920310");
   });
 
-  test("handles report with missing openfda section", async () => {
+  test("falls back to brand_name when generic_name absent", async () => {
+    const { deviceAdverseEventsTool } = await import(
+      "../src/backend/tools/open-fda"
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        results: [
+          {
+            report_number: "11",
+            event_type: "Malfunction",
+            device: [{ brand_name: "Medtronic Pace-O-Matic" }],
+            patient: {},
+          },
+        ],
+      }),
+    }) as any;
+
+    const result = await deviceAdverseEventsTool.execute({
+      deviceName: "pacemaker",
+      limit: 5,
+    });
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results[0].deviceName).toBe("Medtronic Pace-O-Matic");
+  });
+
+  test("handles report with missing device array", async () => {
     const { deviceAdverseEventsTool } = await import(
       "../src/backend/tools/open-fda"
     );
@@ -332,7 +367,6 @@ describe("deviceAdverseEventsTool", () => {
             report_number: "11",
             event_type: "Malfunction",
             patient: {},
-            openfda: {},
           },
         ],
       }),
@@ -385,42 +419,5 @@ describe("deviceAdverseEventsTool", () => {
     });
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toEqual([]);
-  });
-
-  test("handles multiple device names in openfda", async () => {
-    const { deviceAdverseEventsTool } = await import(
-      "../src/backend/tools/open-fda"
-    );
-
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        results: [
-          {
-            report_number: "12",
-            event_type: "Death",
-            patient: {},
-            openfda: {
-              device_name: ["Ventilator", "Respirator"],
-              medical_specialty_description: [
-                "Anesthesiology",
-                "General Hospital",
-              ],
-            },
-          },
-        ],
-      }),
-    }) as any;
-
-    const result = await deviceAdverseEventsTool.execute({
-      deviceName: "ventilator",
-      limit: 5,
-    });
-    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
-    expect(result.data.results[0].deviceName).toBe("Ventilator, Respirator");
-    expect(result.data.results[0].medicalSpecialty).toBe(
-      "Anesthesiology, General Hospital",
-    );
   });
 });

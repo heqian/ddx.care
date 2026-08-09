@@ -5,6 +5,7 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
   lint:
@@ -95,3 +96,21 @@ jobs:
       - run: bun run test:e2e
         env:
           MOCK_LLM: "1"
+
+  # API contract tests — verify external API response shapes haven't drifted
+  # from what the tools expect. Hits live APIs (RxNav, OpenFDA, CT.gov,
+  # MedlinePlus, NLM, Orphadata). Runs on every PR and push so drift is
+  # caught before merge.
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: bun-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - run: bun run test:contract

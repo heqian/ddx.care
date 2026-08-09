@@ -57,6 +57,50 @@ describe("drug-interaction tool execute", () => {
     expect(result.data.rxcui).toBeUndefined();
   });
 
+  test("drugLookupTool prefers SCD over BPCK combo packs", async () => {
+    const { drugLookupTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        drugGroup: {
+          name: "aspirin",
+          conceptGroup: [
+            {
+              tty: "BPCK",
+              conceptProperties: [
+                {
+                  rxcui: "2047428",
+                  name: "Excedrin Combo Pack",
+                  tty: "BPCK",
+                },
+              ],
+            },
+            {
+              tty: "SCD",
+              conceptProperties: [
+                {
+                  rxcui: "103863",
+                  name: "aspirin 75 MG Oral Tablet",
+                  tty: "SCD",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    }) as any;
+
+    const result = await drugLookupTool.execute({ drugName: "aspirin" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.rxcui).toBe("103863");
+    expect(result.data.name).toBe("aspirin 75 MG Oral Tablet");
+  });
+
   test("drugInteractionTool returns interactions", async () => {
     const { drugInteractionTool } = await import(
       "../src/backend/tools/drug-interaction"
@@ -121,6 +165,77 @@ describe("drug-interaction tool execute", () => {
       { input: "aspirin", resolvedName: "aspirin", status: "checked" },
       { input: "warfarin", resolvedName: "warfarin", status: "checked" },
     ]);
+  });
+
+  test("drugInteractionTool falls back to generic_name when rxcui label lookup fails", async () => {
+    const { drugInteractionTool } = await import(
+      "../src/backend/tools/drug-interaction"
+    );
+
+    let labelCallCount = 0;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes("/drugs.json")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            drugGroup: {
+              conceptGroup: [
+                {
+                  tty: "SCD",
+                  conceptProperties: [
+                    {
+                      rxcui: "855290",
+                      name: "warfarin sodium 1 MG",
+                      tty: "SCD",
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+        };
+      }
+      if (url.includes("/drug/label.json")) {
+        labelCallCount++;
+        const search =
+          new URL(url, "https://api.fda.gov").searchParams.get("search") ?? "";
+        // Primary rxcui lookup returns no results (simulates OpenFDA not
+        // indexing this branded rxcui)
+        if (search.includes("openfda.rxcui")) {
+          return { ok: true, status: 200, json: async () => ({ results: [] }) };
+        }
+        // Fallback generic_name lookup returns a label
+        if (search.includes("openfda.generic_name")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              results: [
+                {
+                  drug_interactions: [
+                    "warfarin interacts with aspirin increasing bleeding risk",
+                  ],
+                  contraindications: [],
+                  warnings: [],
+                  boxed_warning: [],
+                },
+              ],
+            }),
+          };
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
+    }) as any;
+
+    const result = await drugInteractionTool.execute({
+      drugNames: ["warfarin", "aspirin"],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.coverage).toBe("complete");
+    expect(result.data.interactionStatus).toBe("found");
+    expect(labelCallCount).toBeGreaterThanOrEqual(2);
   });
 
   test("drugInteractionTool handles API error gracefully", async () => {
@@ -629,17 +744,8 @@ describe("medlineplus tool execute", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({
-        feed: {
-          entry: [
-            {
-              title: { _value: "Diabetes" },
-              summary: { _value: "Diabetes overview" },
-              link: [{ href: "https://medlineplus.gov/diabetes.html" }],
-            },
-          ],
-        },
-      }),
+      text: async () =>
+        `<?xml version="1.0"?><nlmSearchResult><term>diabetes</term><count>1</count><list><document rank="0" url="https://medlineplus.gov/diabetes.html"><content name="title">Diabetes</content><content name="FullSummary">Diabetes overview</content></document></list></nlmSearchResult>`,
     }) as any;
 
     const result = await medlinePlusSearchTool.execute({
@@ -650,6 +756,9 @@ describe("medlineplus tool execute", () => {
     expect(result.data.results).toHaveLength(1);
     expect(result.data.results[0].title).toBe("Diabetes");
     expect(result.data.results[0].summary).toBe("Diabetes overview");
+    expect(result.data.results[0].url).toBe(
+      "https://medlineplus.gov/diabetes.html",
+    );
   });
 
   test("medlinePlusSearchTool searches by condition name", async () => {
@@ -657,23 +766,14 @@ describe("medlineplus tool execute", () => {
       "../src/backend/tools/medlineplus"
     );
 
-    let callCount = 0;
-    globalThis.fetch = vi.fn().mockImplementation(async () => {
-      callCount++;
+    let calledUrl = "";
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {
+      calledUrl = url;
       return {
         ok: true,
         status: 200,
-        json: async () => ({
-          feed: {
-            entry: [
-              {
-                title: "Hypertension",
-                summary: "High blood pressure info",
-                link: [{ href: "https://medlineplus.gov/hypertension.html" }],
-              },
-            ],
-          },
-        }),
+        text: async () =>
+          `<?xml version="1.0"?><nlmSearchResult><term>hypertension</term><count>1</count><list><document rank="0" url="https://medlineplus.gov/hypertension.html"><content name="title">Hypertension</content><content name="FullSummary">High blood pressure info</content></document></list></nlmSearchResult>`,
       };
     }) as any;
 
@@ -683,7 +783,32 @@ describe("medlineplus tool execute", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
-    expect(callCount).toBe(1);
+    expect(calledUrl).toContain("wsearch.nlm.nih.gov/ws/query");
+    expect(calledUrl).toContain("db=healthTopics");
+    expect(calledUrl).toContain("term=hypertension");
+  });
+
+  test("medlinePlusSearchTool strips highlighting spans and HTML from summary", async () => {
+    const { medlinePlusSearchTool } = await import(
+      "../src/backend/tools/medlineplus"
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        `<?xml version="1.0"?><nlmSearchResult><list><document url="https://medlineplus.gov/asthma.html"><content name="title">&lt;span class="qt0"&gt;Asthma&lt;/span&gt;</content><content name="FullSummary">What is &lt;span class="qt0"&gt;asthma&lt;/span&gt;?&lt;p&gt;It is a lung disease.&lt;/p&gt;</content></document></list></nlmSearchResult>`,
+    }) as any;
+
+    const result = await medlinePlusSearchTool.execute({
+      condition: "asthma",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results[0].title).toBe("Asthma");
+    expect(result.data.results[0].summary).toBe(
+      "What is asthma?It is a lung disease.",
+    );
   });
 
   test("medlinePlusSearchTool returns error for unknown condition", async () => {
@@ -694,7 +819,8 @@ describe("medlineplus tool execute", () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ feed: {} }),
+      text: async () =>
+        `<?xml version="1.0"?><nlmSearchResult><term>xyz-unknown</term><count>0</count></nlmSearchResult>`,
     }) as any;
 
     const result = await medlinePlusSearchTool.execute({
@@ -721,6 +847,26 @@ describe("medlineplus tool execute", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected error result");
     expect(result.retriable).toBe(true);
+  });
+
+  test("medlinePlusSearchTool falls back to snippet when FullSummary absent", async () => {
+    const { medlinePlusSearchTool } = await import(
+      "../src/backend/tools/medlineplus"
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        `<?xml version="1.0"?><nlmSearchResult><list><document url="https://medlineplus.gov/x.html"><content name="title">Topic</content><content name="snippet">Brief snippet text</content></document></list></nlmSearchResult>`,
+    }) as any;
+
+    const result = await medlinePlusSearchTool.execute({
+      condition: "topic",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results[0].summary).toBe("Brief snippet text");
   });
 });
 
@@ -918,9 +1064,21 @@ describe("open-fda tool execute", () => {
       json: async () => ({
         results: [
           {
-            substance_id: "SUB-001",
-            substance_name: "Ethylene Glycol",
-            approval_id: "APP-001",
+            uuid: "507a6831-264f-47a1-afad-71f1d966d185",
+            unii: "3T7J3K0L5Z",
+            substance_class: "chemical",
+            names: [
+              {
+                name: "ETHYLENE GLYCOL",
+                preferred: true,
+                display_name: true,
+              },
+              { name: "1,2-ethanediol", preferred: false },
+            ],
+            codes: [
+              { code: "3T7J3K0L5Z", code_system: "FDA UNII", type: "PRIMARY" },
+              { code: "107-21-1", code_system: "CAS" },
+            ],
           },
         ],
       }),
@@ -933,6 +1091,39 @@ describe("open-fda tool execute", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
-    expect(result.data.results[0].substanceName).toBe("Ethylene Glycol");
+    expect(result.data.results[0].substanceName).toBe("ETHYLENE GLYCOL");
+    expect(result.data.results[0].unii).toBe("3T7J3K0L5Z");
+    expect(result.data.results[0].substanceClass).toBe("chemical");
+    expect(result.data.results[0].code).toBe("3T7J3K0L5Z");
+    expect(result.data.results[0].codeSystem).toBe("FDA UNII");
+  });
+
+  test("substanceToxicologyTool falls back to first name when no preferred", async () => {
+    const { substanceToxicologyTool } = await import(
+      "../src/backend/tools/open-fda"
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        results: [
+          {
+            unii: "ABC123",
+            names: [{ name: "Polyethylene glycol", preferred: false }],
+            codes: [{ code: "ABC123", code_system: "FDA UNII" }],
+          },
+        ],
+      }),
+    }) as any;
+
+    const result = await substanceToxicologyTool.execute({
+      substanceName: "polyethylene",
+      limit: 1,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
+    expect(result.data.results[0].substanceName).toBe("Polyethylene glycol");
+    expect(result.data.results[0].unii).toBe("ABC123");
   });
 });

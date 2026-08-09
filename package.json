@@ -15,7 +15,8 @@
     "test:frontend": "bun test tests/frontend.test.tsx",
     "test:e2e": "bunx playwright test",
     "test:all": "bun run test && bun run test:frontend && bun run test:e2e",
-    "test:integration": "RUN_INTEGRATION=1 bun test tests/api-integration.test.ts"
+    "test:integration": "RUN_INTEGRATION=1 bun test tests/api-integration.test.ts",
+    "test:contract": "RUN_CONTRACT=1 bun test tests/api-contract.test.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
