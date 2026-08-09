@@ -483,7 +483,7 @@ describe("useAutoLogout", () => {
 
   test("paused=true prevents timer from firing", () => {
     const onTimeout = vi.fn();
-    renderHook(() => useAutoLogout(onTimeout, true));
+    renderHook(() => useAutoLogout(onTimeout, { paused: true }));
 
     hookAct(() => {
       vi.advanceTimersByTime(15 * 60 * 1000);
@@ -494,7 +494,9 @@ describe("useAutoLogout", () => {
 
   test("paused=true prevents warning from showing", () => {
     const onTimeout = vi.fn();
-    const { result } = renderHook(() => useAutoLogout(onTimeout, true));
+    const { result } = renderHook(() =>
+      useAutoLogout(onTimeout, { paused: true }),
+    );
 
     hookAct(() => {
       vi.advanceTimersByTime(8 * 60 * 1000);
@@ -506,7 +508,7 @@ describe("useAutoLogout", () => {
   test("timer starts when paused transitions from true to false", () => {
     const onTimeout = vi.fn();
     const { rerender } = renderHook(
-      ({ paused }: { paused: boolean }) => useAutoLogout(onTimeout, paused),
+      ({ paused }: { paused: boolean }) => useAutoLogout(onTimeout, { paused }),
       { initialProps: { paused: true } },
     );
 
@@ -520,6 +522,82 @@ describe("useAutoLogout", () => {
     hookAct(() => {
       vi.advanceTimersByTime(10 * 60 * 1000);
     });
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  test("uses the extended waitingTimeoutMs on the waiting screen", () => {
+    const onTimeout = vi.fn();
+    renderHook(() =>
+      useAutoLogout(onTimeout, {
+        timeoutMs: 10 * 60 * 1000,
+        waitingTimeoutMs: 15 * 60 * 1000,
+        screen: "waiting",
+      }),
+    );
+
+    // Advance past the input timeout — should NOT fire on waiting.
+    hookAct(() => {
+      vi.advanceTimersByTime(10 * 60 * 1000);
+    });
+    expect(onTimeout).not.toHaveBeenCalled();
+
+    // Advance to 15 minutes — fires on waiting.
+    hookAct(() => {
+      vi.advanceTimersByTime(5 * 60 * 1000);
+    });
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  test("uses the extended waitingTimeoutMs on the results screen", () => {
+    const onTimeout = vi.fn();
+    renderHook(() =>
+      useAutoLogout(onTimeout, {
+        timeoutMs: 10 * 60 * 1000,
+        waitingTimeoutMs: 15 * 60 * 1000,
+        screen: "results",
+      }),
+    );
+
+    hookAct(() => {
+      vi.advanceTimersByTime(10 * 60 * 1000);
+    });
+    expect(onTimeout).not.toHaveBeenCalled();
+
+    hookAct(() => {
+      vi.advanceTimersByTime(5 * 60 * 1000);
+    });
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  test("uses the short timeoutMs on the input screen", () => {
+    const onTimeout = vi.fn();
+    renderHook(() =>
+      useAutoLogout(onTimeout, {
+        timeoutMs: 10 * 60 * 1000,
+        waitingTimeoutMs: 15 * 60 * 1000,
+        screen: "input",
+      }),
+    );
+
+    hookAct(() => {
+      vi.advanceTimersByTime(10 * 60 * 1000);
+    });
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  test("timer is NOT paused on the waiting screen (fires after extended timeout)", () => {
+    const onTimeout = vi.fn();
+    renderHook(() =>
+      useAutoLogout(onTimeout, {
+        screen: "waiting",
+        waitingTimeoutMs: 15 * 60 * 1000,
+      }),
+    );
+
+    hookAct(() => {
+      vi.advanceTimersByTime(15 * 60 * 1000);
+    });
+
     expect(onTimeout).toHaveBeenCalledTimes(1);
   });
 });
@@ -1710,7 +1788,10 @@ describe("Accessibility — FileDropZone", () => {
 // ---------------------------------------------------------------------------
 // Accessibility — InputDashboard (age validation)
 // ---------------------------------------------------------------------------
-import { InputDashboard } from "../src/frontend/pages/InputDashboard";
+import {
+  InputDashboard,
+  type InputDashboardHandle,
+} from "../src/frontend/pages/InputDashboard";
 
 describe("Accessibility — InputDashboard", () => {
   test("age input has no aria-invalid when valid", () => {
@@ -1760,6 +1841,131 @@ describe("Accessibility — InputDashboard", () => {
     } catch {
       /* ignore */
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Inactivity purge — InputDashboardHandle.clearAll + clearSensitiveSessionData
+// ---------------------------------------------------------------------------
+import { createRef } from "react";
+import {
+  clearSensitiveSessionData,
+  storeJobCredential,
+} from "../src/frontend/job-credentials";
+
+describe("Inactivity purge", () => {
+  test("clearSensitiveSessionData removes draft and job credentials from sessionStorage", () => {
+    // Seed sessionStorage with a draft and a stored job credential.
+    happyWindow.sessionStorage.setItem(
+      "ddx_draft",
+      JSON.stringify({ age: "45", medicalHistory: "sensitive" }),
+    );
+    storeJobCredential("purge-test-job", "secret-token", "ws-ticket");
+
+    // Sanity: both are present before the purge.
+    expect(happyWindow.sessionStorage.getItem("ddx_draft")).not.toBeNull();
+    expect(
+      JSON.parse(
+        happyWindow.sessionStorage.getItem("ddx_job_credentials") ?? "{}",
+      ).jobs["purge-test-job"],
+    ).toBeTruthy();
+
+    clearSensitiveSessionData();
+
+    // After purge: both are gone.
+    expect(happyWindow.sessionStorage.getItem("ddx_draft")).toBeNull();
+    expect(
+      happyWindow.sessionStorage.getItem("ddx_job_credentials"),
+    ).toBeNull();
+  });
+
+  test("InputDashboardHandle.clearAll clears form fields and the sessionStorage draft", () => {
+    resetBody();
+    // Seed a draft so the form starts populated.
+    happyWindow.sessionStorage.setItem(
+      "ddx_draft",
+      JSON.stringify({
+        age: "72",
+        sex: "Female",
+        chiefComplaint: "Chest pain",
+        medicalHistory: "Sensitive history content",
+        transcript: "Sensitive transcript content",
+        labResults: "Sensitive lab content",
+      }),
+    );
+
+    const handleRef = createRef<InputDashboardHandle>();
+    const { container } = render(
+      createElement(InputDashboard, {
+        ref: handleRef,
+        onSubmit: () => {},
+      }),
+    );
+
+    // The form should be populated from the draft.
+    const ageInput = container.querySelector("#age-input") as HTMLInputElement;
+    expect(ageInput.value).toBe("72");
+
+    // Drive the purge via the imperative handle.
+    act(() => {
+      handleRef.current?.clearAll();
+    });
+
+    // Form fields are cleared.
+    expect(ageInput.value).toBe("");
+    // The draft is removed from sessionStorage.
+    expect(happyWindow.sessionStorage.getItem("ddx_draft")).toBeNull();
+  });
+
+  test("purge replaces the history entry with a neutral route via replaceState", () => {
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState");
+    // Simulate the purge's history scrubbing call.
+    window.history.replaceState({ screen: "input" }, "", "/");
+
+    expect(replaceStateSpy).toHaveBeenCalledTimes(1);
+    expect(replaceStateSpy).toHaveBeenCalledWith({ screen: "input" }, "", "/");
+    replaceStateSpy.mockRestore();
+  });
+
+  test("purge drops the job token from sessionStorage", () => {
+    // Store a credential, then purge via clearSensitiveSessionData.
+    storeJobCredential("token-drop-job", "tok", "ticket");
+    expect(
+      JSON.parse(
+        happyWindow.sessionStorage.getItem("ddx_job_credentials") ?? "{}",
+      ).jobs["token-drop-job"],
+    ).toBeTruthy();
+
+    clearSensitiveSessionData();
+
+    const remaining = happyWindow.sessionStorage.getItem("ddx_job_credentials");
+    expect(remaining).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Autosave disclosure
+// ---------------------------------------------------------------------------
+
+describe("Autosave disclosure", () => {
+  test("InputDashboard renders the autosave disclosure note text", () => {
+    resetBody();
+    const { container } = render(
+      createElement(InputDashboard, { onSubmit: () => {} }),
+    );
+    expect(
+      getByText(container, /Drafts are auto-saved for this tab/),
+    ).toBeTruthy();
+  });
+
+  test("autosave disclosure uses role=note", () => {
+    resetBody();
+    const { container } = render(
+      createElement(InputDashboard, { onSubmit: () => {} }),
+    );
+    const note = container.querySelector('[role="note"]');
+    expect(note).toBeTruthy();
+    expect(note?.textContent).toContain("cleared on inactivity");
   });
 });
 

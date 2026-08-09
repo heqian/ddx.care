@@ -162,7 +162,7 @@ All constants centralized here, read from environment variables with defaults:
 
 - `useJobStream` — WebSocket connection with exponential backoff reconnection (5 attempts: 1s → 2s → 4s → 8s → 16s) and pre-reconnect status check via `getJobStatus()`, before HTTP polling fallback. Prefers the short-lived `wsTicket` for the WebSocket URL; the long-lived `token` is used for REST polling via the `Authorization` header.
 - `usePolling` — Interval-based status polling
-- `useAutoLogout` — Inactivity timeout with `paused` prop support (pauses timer during active diagnosis)
+- `useAutoLogout` — Inactivity timeout with `timeoutMs` (input screen, default 10 min) and `waitingTimeoutMs` (waiting/results, default 15 min) options. The timer is never paused; it runs on all screens so an unattended terminal screen triggers the sensitive-session purge. The `screen` option selects which timeout applies. User activity (mousemove, keydown, click, scroll, touchstart) resets the timer.
 - `useRouter` — Hash-based client-side routing. `navigate()` uses `replaceState` when navigating between capability-bearing routes (waiting → results, results → waiting) so credential URLs don't accumulate in browser history. Navigating from a clean route (input) to a capability route uses `pushState` so the user can go back to the clean input page. Callers can override via `{ replace: boolean }`.
 
 #### Other Frontend Files
@@ -267,7 +267,9 @@ ddx.care is explicitly labeled "RESEARCH PROOF-OF-CONCEPT ONLY. NOT a medical de
 
 ### Frontend
 
-- **sessionStorage**: The input form auto-saves to `sessionStorage` every 500ms, cleared on successful submission. Data persists if the user abandons the form but is cleared on tab close.
+- **sessionStorage**: The input form auto-saves to `sessionStorage` every 500ms, cleared on successful submission. Data persists if the user abandons the form but is cleared on tab close. A visible disclosure note under the form states drafts are auto-saved for this tab and cleared on inactivity or tab close.
+- **Inactivity session purge**: When the inactivity timeout fires, a centralized `purgeSensitiveSession()` function in `src/frontend/main.tsx` stops any active voice dictation (via the `InputDashboardHandle.stopVoiceInput` ref), clears the form fields and draft (via `InputDashboardHandle.clearAll`), removes job credentials and the draft from `sessionStorage`, clears in-memory job contexts, replaces the current history entry with the neutral `/` route via `history.replaceState` (so browser back navigation cannot recover case content or capability URLs), and renders a "Session Locked" view instead of navigating to a still-populated input page. Tapping "Continue" dismisses the lock and returns to a blank input form.
+- **Extended timeout on waiting/results**: The auto-logout timer is never paused. On the input screen it uses a 10-minute timeout; on the waiting and results screens it uses an extended 15-minute timeout (`waitingTimeoutMs`) so an unattended terminal screen still triggers the purge. User activity resets the timer on all screens.
 
 ### What is NOT covered (operator's responsibility)
 
@@ -306,6 +308,9 @@ These files start a server with `WS_TOKEN_SECRET` set and must run separately fr
 ### E2E Tests (`bun run test:e2e`)
 
 - `full-flow.spec.ts` — Full diagnostic workflow via Playwright (Chromium)
+- `job-context.spec.ts` — Frontend job context isolation (refresh, expiry, back/forward navigation)
+- `error-states.spec.ts` — Error states & edge paths (deep-link, agent-list failure, cancel, retry, report-generation failure)
+- `inactivity-purge.spec.ts` — Inactivity session purge (unattended results/waiting/input screens, back navigation, autosave disclosure, activity reset). Uses Playwright's `page.clock` to fast-forward through the extended timeout.
 - Runs on port 3999 with `MOCK_LLM=1` (configured in `playwright.config.ts`)
 - Covers: input submission, real-time progress updates, report rendering, print/export
 

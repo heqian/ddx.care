@@ -1,9 +1,12 @@
 import { createRoot } from "react-dom/client";
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AppShell } from "./components/layout/AppShell";
 import { ConsentGate, useConsent } from "./components/layout/ConsentGate";
-import { InputDashboard } from "./pages/InputDashboard";
+import {
+  InputDashboard,
+  type InputDashboardHandle,
+} from "./pages/InputDashboard";
 import { WaitingRoom } from "./pages/WaitingRoom";
 import { ResultsView } from "./pages/ResultsView";
 import { useAutoLogout } from "./hooks/useAutoLogout";
@@ -66,16 +69,46 @@ function App() {
   const activeContext = activeJobId ? jobs[activeJobId] : undefined;
   const hasPatientData = route.screen !== "input";
 
+  // Ref to InputDashboard so the inactivity purge can drive
+  // stopVoiceInput and clearAll imperatively without lifting the
+  // form's local field state.
+  const inputDashboardRef = useRef<InputDashboardHandle | null>(null);
+
+  // After the inactivity purge fires, we render a locked view instead
+  // of navigating back to a still-populated input page. Tapping the
+  // "Continue" button dismisses the lock and shows a blank input.
+  const [locked, setLocked] = useState(false);
+
   const handleReset = useCallback(() => {
     clearSensitiveSessionData();
     dispatch({ type: "clear" });
     navigate({ screen: "input" }, { replace: true });
   }, [navigate]);
 
-  const { showWarning, extendSession } = useAutoLogout(
-    handleReset,
-    route.screen === "waiting",
-  );
+  const purgeSensitiveSession = useCallback(() => {
+    // Stop voice dictation inside InputDashboard if it is mounted.
+    inputDashboardRef.current?.stopVoiceInput();
+    // Clear the form fields and the sessionStorage draft.
+    inputDashboardRef.current?.clearAll();
+    // Clear job credentials + draft from sessionStorage and in-memory jobs.
+    clearSensitiveSessionData();
+    dispatch({ type: "clear" });
+    // Replace the current history entry with a neutral, credential-free
+    // route so browser back navigation cannot recover case content or
+    // capability URLs.
+    window.history.replaceState({ screen: "input" }, "", "/");
+    navigate({ screen: "input" }, { replace: true });
+    // Render the locked view rather than a flash of populated input.
+    setLocked(true);
+  }, [navigate]);
+
+  const { showWarning, extendSession } = useAutoLogout(purgeSensitiveSession, {
+    screen: route.screen,
+    // The timer is never paused — it runs on input (10 min) and on
+    // waiting/results (15 min) so an unattended terminal screen still
+    // triggers the purge.
+    paused: false,
+  });
 
   useEffect(() => {
     if (!activeJobId) return;
@@ -291,6 +324,27 @@ function App() {
     return <ConsentGate onAccept={grant} onDecline={revoke} />;
   }
 
+  if (locked) {
+    return (
+      <AppShell>
+        <div className="max-w-md mx-auto text-center py-16 space-y-4">
+          <h1 className="text-xl font-display">Session Locked</h1>
+          <p className="text-slate-700 dark:text-slate-300 text-sm">
+            Your session was locked due to inactivity. Patient data has been
+            cleared from this device.
+          </p>
+          <button
+            type="button"
+            onClick={() => setLocked(false)}
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark transition-colors"
+          >
+            Continue
+          </button>
+        </div>
+      </AppShell>
+    );
+  }
+
   const authorization = activeContext?.authorization;
   const availableContext =
     activeContext?.authorization === "available" ? activeContext : null;
@@ -316,7 +370,9 @@ function App() {
         </div>
       )}
 
-      {route.screen === "input" && <InputDashboard onSubmit={handleSubmit} />}
+      {route.screen === "input" && (
+        <InputDashboard ref={inputDashboardRef} onSubmit={handleSubmit} />
+      )}
       {route.screen !== "input" &&
         authorization &&
         authorization !== "available" && (

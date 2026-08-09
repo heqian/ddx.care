@@ -1,4 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import {
   MicrophoneIcon,
   DocumentTextIcon,
@@ -19,6 +26,18 @@ interface InputDashboardProps {
     token: string,
     wsTicket: string,
   ) => void;
+}
+
+/**
+ * Imperatively-exposed methods for the inactivity purge to drive
+ * sensitive-state clearing inside InputDashboard without lifting
+ * all of its local field state. `clearAll` clears every form field
+ * and the `sessionStorage` draft; `stopVoiceInput` stops any active
+ * voice dictation.
+ */
+export interface InputDashboardHandle {
+  clearAll: () => void;
+  stopVoiceInput: () => void;
 }
 
 const MAX_CHARS = 50_000;
@@ -84,7 +103,10 @@ function CharCount({ value, max }: { value: string; max: number }) {
   );
 }
 
-export function InputDashboard({ onSubmit }: InputDashboardProps) {
+export const InputDashboard = forwardRef<
+  InputDashboardHandle,
+  InputDashboardProps
+>(function InputDashboard({ onSubmit }, ref) {
   const draft = loadDraft();
   const [age, setAge] = useState(draft?.age ?? "");
   const [sex, setSex] = useState(draft?.sex ?? "");
@@ -193,6 +215,17 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
     setTouched(false);
     clearDraft();
   }, []);
+
+  // Expose stopVoiceInput and handleClearAll to the parent so the
+  // inactivity purge can drive sensitive-state clearing.
+  useImperativeHandle(
+    ref,
+    () => ({
+      clearAll: handleClearAll,
+      stopVoiceInput,
+    }),
+    [handleClearAll, stopVoiceInput],
+  );
 
   const handleVoiceInput = useCallback(
     (target: "history" | "transcript") => {
@@ -490,6 +523,15 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
         </p>
       </div>
 
+      {/* Autosave disclosure */}
+      <p
+        className="text-xs text-slate-400 dark:text-slate-500 text-center"
+        role="note"
+      >
+        Drafts are auto-saved for this tab and cleared on inactivity or tab
+        close.
+      </p>
+
       {/* Submit */}
       <div className="flex justify-stretch sm:justify-end">
         <Button
@@ -502,4 +544,4 @@ export function InputDashboard({ onSubmit }: InputDashboardProps) {
       </div>
     </div>
   );
-}
+});
