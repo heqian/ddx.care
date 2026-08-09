@@ -12,6 +12,7 @@ import type { AgentInfo, StatusResponse, ProgressEvent } from "../api/types";
 interface WaitingRoomProps {
   jobId: string;
   token?: string;
+  wsTicket?: string;
   onComplete: (result: StatusResponse) => void;
   onCancel: () => void;
   onRetry: () => void;
@@ -105,6 +106,7 @@ export function deriveToolHistory(
 export function WaitingRoom({
   jobId,
   token,
+  wsTicket,
   onComplete,
   onCancel,
   onRetry,
@@ -121,6 +123,7 @@ export function WaitingRoom({
     generation,
     onStatus,
     onStreamError,
+    wsTicket,
   );
   const isTerminal =
     status?.status === "failed" || status?.status === "completed";

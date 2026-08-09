@@ -16,6 +16,7 @@ export function useJobStream(
   generation = 0,
   onStatus?: StatusHandler,
   onError?: ErrorHandler,
+  wsTicket?: string,
 ) {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -98,8 +99,15 @@ export function useJobStream(
     const connectWebSocket = () => {
       if (cancelled) return;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
-      const wsUrl = `${protocol}//${window.location.host}/ws?jobId=${encodeURIComponent(jobId)}${tokenParam}`;
+      // Prefer the short-lived wsTicket (120s TTL) over the long-lived token so
+      // the durable capability is not exposed in the WebSocket URL. The token
+      // remains as a migration fallback and is still used for REST polling.
+      const credParam = wsTicket
+        ? `&ticket=${encodeURIComponent(wsTicket)}`
+        : token
+          ? `&token=${encodeURIComponent(token)}`
+          : "";
+      const wsUrl = `${protocol}//${window.location.host}/ws?jobId=${encodeURIComponent(jobId)}${credParam}`;
 
       ws = new WebSocket(wsUrl);
       ws.onmessage = (event) => {
@@ -182,7 +190,7 @@ export function useJobStream(
       for (const controller of controllers) controller.abort();
       controllers.clear();
     };
-  }, [jobId, token, generation]);
+  }, [jobId, token, wsTicket, generation]);
 
   return { status, error };
 }

@@ -128,7 +128,7 @@ describe("getJobStatus", () => {
     expect(fetchCall[0]).toBe("/v1/status/job-1");
   });
 
-  test("appends token query parameter when provided", async () => {
+  test("sends Authorization: Bearer header when token is provided", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -141,10 +141,13 @@ describe("getJobStatus", () => {
     await getJobStatus("job-1", "abc123token");
 
     const fetchCall = (globalThis.fetch as any).mock.calls[0];
-    expect(fetchCall[0]).toBe("/v1/status/job-1?token=abc123token");
+    // Token MUST NOT appear in the URL — only in the Authorization header
+    expect(fetchCall[0]).toBe("/v1/status/job-1");
+    expect(fetchCall[0]).not.toContain("token=");
+    expect(fetchCall[1].headers.Authorization).toBe("Bearer abc123token");
   });
 
-  test("URL-encodes the token parameter", async () => {
+  test("does not put the token in the URL even with special characters", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -157,12 +160,14 @@ describe("getJobStatus", () => {
     await getJobStatus("job-1", "token with spaces&special");
 
     const fetchCall = (globalThis.fetch as any).mock.calls[0];
-    expect(fetchCall[0]).toBe(
-      "/v1/status/job-1?token=token%20with%20spaces%26special",
+    expect(fetchCall[0]).toBe("/v1/status/job-1");
+    expect(fetchCall[0]).not.toContain("token");
+    expect(fetchCall[1].headers.Authorization).toBe(
+      "Bearer token with spaces&special",
     );
   });
 
-  test("does not append token when not provided", async () => {
+  test("does not send Authorization header when token is not provided", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -176,6 +181,7 @@ describe("getJobStatus", () => {
 
     const fetchCall = (globalThis.fetch as any).mock.calls[0];
     expect(fetchCall[0]).toBe("/v1/status/job-1");
+    expect(fetchCall[1].headers.Authorization ?? "").toBe("");
   });
 
   test("forwards an AbortSignal to status requests", async () => {
@@ -283,7 +289,7 @@ describe("cancelDiagnosis", () => {
     expect(fetchCall[1].method).toBe("DELETE");
   });
 
-  test("appends token query parameter when provided", async () => {
+  test("sends Authorization: Bearer header when token is provided", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ status: "cancelled" }),
@@ -292,11 +298,14 @@ describe("cancelDiagnosis", () => {
     await cancelDiagnosis("job-1", "secret-token-123");
 
     const fetchCall = (globalThis.fetch as any).mock.calls[0];
-    expect(fetchCall[0]).toBe("/v1/diagnose/job-1?token=secret-token-123");
+    // Token MUST NOT appear in the URL — only in the Authorization header
+    expect(fetchCall[0]).toBe("/v1/diagnose/job-1");
+    expect(fetchCall[0]).not.toContain("token=");
     expect(fetchCall[1].method).toBe("DELETE");
+    expect(fetchCall[1].headers.Authorization).toBe("Bearer secret-token-123");
   });
 
-  test("URL-encodes the token parameter", async () => {
+  test("does not put the token in the URL even with special characters", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ status: "cancelled" }),
@@ -305,12 +314,14 @@ describe("cancelDiagnosis", () => {
     await cancelDiagnosis("job-1", "token/special+chars");
 
     const fetchCall = (globalThis.fetch as any).mock.calls[0];
-    expect(fetchCall[0]).toBe(
-      "/v1/diagnose/job-1?token=token%2Fspecial%2Bchars",
+    expect(fetchCall[0]).toBe("/v1/diagnose/job-1");
+    expect(fetchCall[0]).not.toContain("token");
+    expect(fetchCall[1].headers.Authorization).toBe(
+      "Bearer token/special+chars",
     );
   });
 
-  test("does not append token when not provided", async () => {
+  test("does not send Authorization header when token is not provided", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ status: "cancelled" }),
@@ -320,6 +331,7 @@ describe("cancelDiagnosis", () => {
 
     const fetchCall = (globalThis.fetch as any).mock.calls[0];
     expect(fetchCall[0]).toBe("/v1/diagnose/job-1");
+    expect(fetchCall[1].headers.Authorization ?? "").toBe("");
   });
 
   test("throws on non-OK response", async () => {

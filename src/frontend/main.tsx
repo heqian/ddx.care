@@ -85,6 +85,7 @@ function App() {
       if (
         !existing ||
         existing.token !== lookup.credential.token ||
+        existing.wsTicket !== lookup.credential.wsTicket ||
         existing.expiresAt !== lookup.credential.expiresAt
       ) {
         dispatch({
@@ -156,8 +157,13 @@ function App() {
   }, [hasPatientData]);
 
   const handleSubmit = useCallback(
-    (jobId: string, payload: DiagnoseRequest, token: string) => {
-      const credential = storeJobCredential(jobId, token);
+    (
+      jobId: string,
+      payload: DiagnoseRequest,
+      token: string,
+      wsTicket: string,
+    ) => {
+      const credential = storeJobCredential(jobId, token, wsTicket);
       dispatch({ type: "register", ...credential, payload });
       navigate({ screen: "waiting", jobId });
     },
@@ -248,7 +254,11 @@ function App() {
       ) {
         return;
       }
-      const credential = storeJobCredential(response.jobId, response.token);
+      const credential = storeJobCredential(
+        response.jobId,
+        response.token,
+        response.wsTicket,
+      );
       dispatch({
         type: "register",
         ...credential,
@@ -316,6 +326,7 @@ function App() {
         <WaitingRoom
           jobId={route.jobId}
           token={availableContext.token}
+          wsTicket={availableContext.wsTicket}
           generation={availableContext.generation}
           onStatus={handleStatus}
           onStreamError={handleStreamError}

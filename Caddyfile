@@ -37,8 +37,18 @@ ddx.care {
   # Compress responses
   encode gzip
 
-  # Structured JSON logging for production log aggregation
+  # Structured JSON logging for production log aggregation, with query
+  # parameter redaction so job capabilities (token, ticket) never appear in
+  # access logs. The frontend sends credentials via the Authorization header
+  # and short-lived wsTicket; this redaction is defense-in-depth for the
+  # query-param fallback during migration and for any non-browser clients.
   log {
-    format json
+    format filter {
+      wrap json
+      request>uri query {
+        replace token REDACTED
+        replace ticket REDACTED
+      }
+    }
   }
 }

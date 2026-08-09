@@ -48,10 +48,11 @@ export async function getJobStatus(
   token?: string,
   signal?: AbortSignal,
 ): Promise<StatusResponse> {
-  const url = token
-    ? `/v1/status/${jobId}?token=${encodeURIComponent(token)}`
-    : `/v1/status/${jobId}`;
-  const res = await fetch(url, { signal });
+  // Prefer the Authorization header (not logged by Caddy, not in browser history)
+  // over a query parameter. The query fallback remains for dev mode only.
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`/v1/status/${jobId}`, { headers, signal });
   if (!res.ok) {
     await handleResponseText(res);
   }
@@ -77,10 +78,14 @@ export async function cancelDiagnosis(
   jobId: string,
   token?: string,
 ): Promise<{ status: string }> {
-  const url = token
-    ? `/v1/diagnose/${jobId}?token=${encodeURIComponent(token)}`
-    : `/v1/diagnose/${jobId}`;
-  const res = await fetch(url, { method: "DELETE" });
+  // Prefer the Authorization header (not logged by Caddy, not in browser history)
+  // over a query parameter. The query fallback remains for dev mode only.
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`/v1/diagnose/${jobId}`, {
+    method: "DELETE",
+    headers,
+  });
   if (!res.ok) {
     await handleResponseText(res);
   }

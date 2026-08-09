@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 export type Route =
   | { screen: "input" }
@@ -37,16 +37,26 @@ export function routeToPath(route: Route): string {
       return "/";
   }
 }
-
 export function useRouter() {
   const [route, setRoute] = useState<Route>(() =>
     parsePath(window.location.pathname),
   );
+  const routeRef = useRef(route);
+  routeRef.current = route;
 
   const navigate = useCallback(
     (next: Route, options?: { replace?: boolean }) => {
       const path = routeToPath(next);
-      if (options?.replace) {
+      // Use replaceState when navigating between capability-bearing routes
+      // (waiting → results, results → waiting) so credential URLs don't
+      // accumulate in browser history. Navigating FROM a clean route (input)
+      // TO a capability route uses pushState so the user can go back to the
+      // clean input page. Navigating TO a clean route (input) uses pushState
+      // by default. Callers can force either behavior via `options.replace`.
+      const fromCapability = routeRef.current.screen !== "input";
+      const toCapability = next.screen !== "input";
+      const replace = options?.replace ?? (fromCapability && toCapability);
+      if (replace) {
         window.history.replaceState(next, "", path);
       } else {
         window.history.pushState(next, "", path);

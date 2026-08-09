@@ -16,7 +16,8 @@ The client SHALL bind each job token, request payload reference, stream status, 
 - **THEN** the client selects only that job's context and does not reuse global state from the previous job
 
 ### Requirement: Results render only for the matching route
-The client SHALL display a diagnostic result only when the result job ID exactly matches the active results-route job ID.
+
+The client SHALL display a diagnostic result only when the result job ID exactly matches the active results-route job ID. The client SHALL NOT embed job tokens or WebSocket tickets in URL path segments. Capability-bearing navigations SHALL use `history.replaceState` so credentials do not persist in browser history, sync, or screenshots. Deep-link sharing, if supported, SHALL use a separate short-lived share capability distinct from the read/cancel capability.
 
 #### Scenario: In-memory result belongs to a different job
 - **WHEN** the active route references job A but the most recently received result belongs to job B
@@ -25,6 +26,14 @@ The client SHALL display a diagnostic result only when the result job ID exactly
 #### Scenario: User navigates backward across completed cases
 - **WHEN** browser history moves from job B's results to job A's results
 - **THEN** only job A's result may appear under job A's route
+
+#### Scenario: Token is not present in URL path
+- **WHEN** the client navigates to a results route
+- **THEN** the URL path does not contain the job token or WebSocket ticket
+
+#### Scenario: Capability URL is not retained in history
+- **WHEN** the client navigates using a capability-bearing route
+- **THEN** the history entry is replaced rather than pushed, so the capability is not recoverable via back navigation
 
 ### Requirement: Submission and retry update job identity atomically
 Every successful submission or retry SHALL store the returned job ID and token together before starting streaming or navigation. Previous terminal state SHALL NOT carry into the new job.

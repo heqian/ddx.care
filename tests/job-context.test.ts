@@ -46,17 +46,21 @@ describe("jobContextReducer", () => {
       type: "register",
       jobId: "job-a",
       token: "token-a",
+      wsTicket: "ticket-a",
       expiresAt: 100,
     });
     state = jobContextReducer(state, {
       type: "register",
       jobId: "job-b",
       token: "token-b",
+      wsTicket: "ticket-b",
       expiresAt: 200,
     });
 
     expect(state["job-a"].token).toBe("token-a");
+    expect(state["job-a"].wsTicket).toBe("ticket-a");
     expect(state["job-b"].token).toBe("token-b");
+    expect(state["job-b"].wsTicket).toBe("ticket-b");
     expect(state["job-a"].status?.jobId).toBe("job-a");
     expect(state["job-b"].status?.jobId).toBe("job-b");
   });
@@ -68,6 +72,7 @@ describe("jobContextReducer", () => {
         type: "register" as const,
         jobId: "job-a",
         token: "token-a",
+        wsTicket: "ticket-a",
         expiresAt: 100,
       },
     );
@@ -109,14 +114,15 @@ describe("jobContextReducer", () => {
 
 describe("job credential store", () => {
   test("stores only versioned recovery credentials for multiple jobs", () => {
-    storeJobCredential("job-a", "token-a", 1_000);
-    storeJobCredential("job-b", "token-b", 2_000);
+    storeJobCredential("job-a", "token-a", "ticket-a", 1_000);
+    storeJobCredential("job-b", "token-b", "ticket-b", 2_000);
 
     expect(getJobCredential("job-a", 3_000)).toEqual({
       status: "available",
       credential: {
         jobId: "job-a",
         token: "token-a",
+        wsTicket: "ticket-a",
         expiresAt: 1_000 + JOB_CREDENTIAL_TTL_MS,
       },
     });
@@ -126,15 +132,15 @@ describe("job credential store", () => {
   });
 
   test("removes cancelled, reset, expired, and malformed credentials", () => {
-    storeJobCredential("cancelled", "cancel-token", 1_000);
+    storeJobCredential("cancelled", "cancel-token", "ticket", 1_000);
     removeJobCredential("cancelled");
     expect(getJobCredential("cancelled", 1_001).status).toBe("missing");
 
-    storeJobCredential("expired", "expired-token", 1_000);
+    storeJobCredential("expired", "expired-token", "ticket", 1_000);
     removeExpiredJobCredentials(1_000 + JOB_CREDENTIAL_TTL_MS);
     expect(getJobCredential("expired").status).toBe("missing");
 
-    storeJobCredential("reset", "reset-token", Date.now());
+    storeJobCredential("reset", "reset-token", "ticket", Date.now());
     clearJobCredentials();
     expect(sessionStorage.getItem(JOB_CREDENTIALS_STORAGE_KEY)).toBeNull();
 
@@ -144,7 +150,7 @@ describe("job credential store", () => {
   });
 
   test("reports an expired route credential before removing it", () => {
-    storeJobCredential("job-a", "token-a", 1_000);
+    storeJobCredential("job-a", "token-a", "ticket-a", 1_000);
 
     expect(getJobCredential("job-a", 1_000 + JOB_CREDENTIAL_TTL_MS)).toEqual({
       status: "expired",
@@ -153,7 +159,7 @@ describe("job credential store", () => {
   });
 
   test("purges credentials and draft data for reset or inactivity", () => {
-    storeJobCredential("job-a", "token-a", Date.now());
+    storeJobCredential("job-a", "token-a", "ticket-a", Date.now());
     sessionStorage.setItem("ddx_draft", "patient data");
 
     clearSensitiveSessionData();

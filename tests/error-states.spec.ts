@@ -6,7 +6,7 @@ import {
   waitForResults,
   waitForWaitingRoom,
   jobIdFromUrl,
-  authenticatedStatusUrl,
+  authenticatedStatusRequest,
   jobCredential,
 } from "./e2e/helpers";
 
@@ -116,7 +116,10 @@ test.describe("Error states & edge paths", () => {
 
     const jobId = jobIdFromUrl(page.url());
     expect(jobId).toBeTruthy();
-    const statusUrl = await authenticatedStatusUrl(page, jobId!);
+    // Capture the token before cancel — the credential is removed from
+    // sessionStorage after cancel, so we need it beforehand to query status.
+    const { token } = await jobCredential(page, jobId!);
+    const statusUrl = `${page.url().split("/waiting/")[0]}/v1/status/${jobId}`;
 
     await page.getByRole("button", { name: "Cancel" }).click();
 
@@ -135,17 +138,22 @@ test.describe("Error states & edge paths", () => {
 
     // The job is marked failed with the cancellation message. Poll because
     // the DELETE from the browser may still be in flight when we check.
+    // Use the Authorization header (capability-transport-hardening).
     await expect
       .poll(
         async () => {
-          const res = await page.request.get(statusUrl);
+          const res = await page.request.get(statusUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
           return (await res.json()).status;
         },
         { timeout: 5_000 },
       )
       .toBe("failed");
 
-    const finalRes = await page.request.get(statusUrl);
+    const finalRes = await page.request.get(statusUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     const finalData = await finalRes.json();
     expect(finalData.error).toContain("Cancelled");
   });
@@ -254,9 +262,7 @@ test.describe("Error states & edge paths", () => {
     );
 
     const jobId = jobIdFromUrl(page.url());
-    const statusResponse = await page.request.get(
-      await authenticatedStatusUrl(page, jobId!),
-    );
+    const statusResponse = await authenticatedStatusRequest(page, jobId!);
     const statusBody = await statusResponse.json();
     expect(statusBody.status).toBe("completed");
     expect(statusBody.result.status).toBe("generation_failed");
@@ -271,7 +277,10 @@ test.describe("Error states & edge paths", () => {
 
     const jobId = jobIdFromUrl(page.url());
     expect(jobId).toBeTruthy();
-    const statusUrl = await authenticatedStatusUrl(page, jobId!);
+    // Capture the token before cancel — the credential is removed from
+    // sessionStorage after cancel, so we need it beforehand to poll status.
+    const { token } = await jobCredential(page, jobId!);
+    const statusUrl = `${page.url().split("/waiting/")[0]}/v1/status/${jobId}`;
 
     // Cancel via the UI — returns to the input screen and marks the job
     // failed ("Cancelled by user"), unlike a report-generation failure, which
@@ -282,10 +291,13 @@ test.describe("Error states & edge paths", () => {
     });
 
     // Wait for the cancel to land on the server before deep-linking.
+    // Use the Authorization header (capability-transport-hardening).
     await expect
       .poll(
         async () => {
-          const res = await page.request.get(statusUrl);
+          const res = await page.request.get(statusUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
           return (await res.json()).status;
         },
         { timeout: 5_000 },

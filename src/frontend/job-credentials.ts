@@ -4,6 +4,7 @@ export const JOB_CREDENTIAL_TTL_MS = 60 * 60 * 1000;
 interface StoredCredential {
   jobId: string;
   token: string;
+  wsTicket: string;
   expiresAt: number;
 }
 
@@ -25,9 +26,10 @@ function isCredential(value: unknown, key: string): value is StoredCredential {
   if (!value || typeof value !== "object") return false;
   const credential = value as Record<string, unknown>;
   return (
-    Object.keys(credential).length === 3 &&
+    Object.keys(credential).length === 4 &&
     credential.jobId === key &&
     typeof credential.token === "string" &&
+    typeof credential.wsTicket === "string" &&
     typeof credential.expiresAt === "number" &&
     Number.isFinite(credential.expiresAt)
   );
@@ -73,11 +75,13 @@ function saveStore(store: CredentialStore): void {
 export function storeJobCredential(
   jobId: string,
   token: string,
+  wsTicket: string = "",
   now = Date.now(),
 ): StoredCredential {
   const credential = {
     jobId,
     token,
+    wsTicket,
     expiresAt: now + JOB_CREDENTIAL_TTL_MS,
   };
   const store = loadStore();

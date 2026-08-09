@@ -97,7 +97,11 @@ Shared utilities:
 
 - `rate-limiter.ts` — `RateLimiter` class: per-IP sliding window rate limiting + global concurrent workflow cap. In-memory (resets on restart, logs a warning on first request post-restart). Configurable via `RATE_LIMIT_MAX_REQUESTS`, `RATE_LIMIT_WINDOW_MS`, `MAX_CONCURRENT_WORKFLOWS`. Per-IP recording happens immediately after `check()` succeeds (before body parsing), so malformed requests count against the limit to prevent bypass.
 - `logger.ts` — Structured logger with `info`, `warn`, `error`, `request`, `workflowStart`, `workflowComplete`, `workflowFail`, `specialistCall` methods. Supports `LOG_FORMAT=json` env var for JSON-line output (for log aggregation). Default: human-readable text.
-- `ws-token.ts` — `generateToken(jobId)` and `verifyToken(jobId, token)` functions using HMAC-SHA256 with `WS_TOKEN_SECRET`. When `WS_TOKEN_SECRET` is empty (dev mode), tokens are not required for WebSocket connections, REST endpoints (`GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId`), or the HTTP polling fallback.
+- `ws-token.ts` — Durable job capability + short-lived WebSocket ticket primitives using HMAC-SHA256 with `WS_TOKEN_SECRET`:
+  - `generateToken(jobId, ttlMs?, now?)` signs `jobId.expiry` where `expiry = now + JOB_TTL_MS` (default). Returns `<expiryMs>.<hmacHex>`. Empty string in dev mode (empty `WS_TOKEN_SECRET`).
+  - `verifyToken(jobId, token, now?)` parses `<expiryMs>.<hmacHex>`, rejects expired tokens, and uses a timing-safe comparison. Requires exactly 64 ASCII hex characters before any `Buffer` work to avoid the malformed-Unicode `RangeError`. Returns `true` in dev mode.
+  - `generateWsTicket(jobId, ttlSec?, now?)` and `verifyWsTicket(jobId, ticket, now?)` — short-lived (default 120s), stateless, single-use WebSocket upgrade ticket. Same `<expiryMs>.<hmacHex>` format but with an independent, shorter TTL so the two capabilities are not interchangeable.
+  When `WS_TOKEN_SECRET` is empty (dev mode), tokens/tickets are not required for WebSocket connections, REST endpoints (`GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId`), or the HTTP polling fallback.
 - `abort-controller-store.ts` — `Map<string, AbortController>` with exported `set`, `get`, `remove` functions. Stores abort controllers for running workflows, enabling cancellation via `DELETE /v1/diagnose/:jobId`.
 
 #### Tool Cache (`src/backend/tools/utils/tool-cache.ts`)
@@ -156,15 +160,15 @@ All constants centralized here, read from environment variables with defaults:
 
 #### Hooks (`src/frontend/hooks/`)
 
-- `useJobStream` — WebSocket connection with exponential backoff reconnection (5 attempts: 1s → 2s → 4s → 8s → 16s) and pre-reconnect status check via `getJobStatus()`, before HTTP polling fallback. Includes HMAC token for WebSocket authentication and REST polling fallback when `WS_TOKEN_SECRET` is set.
+- `useJobStream` — WebSocket connection with exponential backoff reconnection (5 attempts: 1s → 2s → 4s → 8s → 16s) and pre-reconnect status check via `getJobStatus()`, before HTTP polling fallback. Prefers the short-lived `wsTicket` for the WebSocket URL; the long-lived `token` is used for REST polling via the `Authorization` header.
 - `usePolling` — Interval-based status polling
 - `useAutoLogout` — Inactivity timeout with `paused` prop support (pauses timer during active diagnosis)
-- `useRouter` — Simple hash-based client-side routing
+- `useRouter` — Hash-based client-side routing. `navigate()` uses `replaceState` when navigating between capability-bearing routes (waiting → results, results → waiting) so credential URLs don't accumulate in browser history. Navigating from a clean route (input) to a capability route uses `pushState` so the user can go back to the clean input page. Callers can override via `{ replace: boolean }`.
 
 #### Other Frontend Files
 
 - `context/ThemeContext.tsx` — Light/dark mode toggle
-- `api/client.ts` — API client functions (`submitDiagnosis`, `getJobStatus`, `getAgents`, `cancelDiagnosis`). Completed status responses are runtime-validated with the shared `reportOutcomeSchema`.
+- `api/client.ts` — API client functions (`submitDiagnosis`, `getJobStatus`, `getAgents`, `cancelDiagnosis`). `getJobStatus` and `cancelDiagnosis` send the job token via an `Authorization: Bearer <token>` header (not in the URL). Completed status responses are runtime-validated with the shared `reportOutcomeSchema`.
 - `api/types.ts` — Frontend API types (`DiagnoseRequest`, `StatusResponse`, `WsMessage`, etc.). `DiagnosisReport` and `ReportOutcome` are re-exported from the shared schema module rather than duplicated.
 - `types/speech.d.ts` — Ambient type declarations for `SpeechRecognition`, `SpeechRecognitionEvent`, etc.
 
@@ -173,18 +177,20 @@ All constants centralized here, read from environment variables with defaults:
 Entry point. Creates the `Bun.serve()` instance with:
 
 **Routes** (defined in `src/backend/api/routes.ts`):
-- `POST /v1/diagnose` — Submit a diagnostic case. Validates input (Zod schema, payload size limit), checks rate limit (per-IP + concurrent workflow cap), starts async workflow, returns `202 Accepted` with `jobId` and `token`.
-- `GET /v1/status/:jobId` — Poll job status and progress events. A completed response contains a direct `result: ReportOutcome`; there is no nested workflow-result wrapper. Requires `?token=<hmac>` query parameter when `WS_TOKEN_SECRET` is set (403 on missing/invalid token). Token is verified before job existence lookup to prevent enumeration (ordering: format check 400 → token check 403 → existence 404).
-- `DELETE /v1/diagnose/:jobId` — Cancel a running diagnostic workflow. Requires `?token=<hmac>` query parameter when `WS_TOKEN_SECRET` is set (403 on missing/invalid token). Aborts the workflow's `AbortController` and marks the job as `failed("Cancelled by user")`; the workflow keeps its concurrent slot until its promise settles.
+- `POST /v1/diagnose` — Submit a diagnostic case. Validates input (Zod schema, payload size limit), checks rate limit (per-IP + concurrent workflow cap), starts async workflow, returns `202 Accepted` with `jobId`, `token`, and `wsTicket`.
+- `GET /v1/status/:jobId` — Poll job status and progress events. A completed response contains a direct `result: ReportOutcome`; there is no nested workflow-result wrapper. Requires an `Authorization: Bearer <token>` header when `WS_TOKEN_SECRET` is set (403 on missing/invalid token); a `?token=<hmac>` query parameter is accepted as a dev fallback during migration. Token is verified before job existence lookup to prevent enumeration (ordering: format check 400 → token check 403 → existence 404). The 200 response includes `Cache-Control: no-store, private` so shared and intermediary caches do not retain PHI-bearing payloads.
+- `DELETE /v1/diagnose/:jobId` — Cancel a running diagnostic workflow. Requires an `Authorization: Bearer <token>` header when `WS_TOKEN_SECRET` is set (403 on missing/invalid token); a `?token=<hmac>` query parameter is accepted as a dev fallback. Aborts the workflow's `AbortController` and marks the job as `failed("Cancelled by user")`; the workflow keeps its concurrent slot until its promise settles.
 - `GET /v1/health` — Health check endpoint (uptime, active workflows, SQLite connectivity).
 - `GET /v1/agents` — List available specialist agents (id, name, description).
-- `GET /ws?jobId=...&token=...` — WebSocket for real-time progress streaming. Completion messages are `{ type: "completed", jobId, result: ReportOutcome }`. Validates `Origin` header against `TRUSTED_ORIGINS` (or `ALLOWED_ORIGINS` when not set). Validates HMAC token when `WS_TOKEN_SECRET` is set. Replays history on connect, subscribes to live updates.
+- `GET /ws?jobId=...&ticket=...` — WebSocket for real-time progress streaming. Completion messages are `{ type: "completed", jobId, result: ReportOutcome }`. Validates `Origin` header against `TRUSTED_ORIGINS` (or `ALLOWED_ORIGINS` when not set). When `WS_TOKEN_SECRET` is set, prefers a short-lived `ticket` parameter (120s TTL, single-use) and also accepts the long-lived `token` parameter for a bounded migration period; rejects expired/invalid credentials with 403. Replays history on connect, subscribes to live updates.
 - `OPTIONS /v1/*` — CORS preflight catch-all.
 - `/*` — SPA fallback (serves the bundled `index.html` via Bun's HTMLBundle route value; security headers applied by Caddy in production, since HTMLBundle routes bypass the app's `corsHeaders()`).
 
-**CORS**: When `TRUSTED_ORIGINS` is set, reflects the request's `Origin` header if it matches the whitelist. When not set, falls back to `ALLOWED_ORIGINS` (default `*`). All `/v1/*` API responses include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Content-Security-Policy` headers via `corsHeaders()`. HTML responses (`"/"` and `"/*"`) are served as Bun HTMLBundle route values, which bypass `corsHeaders()` — security headers for HTML are applied by the Caddy reverse proxy.
+**CORS**: When `TRUSTED_ORIGINS` is set, reflects the request's `Origin` header if it matches the whitelist. When not set, falls back to `ALLOWED_ORIGINS` (default `*`). All `/v1/*` API responses include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Content-Security-Policy` headers via `corsHeaders()`. `Access-Control-Allow-Headers` includes `Content-Type, Authorization` so the frontend can send `Authorization: Bearer <token>`. HTML responses (`"/"` and `"/*"`) are served as Bun HTMLBundle route values, which bypass `corsHeaders()` — security headers for HTML are applied by the Caddy reverse proxy.
 
 **Content-Security-Policy**: The CSP (`CSP_VALUE` in `src/backend/api/routes.ts`) is applied to all `/v1/*` API responses via `corsHeaders()`. For HTML responses, the same CSP is applied by the Caddyfile's `header` directive in production. The CSP enforces: `default-src 'self'`, `script-src 'self'` (no `'unsafe-inline'`), `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` (Google Fonts CSS allowlisted; `'unsafe-inline'` retained for Tailwind v4 runtime styles), `font-src 'self' https://fonts.gstatic.com`, `img-src 'self' data:`, `connect-src 'self'` (same-origin only; no bare `ws:`/`wss:` schemes — `'self'` covers same-origin WebSocket), `frame-ancestors 'none'`, `base-uri 'none'`, `form-action 'self'`, `object-src 'none'`. HSTS is added by Caddy (`Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`).
+
+**Capability transport hardening**: Job credentials (HMAC tokens) travel via `Authorization: Bearer <token>` headers for REST endpoints and short-lived `wsTicket` query parameters (120s TTL) for WebSocket upgrades — never in URL path segments or long-lived query parameters. The Caddyfile redacts `token` and `ticket` query parameters from access logs as defense-in-depth for the query-param fallback during migration. The token format is `<expiryMs>.<hmacHex>` where `expiry = now + JOB_TTL_MS` (default), so tokens do not outlive the data they protect. `verifyToken` and `verifyWsTicket` reject expired credentials and require exactly 64 ASCII hex characters before any `Buffer` comparison (prevents the malformed-Unicode `RangeError`). `useRouter.navigate()` uses `replaceState` for capability-bearing routes (waiting, results) so credential URLs are not retained in browser history.
 
 **WebSocket** (defined in `src/backend/api/websocket.ts`):
 - On open: validates job exists, replays progress history, and either replays the terminal `ReportOutcome` or subscribes to live events.
@@ -214,7 +220,7 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `PORT` | `3000` | Server port |
 | `ALLOWED_ORIGINS` | `*` | CORS + WebSocket origin whitelist (comma-separated, used when `TRUSTED_ORIGINS` is not set) |
 | `TRUSTED_ORIGNS` | (empty) | Production CORS + WebSocket origin whitelist (comma-separated). When set, `ALLOWED_ORIGINS` is ignored |
-| `WS_TOKEN_SECRET` | (empty) | HMAC secret for WebSocket + REST endpoint authentication. When empty, tokens are not required (dev mode). Set for production — secures WebSocket, `GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId`, and HTTP polling fallback. |
+| `WS_TOKEN_SECRET` | (empty) | HMAC secret for WebSocket + REST endpoint authentication. When empty, tokens are not required (dev mode). Set for production — secures WebSocket (short-lived ticket + long-lived token fallback), `GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId` (via `Authorization` header), and HTTP polling fallback. |
 | `JOB_TTL_MS` | `3600000` (60 min) | Terminal-job (completed/failed) TTL before scrub + delete. Must be >= `DIAGNOSIS_TIMEOUT_MS`. Pending jobs are not affected; see `PENDING_JOB_TIMEOUT_MS`. |
 | `PENDING_JOB_TIMEOUT_MS` | `1020000` (17 min) | Max lifetime of a pending job before it is aborted and failed (`Diagnosis timed out`). Defaults to `DIAGNOSIS_TIMEOUT_MS + 120000`. Must be >= `DIAGNOSIS_TIMEOUT_MS`. |
 | `SPECIALIST_MODEL` | `ollama-cloud/gemma4:31b` | Override specialist agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
@@ -285,6 +291,13 @@ Backend test files in `tests/`:
 - `audit-logger.test.ts` — Audit logger rotation, tool-arg redaction, time-based purge tests
 - `ws-origin.test.ts` — WebSocket origin validation tests
 - `shutdown.test.ts` — Graceful shutdown signal handling tests
+
+### REST/WS Token Integration Tests (`bun run test:rest-tokens`)
+
+These files start a server with `WS_TOKEN_SECRET` set and must run separately from `bun run test` (Bun shares the module registry; the main suite's dev-mode server caches an empty secret).
+
+- `rest-token.test.ts` — REST endpoint `Authorization` header acceptance, query-param fallback, expired-token rejection, `Cache-Control: no-store` presence, malformed-Unicode (403 not 500), and unit-level `generateToken`/`verifyToken` primitives. Run: `bun run test:rest-token`.
+- `ws-ticket.test.ts` — `/ws` ticket validation: valid ticket within TTL, expired ticket rejected, invalid/cross-job ticket rejected, missing-credential 403, long-lived token fallback, ticket precedence. Run: `bun run test:ws-ticket`.
 
 ### Frontend Tests (`bun run test:frontend`)
 

@@ -23,6 +23,7 @@ export interface DiagnoseResponse {
   jobId: string;
   status: "pending";
   token: string;
+  wsTicket: string;
 }
 
 export interface SpecialistConsulted {

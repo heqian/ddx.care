@@ -4,7 +4,12 @@ import { agentList } from "../agents/index";
 import { progressStore } from "../progress-store";
 import { RateLimiter } from "../utils/rate-limiter";
 import { logger } from "../utils/logger";
-import { generateToken, verifyToken } from "../utils/ws-token";
+import {
+  generateToken,
+  generateWsTicket,
+  verifyToken,
+  verifyWsTicket,
+} from "../utils/ws-token";
 import * as abortStore from "../utils/abort-controller-store";
 import { getCacheStats } from "../tools/utils/tool-cache";
 import { TOOL_CACHE_ENABLED } from "../config";
@@ -41,7 +46,7 @@ const JOB_ID_RE =
 function corsHeaders(req?: Request): Record<string, string> {
   const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Content-Security-Policy": CSP_VALUE,
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -79,11 +84,25 @@ function corsPreflightResponse(req?: Request): Response {
  * Verify the HMAC job token on REST endpoints (GET /v1/status, DELETE /v1/diagnose).
  * Returns a 403 Response if the token is missing/invalid, or null if access is allowed.
  * Skipped in dev mode (empty WS_TOKEN_SECRET), mirroring the /ws WebSocket handler.
+ *
+ * Token transport precedence:
+ *   1. `Authorization: Bearer <token>` header (preferred — not logged by Caddy, not in history)
+ *   2. `?token=<token>` query parameter (dev fallback during migration)
  */
 function verifyJobToken(req: Request, jobId: string): Response | null {
   if (!WS_TOKEN_SECRET) return null;
-  const url = new URL(req.url);
-  const token = url.searchParams.get("token");
+  // Prefer the Authorization header; fall back to the query parameter for
+  // dev ergonomics and migration from existing clients. The query fallback is
+  // covered by Caddy log redaction (see Caddyfile).
+  const authHeader = req.headers.get("authorization") ?? "";
+  let token: string | null = null;
+  if (authHeader.toLowerCase().startsWith("bearer ")) {
+    token = authHeader.slice(7).trim();
+  }
+  if (!token) {
+    const url = new URL(req.url);
+    token = url.searchParams.get("token");
+  }
   if (!token || !verifyToken(jobId, token)) {
     logger.warn("rest_token_rejected", { jobId });
     return withCors(
@@ -384,7 +403,12 @@ export function createRoutes(
 
         return withCors(
           Response.json(
-            { jobId, status: "pending", token: generateToken(jobId) },
+            {
+              jobId,
+              status: "pending",
+              token: generateToken(jobId),
+              wsTicket: generateWsTicket(jobId),
+            },
             { status: 202 },
           ),
           req,
@@ -491,7 +515,15 @@ export function createRoutes(
           jobId,
           status: entry.status,
         });
-        return withCors(Response.json({ jobId, ...entry }), req);
+        return withCors(
+          Response.json(
+            { jobId, ...entry },
+            {
+              headers: { "Cache-Control": "no-store, private" },
+            },
+          ),
+          req,
+        );
       },
     },
 
@@ -577,12 +609,33 @@ export function createRoutes(
         }
 
         if (WS_TOKEN_SECRET) {
+          // Prefer the short-lived, single-use ticket (default 120s TTL) so the
+          // long-lived job capability is not exposed in the WebSocket URL.
+          const ticket = url.searchParams.get("ticket");
           const token = url.searchParams.get("token");
-          if (!token || !verifyToken(jobId, token)) {
-            logger.warn("ws_token_rejected", {
-              jobId,
-              reason: "invalid_token",
-            });
+          if (ticket) {
+            if (!verifyWsTicket(jobId, ticket)) {
+              // Log the rejection without the ticket value — credentials must
+              // never appear in logs. The reason field is enough for triage.
+              logger.warn("ws_ticket_rejected", {
+                jobId,
+                reason: "invalid_or_expired_ticket",
+              });
+              return new Response("Invalid or expired ticket", { status: 403 });
+            }
+          } else if (token) {
+            // Migration fallback: accept the long-lived HMAC token on /ws for a
+            // bounded period. The frontend ships wsTicket-based connections;
+            // remove this branch once migration completes (see design.md).
+            if (!verifyToken(jobId, token)) {
+              logger.warn("ws_token_rejected", {
+                jobId,
+                reason: "invalid_token",
+              });
+              return new Response("Invalid or missing token", { status: 403 });
+            }
+          } else {
+            logger.warn("ws_credential_missing", { jobId });
             return new Response("Invalid or missing token", { status: 403 });
           }
         }

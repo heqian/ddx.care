@@ -19,11 +19,12 @@ test.describe("Frontend job context isolation", () => {
   }) => {
     const jobId = "00000000-0000-4000-8000-000000000321";
     const token = "waiting-refresh-secret";
+    const wsTicket = "waiting-refresh-ticket";
     await page.route("**/v1/diagnose", (route) =>
       route.fulfill({
         status: 202,
         contentType: "application/json",
-        body: JSON.stringify({ jobId, status: "pending", token }),
+        body: JSON.stringify({ jobId, status: "pending", token, wsTicket }),
       }),
     );
 
@@ -33,6 +34,7 @@ test.describe("Frontend job context isolation", () => {
     await submitCase(page);
     await expect(page).toHaveURL(new RegExp(`/waiting/${jobId}$`));
     expect(page.url()).not.toContain(token);
+    expect(page.url()).not.toContain(wsTicket);
     expect(await page.title()).not.toContain(token);
 
     await page.reload();
@@ -41,8 +43,15 @@ test.describe("Frontend job context isolation", () => {
       page.getByRole("heading", { name: "Analyzing Case..." }),
     ).toBeVisible();
     await expect.poll(() => sockets.length).toBeGreaterThanOrEqual(2);
-    expect(sockets.at(-1)).toContain(`token=${encodeURIComponent(token)}`);
+    // The job WebSocket must carry the short-lived wsTicket (not the
+    // long-lived token) in the URL. The HMR socket at /_bun/hmr is also
+    // captured; filter for the /ws job socket.
+    const jobSocket = sockets.find((s) => s.includes("/ws?jobId="));
+    expect(jobSocket).toBeTruthy();
+    expect(jobSocket).toContain(`ticket=${encodeURIComponent(wsTicket)}`);
+    expect(jobSocket).not.toContain(`token=`);
     expect(page.url()).not.toContain(token);
+    expect(page.url()).not.toContain(wsTicket);
     expect(await page.title()).not.toContain(token);
   });
 

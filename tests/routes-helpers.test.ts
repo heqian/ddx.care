@@ -40,16 +40,20 @@ describe("corsHeaders", () => {
   function corsHeaders(allowedOrigins: string): Record<string, string> {
     return {
       "Access-Control-Allow-Origin": allowedOrigins,
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
   }
 
   test("returns all CORS headers with configured origin", () => {
     const headers = corsHeaders("https://app.ddx.care");
     expect(headers["Access-Control-Allow-Origin"]).toBe("https://app.ddx.care");
-    expect(headers["Access-Control-Allow-Methods"]).toBe("GET, POST, OPTIONS");
-    expect(headers["Access-Control-Allow-Headers"]).toBe("Content-Type");
+    expect(headers["Access-Control-Allow-Methods"]).toBe(
+      "GET, POST, DELETE, OPTIONS",
+    );
+    expect(headers["Access-Control-Allow-Headers"]).toBe(
+      "Content-Type, Authorization",
+    );
   });
 
   test("returns wildcard origin when configured", () => {

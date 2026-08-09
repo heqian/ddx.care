@@ -258,7 +258,7 @@ describe("API Endpoints", () => {
         "GET, POST, DELETE, OPTIONS",
       );
       expect(res.headers.get("Access-Control-Allow-Headers")).toBe(
-        "Content-Type",
+        "Content-Type, Authorization",
       );
     });
 
@@ -270,7 +270,7 @@ describe("API Endpoints", () => {
       });
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
       expect(res.headers.get("Access-Control-Allow-Headers")).toBe(
-        "Content-Type",
+        "Content-Type, Authorization",
       );
     });
 
@@ -290,7 +290,7 @@ describe("API Endpoints", () => {
         "GET, POST, DELETE, OPTIONS",
       );
       expect(res.headers.get("Access-Control-Allow-Headers")).toBe(
-        "Content-Type",
+        "Content-Type, Authorization",
       );
     });
 
@@ -518,7 +518,7 @@ describe("API Endpoints", () => {
     ): Record<string, string> {
       const headers: Record<string, string> = {
         "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
       };
 
       if (trustedOrigins) {

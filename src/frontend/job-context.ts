@@ -5,6 +5,7 @@ export type JobAuthorizationState = "available" | "missing" | "expired";
 export interface JobContext {
   jobId: string;
   token: string;
+  wsTicket: string;
   expiresAt: number;
   payload?: DiagnoseRequest;
   generation: number;
@@ -21,6 +22,7 @@ export type JobContextAction =
       type: "register";
       jobId: string;
       token: string;
+      wsTicket: string;
       expiresAt: number;
       payload?: DiagnoseRequest;
     }
@@ -62,6 +64,7 @@ export function jobContextReducer(
       [action.jobId]: {
         jobId: action.jobId,
         token: action.token,
+        wsTicket: action.wsTicket,
         expiresAt: action.expiresAt,
         payload: action.payload,
         generation: 0,
@@ -92,6 +95,7 @@ export function jobContextReducer(
       [action.jobId]: {
         jobId: action.jobId,
         token: "",
+        wsTicket: "",
         expiresAt: 0,
         generation: 0,
         status: null,
