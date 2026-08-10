@@ -55,6 +55,9 @@ function ToolHistoryItem({
       >
         {label}
         {isLatest && entry.toolArgs ? `: ${entry.toolArgs}` : ""}
+        {entry.status !== "running" && entry.resultSummary
+          ? ` - ${entry.resultSummary}`
+          : ""}
       </span>
       {entry.status !== "running" && entry.durationMs !== undefined && (
         <span className="text-slate-400 dark:text-slate-500">

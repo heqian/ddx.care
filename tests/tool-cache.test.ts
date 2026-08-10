@@ -20,6 +20,13 @@ import {
   healthCheck,
 } from "../src/backend/tools/utils/tool-cache";
 import { fetchJSON } from "../src/backend/tools/utils/fetch";
+import { medlinePlusSearchTool } from "../src/backend/tools/medlineplus";
+import { runWithCacheTracking } from "../src/backend/workflows/cache-context";
+import { createStepEventHandler } from "../src/backend/workflows/on-step-finish";
+import type {
+  ProgressEvent,
+  ProgressEventType,
+} from "../src/backend/progress-store";
 
 const tmpDir = join(tmpdir(), `tool-cache-test-${Date.now()}`);
 const originalFetch = globalThis.fetch;
@@ -128,7 +135,7 @@ describe("Tool Cache — unit", () => {
   });
 });
 
-describe("fetchJSON — cache integration", () => {
+describe("tool fetch cache integration", () => {
   const dbPath = join(tmpDir, `fetch-test-${process.pid}-${Date.now()}.sqlite`);
 
   beforeAll(() => {
@@ -167,6 +174,85 @@ describe("fetchJSON — cache integration", () => {
     const result2 = await fetchJSON(url);
     expect(result2).toEqual(mockData);
     expect(callCount).toBe(1);
+  });
+
+  test("cached MedlinePlus no-results remains a successful workflow event", async () => {
+    let callCount = 0;
+    globalThis.fetch = vi.fn().mockImplementation(async () => {
+      callCount++;
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          `<?xml version="1.0"?><nlmSearchResult><term>cache-hit-no-results</term><count>0</count></nlmSearchResult>`,
+      };
+    }) as any;
+
+    const events: ProgressEvent[] = [];
+    const handler = createStepEventHandler(
+      "generalist",
+      "medlineplus-cache-hit",
+      (
+        eventType: ProgressEventType,
+        message: string,
+        extra?: Partial<ProgressEvent>,
+      ) => {
+        events.push({
+          time: new Date().toISOString(),
+          message,
+          eventType,
+          ...extra,
+        });
+      },
+    );
+    const executeTracked = () =>
+      runWithCacheTracking(async () => {
+        const result = await medlinePlusSearchTool.execute({
+          condition: "cache-hit-no-results",
+        });
+        handler({
+          toolCalls: [
+            {
+              payload: {
+                toolName: "medlineplus-search",
+                args: { condition: "cache-hit-no-results" },
+              },
+            },
+          ],
+          toolResults: [
+            {
+              payload: {
+                toolName: "medlineplus-search",
+                result,
+                isError: false,
+              },
+            },
+          ],
+        });
+        return result;
+      });
+
+    const first = await executeTracked();
+    const second = await executeTracked();
+
+    expect(callCount).toBe(1);
+    expect(second).toEqual(first);
+    expect(second.ok).toBe(true);
+    if (!second.ok) throw new Error("Expected success result");
+    expect(second.data.noResults).toBe(true);
+
+    const resultEvents = events.filter(
+      (event) => event.eventType === "tool_result",
+    );
+    expect(resultEvents).toHaveLength(2);
+    expect(resultEvents[0].cached).toBeUndefined();
+    expect(resultEvents[1]).toMatchObject({
+      toolName: "medlineplus-search",
+      success: true,
+      toolResultStatus: "success",
+      cached: true,
+      resultSummary: "No MedlinePlus information found for this condition.",
+    });
   });
 
   test("cache miss: different URLs each call fetch", async () => {

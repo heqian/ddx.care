@@ -127,7 +127,7 @@ describe("rareDiseaseSearchTool", () => {
     expect(result.data.results.length).toBeGreaterThanOrEqual(2);
   });
 
-  test("returns error when no diseases match", async () => {
+  test("returns noResults when no diseases match", async () => {
     setupMocks();
     const { initializeOrphadataCache } = await import(
       "../src/backend/orphadata-cache"
@@ -141,9 +141,13 @@ describe("rareDiseaseSearchTool", () => {
       query: "zzz-nonexistent",
       maxResults: 10,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("No rare diseases found matching the query.");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe(
+      "No rare diseases found matching the query.",
+    );
   });
 
   test("respects maxResults parameter", async () => {
@@ -189,7 +193,7 @@ describe("rareDiseaseGenesTool", () => {
     expect(result.data.results[0].source).toBe("4235");
   });
 
-  test("returns error for disease with no genes", async () => {
+  test("returns noResults for disease with no genes", async () => {
     setupMocks();
     const { initializeOrphadataCache } = await import(
       "../src/backend/orphadata-cache"
@@ -200,12 +204,14 @@ describe("rareDiseaseGenesTool", () => {
     await initializeOrphadataCache();
 
     const result = await rareDiseaseGenesTool.execute({ orphacode: 99999 });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("99999");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toContain("99999");
   });
 
-  test("returns error for uncached disease when fetch fails", async () => {
+  test("returns noResults for uncached disease when fetch fails", async () => {
     setupMocks();
     const { initializeOrphadataCache } = await import(
       "../src/backend/orphadata-cache"
@@ -218,9 +224,13 @@ describe("rareDiseaseGenesTool", () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
 
     const result = await rareDiseaseGenesTool.execute({ orphacode: 12345 });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("12345");
-    expect(result.retriable).toBe(false);
+    // The cache layer swallows fetch errors and returns [], so the tool
+    // surfaces this as a noResults success rather than a failure.
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toContain("12345");
   });
 });
 
@@ -243,7 +253,7 @@ describe("rareDiseasePhenotypesTool", () => {
     expect(result.data.results[0].frequency).toBe("Very frequent (99-80%)");
   });
 
-  test("returns error for disease with no phenotypes", async () => {
+  test("returns noResults for disease with no phenotypes", async () => {
     setupMocks();
     const { initializeOrphadataCache } = await import(
       "../src/backend/orphadata-cache"
@@ -256,12 +266,14 @@ describe("rareDiseasePhenotypesTool", () => {
     const result = await rareDiseasePhenotypesTool.execute({
       orphacode: 99999,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("99999");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toContain("99999");
   });
 
-  test("returns error for uncached disease when fetch fails", async () => {
+  test("returns noResults for uncached disease when fetch fails", async () => {
     setupMocks();
     const { initializeOrphadataCache } = await import(
       "../src/backend/orphadata-cache"
@@ -276,8 +288,12 @@ describe("rareDiseasePhenotypesTool", () => {
     const result = await rareDiseasePhenotypesTool.execute({
       orphacode: 12345,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("12345");
-    expect(result.retriable).toBe(false);
+    // The cache layer swallows fetch errors and returns [], so the tool
+    // surfaces this as a noResults success rather than a failure.
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toContain("12345");
   });
 });

@@ -17,6 +17,12 @@ interface MedlinePlusResult {
   url: string;
 }
 
+interface ParsedMedlinePlusXml {
+  results: MedlinePlusResult[];
+  totalResults: number | null;
+  validEnvelope: boolean;
+}
+
 function decodeEntities(s: string): string {
   return s
     .replace(/&lt;/g, "<")
@@ -43,7 +49,14 @@ function extractContent(body: string, name: string): string | undefined {
   return stripTags(stripSpans(decodeEntities(match[1]))).trim();
 }
 
-function parseMedlinePlusXml(xml: string): MedlinePlusResult[] {
+function parseMedlinePlusXml(xml: string): ParsedMedlinePlusXml {
+  const validEnvelope =
+    /<nlmSearchResult(?:\s[^>]*)?>/.test(xml) &&
+    /<\/nlmSearchResult>/.test(xml);
+  const countMatch = xml.match(/<count>\s*(\d+)\s*<\/count>/);
+  const totalResults = countMatch?.[1]
+    ? Number.parseInt(countMatch[1], 10)
+    : null;
   const documents = [
     ...xml.matchAll(/<document[^>]*url="([^"]+)"[^>]*>([\s\S]*?)<\/document>/g),
   ];
@@ -58,13 +71,13 @@ function parseMedlinePlusXml(xml: string): MedlinePlusResult[] {
     results.push({ title, summary, url });
     if (results.length >= MAX_RESULTS) break;
   }
-  return results;
+  return { results, totalResults, validEnvelope };
 }
 
 export const medlinePlusSearchTool = createTool({
   id: "medlineplus-search",
   description:
-    "Search MedlinePlus for patient-friendly health information on diseases, conditions, and wellness topics. Returns plain-language summaries of causes, symptoms, diagnosis, and treatment. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
+    "Search MedlinePlus for patient-friendly health information on diseases, conditions, and wellness topics. Returns plain-language summaries of causes, symptoms, diagnosis, and treatment. When the API succeeds but returns no matches, returns { ok: true, data: { results: [], noResults: true, message } }. On failure, returns { ok: false, error: string, retriable: boolean } where retriable indicates whether retrying might succeed.",
   inputSchema: z.object({
     condition: z
       .string()
@@ -83,6 +96,8 @@ export const medlinePlusSearchTool = createTool({
             url: z.string().optional(),
           }),
         ),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -96,16 +111,32 @@ export const medlinePlusSearchTool = createTool({
 
     try {
       const xml = await fetchText(url);
-      const results = parseMedlinePlusXml(xml);
+      const { results, totalResults, validEnvelope } = parseMedlinePlusXml(xml);
 
-      if (results.length > 0) {
+      if (
+        validEnvelope &&
+        totalResults !== null &&
+        totalResults > 0 &&
+        results.length > 0
+      ) {
         return { ok: true as const, data: { results } };
+      }
+
+      if (validEnvelope && totalResults === 0 && results.length === 0) {
+        return {
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No MedlinePlus information found for this condition.",
+          },
+        };
       }
 
       return {
         ok: false as const,
-        error: "No information found for this condition.",
-        retriable: true,
+        error: "MedlinePlus returned an invalid or incomplete response.",
+        retriable: false,
       };
     } catch (error: unknown) {
       if (error instanceof APITimeoutError) {

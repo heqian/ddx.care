@@ -34,6 +34,8 @@ export const rareDiseaseSearchTool = createTool({
             name: z.string(),
           }),
         ),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -46,15 +48,22 @@ export const rareDiseaseSearchTool = createTool({
     query,
     maxResults,
   }): Promise<
-    ToolResult<{ results: Array<{ orphacode: number; name: string }> }>
+    ToolResult<{
+      results: Array<{ orphacode: number; name: string }>;
+      noResults?: true;
+      message?: string;
+    }>
   > => {
     try {
       const diseases = searchDiseases(query, maxResults ?? 10);
       if (diseases.length === 0) {
         return {
-          ok: false,
-          error: "No rare diseases found matching the query.",
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No rare diseases found matching the query.",
+          },
         };
       }
       return { ok: true as const, data: { results: diseases } };
@@ -92,6 +101,8 @@ export const rareDiseaseGenesTool = createTool({
             source: z.string().nullable().optional(),
           }),
         ),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -110,15 +121,20 @@ export const rareDiseaseGenesTool = createTool({
         associationType: string;
         source?: string | null;
       }>;
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
       const genes = await getDiseaseGenes(orphacode);
       if (genes.length === 0) {
         return {
-          ok: false,
-          error: `No gene data found for ORPHAcode ${orphacode}. The disease may not have associated genes in the database.`,
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: `No gene data found for ORPHAcode ${orphacode}. The disease may not have associated genes in the database.`,
+          },
         };
       }
       return { ok: true as const, data: { results: genes } };
@@ -155,6 +171,8 @@ export const rareDiseasePhenotypesTool = createTool({
             frequency: z.string().nullable().optional(),
           }),
         ),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -172,15 +190,20 @@ export const rareDiseasePhenotypesTool = createTool({
         phenotypeName: string;
         frequency?: string | null;
       }>;
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
       const phenotypes = await getDiseasePhenotypes(orphacode);
       if (phenotypes.length === 0) {
         return {
-          ok: false,
-          error: `No phenotype data found for ORPHAcode ${orphacode}. The disease may not have associated phenotypes in the database.`,
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: `No phenotype data found for ORPHAcode ${orphacode}. The disease may not have associated phenotypes in the database.`,
+          },
         };
       }
       return { ok: true as const, data: { results: phenotypes } };

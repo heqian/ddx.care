@@ -56,6 +56,8 @@ export const hpoTermSearchTool = createTool({
           }),
         ),
         totalAvailable: z.number().optional(),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -71,6 +73,8 @@ export const hpoTermSearchTool = createTool({
     ToolResult<{
       results: Array<{ hpoId: string; name: string }>;
       totalAvailable?: number;
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
@@ -82,9 +86,12 @@ export const hpoTermSearchTool = createTool({
 
       if (!data || !data[3] || data[3].length === 0) {
         return {
-          ok: false,
-          error: "No HPO terms found matching the query.",
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No HPO terms found matching the query.",
+          },
         };
       }
 
@@ -135,6 +142,8 @@ export const loincTestLookupTool = createTool({
           }),
         ),
         totalAvailable: z.number().optional(),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -155,6 +164,8 @@ export const loincTestLookupTool = createTool({
         method?: string;
       }>;
       totalAvailable?: number;
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
@@ -166,9 +177,12 @@ export const loincTestLookupTool = createTool({
 
       if (!data || !data[3] || data[3].length === 0) {
         return {
-          ok: false,
-          error: "No LOINC tests found matching the query.",
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No LOINC tests found matching the query.",
+          },
         };
       }
 

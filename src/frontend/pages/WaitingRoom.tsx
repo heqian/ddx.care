@@ -217,6 +217,7 @@ export function WaitingRoom({
             let statusIcon = "";
             let durationText = "";
             let cachedText = "";
+            let resultSummaryText = "";
             if (isToolResult) {
               statusIcon =
                 p.toolResultStatus === "partial"
@@ -229,6 +230,9 @@ export function WaitingRoom({
               }
               if (p.cached) {
                 cachedText = " (cached)";
+              }
+              if (p.resultSummary) {
+                resultSummaryText = `: ${p.resultSummary}`;
               }
             } else if (isToolCall) {
               statusIcon = " ⟳";
@@ -243,6 +247,7 @@ export function WaitingRoom({
                   [{new Date(p.time).toLocaleTimeString()}]
                 </span>
                 {p.message}
+                {resultSummaryText}
                 {statusIcon}
                 {durationText}
                 {cachedText}

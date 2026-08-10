@@ -711,6 +711,36 @@ describe("AgentStatusCard", () => {
     expect(getByText(container, /aspirin \+ warfarin/)).toBeTruthy();
   });
 
+  test("shows cached MedlinePlus no-results as a successful summary", () => {
+    resetBody();
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Generalist",
+        agentId: "generalist",
+        description: "General practitioner",
+        status: "active",
+        toolHistory: [
+          {
+            toolName: "medlineplus-search",
+            toolArgs: "unknown condition",
+            status: "success",
+            durationMs: 10,
+            resultSummary:
+              "No MedlinePlus information found for this condition.",
+            cached: true,
+          },
+        ],
+      }),
+    );
+
+    const successText = container.querySelector(".text-emerald-600");
+    expect(successText?.textContent).toContain(
+      "No MedlinePlus information found for this condition.",
+    );
+    expect(container.querySelector(".text-red-600")).toBeNull();
+    expect(getByText(container, "cached")).toBeTruthy();
+  });
+
   test("shows 'Consulting...' when active but no toolHistory", () => {
     resetBody();
     const { container } = render(
@@ -2478,6 +2508,36 @@ describe("deriveToolHistory", () => {
     expect(history![0].status).toBe("success");
     expect(history![0].durationMs).toBe(1200);
     expect(history![0].resultSummary).toBe("2 interactions found");
+  });
+
+  test("maps cached MedlinePlus no-results to success", () => {
+    const map = deriveToolHistory([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Generalist: Searching MedlinePlus",
+        eventType: "tool_call",
+        agentId: "generalist",
+        toolName: "medlineplus-search",
+        toolArgs: "unknown condition",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Generalist: Searching MedlinePlus completed",
+        eventType: "tool_result",
+        agentId: "generalist",
+        toolName: "medlineplus-search",
+        success: true,
+        toolResultStatus: "success",
+        resultSummary: "No MedlinePlus information found for this condition.",
+        cached: true,
+      },
+    ]);
+
+    expect(map.get("generalist")![0]).toMatchObject({
+      status: "success",
+      cached: true,
+      resultSummary: "No MedlinePlus information found for this condition.",
+    });
   });
 
   test("updates running entry to error on failed tool_result", () => {

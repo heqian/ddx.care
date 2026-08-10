@@ -194,6 +194,8 @@ export const adverseEventsTool = createTool({
             disclaimer: z.string().optional(),
           })
           .optional(),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -218,6 +220,8 @@ export const adverseEventsTool = createTool({
         receiveDate?: string;
       }>;
       meta?: { totalResults?: number; disclaimer?: string };
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
@@ -226,9 +230,12 @@ export const adverseEventsTool = createTool({
 
       if (result.error) {
         return {
-          ok: false,
-          error: "No adverse event reports found for this drug.",
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No adverse event reports found for this drug.",
+          },
         };
       }
 
@@ -323,6 +330,8 @@ export const drugLabelingTool = createTool({
             boxedWarning: z.string().optional(),
           }),
         ),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -350,6 +359,8 @@ export const drugLabelingTool = createTool({
         drugInteractions?: string;
         boxedWarning?: string;
       }>;
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
@@ -364,9 +375,12 @@ export const drugLabelingTool = createTool({
 
       if (result.error) {
         return {
-          ok: false,
-          error: "No labeling information found for this drug.",
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No labeling information found for this drug.",
+          },
         };
       }
 
@@ -454,6 +468,8 @@ export const drugRecallTool = createTool({
             recallDate: z.string().optional(),
           }),
         ),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -476,6 +492,8 @@ export const drugRecallTool = createTool({
         initiatingFirm?: string;
         recallDate?: string;
       }>;
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
@@ -484,9 +502,12 @@ export const drugRecallTool = createTool({
 
       if (result.error) {
         return {
-          ok: false,
-          error: "No recall data found for this drug.",
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No recall data found for this drug.",
+          },
         };
       }
 
@@ -540,6 +561,8 @@ export const substanceToxicologyTool = createTool({
             codeSystem: z.string().optional(),
           }),
         ),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -560,6 +583,8 @@ export const substanceToxicologyTool = createTool({
         code?: string;
         codeSystem?: string;
       }>;
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
@@ -568,9 +593,12 @@ export const substanceToxicologyTool = createTool({
 
       if (result.error) {
         return {
-          ok: false,
-          error: "No substance data found.",
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No substance data found.",
+          },
         };
       }
 
@@ -638,6 +666,8 @@ export const drugShortagesTool = createTool({
             updateDate: z.string().optional(),
           }),
         ),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -662,6 +692,8 @@ export const drugShortagesTool = createTool({
         therapeuticCategory?: string[];
         updateDate?: string;
       }>;
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
@@ -670,9 +702,12 @@ export const drugShortagesTool = createTool({
 
       if (result.error) {
         return {
-          ok: false,
-          error: "No drug shortage data found.",
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No drug shortage data found.",
+          },
         };
       }
 
@@ -746,6 +781,8 @@ export const foodAdverseEventsTool = createTool({
             dateStarted: z.string().optional(),
           }),
         ),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -768,6 +805,8 @@ export const foodAdverseEventsTool = createTool({
         consumerGender?: string;
         dateStarted?: string;
       }>;
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
@@ -776,9 +815,12 @@ export const foodAdverseEventsTool = createTool({
 
       if (result.error) {
         return {
-          ok: false,
-          error: "No food adverse event reports found.",
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No food adverse event reports found.",
+          },
         };
       }
 
@@ -843,6 +885,8 @@ export const deviceAdverseEventsTool = createTool({
             dateReceived: z.string().optional(),
           }),
         ),
+        noResults: z.literal(true).optional(),
+        message: z.string().optional(),
       }),
     }),
     z.object({
@@ -866,6 +910,8 @@ export const deviceAdverseEventsTool = createTool({
         dateOfEvent?: string;
         dateReceived?: string;
       }>;
+      noResults?: true;
+      message?: string;
     }>
   > => {
     try {
@@ -880,9 +926,12 @@ export const deviceAdverseEventsTool = createTool({
 
       if (result.error) {
         return {
-          ok: false,
-          error: "No device adverse event reports found.",
-          retriable: false,
+          ok: true as const,
+          data: {
+            results: [],
+            noResults: true as const,
+            message: "No device adverse event reports found.",
+          },
         };
       }
 

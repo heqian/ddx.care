@@ -797,7 +797,7 @@ describe("medlineplus tool execute", () => {
       ok: true,
       status: 200,
       text: async () =>
-        `<?xml version="1.0"?><nlmSearchResult><list><document url="https://medlineplus.gov/asthma.html"><content name="title">&lt;span class="qt0"&gt;Asthma&lt;/span&gt;</content><content name="FullSummary">What is &lt;span class="qt0"&gt;asthma&lt;/span&gt;?&lt;p&gt;It is a lung disease.&lt;/p&gt;</content></document></list></nlmSearchResult>`,
+        `<?xml version="1.0"?><nlmSearchResult><count>1</count><list><document url="https://medlineplus.gov/asthma.html"><content name="title">&lt;span class="qt0"&gt;Asthma&lt;/span&gt;</content><content name="FullSummary">What is &lt;span class="qt0"&gt;asthma&lt;/span&gt;?&lt;p&gt;It is a lung disease.&lt;/p&gt;</content></document></list></nlmSearchResult>`,
     }) as any;
 
     const result = await medlinePlusSearchTool.execute({
@@ -811,7 +811,7 @@ describe("medlineplus tool execute", () => {
     );
   });
 
-  test("medlinePlusSearchTool returns error for unknown condition", async () => {
+  test("medlinePlusSearchTool returns noResults for unknown condition", async () => {
     const { medlinePlusSearchTool } = await import(
       "../src/backend/tools/medlineplus"
     );
@@ -826,10 +826,58 @@ describe("medlineplus tool execute", () => {
     const result = await medlinePlusSearchTool.execute({
       condition: "xyz-unknown",
     });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe(
+      "No MedlinePlus information found for this condition.",
+    );
+  });
+
+  test("medlinePlusSearchTool rejects malformed HTTP 200 responses", async () => {
+    const { medlinePlusSearchTool } = await import(
+      "../src/backend/tools/medlineplus"
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => "<html><body>Upstream error</body></html>",
+    }) as any;
+
+    const result = await medlinePlusSearchTool.execute({
+      condition: "malformed-response",
+    });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected error result");
-    expect(result.error).toBe("No information found for this condition.");
-    expect(result.retriable).toBe(true);
+    expect(result.error).toBe(
+      "MedlinePlus returned an invalid or incomplete response.",
+    );
+    expect(result.retriable).toBe(false);
+  });
+
+  test("medlinePlusSearchTool rejects positive counts without documents", async () => {
+    const { medlinePlusSearchTool } = await import(
+      "../src/backend/tools/medlineplus"
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        `<?xml version="1.0"?><nlmSearchResult><term>schema-drift</term><count>1</count></nlmSearchResult>`,
+    }) as any;
+
+    const result = await medlinePlusSearchTool.execute({
+      condition: "schema-drift",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected error result");
+    expect(result.error).toBe(
+      "MedlinePlus returned an invalid or incomplete response.",
+    );
+    expect(result.retriable).toBe(false);
   });
 
   test("medlinePlusSearchTool handles fetch timeout gracefully", async () => {
@@ -858,7 +906,7 @@ describe("medlineplus tool execute", () => {
       ok: true,
       status: 200,
       text: async () =>
-        `<?xml version="1.0"?><nlmSearchResult><list><document url="https://medlineplus.gov/x.html"><content name="title">Topic</content><content name="snippet">Brief snippet text</content></document></list></nlmSearchResult>`,
+        `<?xml version="1.0"?><nlmSearchResult><count>1</count><list><document url="https://medlineplus.gov/x.html"><content name="title">Topic</content><content name="snippet">Brief snippet text</content></document></list></nlmSearchResult>`,
     }) as any;
 
     const result = await medlinePlusSearchTool.execute({
@@ -973,7 +1021,7 @@ describe("open-fda tool execute", () => {
     expect(result.data.meta?.totalResults).toBe(100);
   });
 
-  test("adverseEventsTool handles 404 with ignore404", async () => {
+  test("adverseEventsTool handles 404 with noResults", async () => {
     const { adverseEventsTool } = await import("../src/backend/tools/open-fda");
 
     globalThis.fetch = vi.fn().mockResolvedValue({
@@ -986,10 +1034,13 @@ describe("open-fda tool execute", () => {
       drugName: "unknown-drug",
       limit: 3,
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("Expected error result");
-    expect(result.error).toBe("No adverse event reports found for this drug.");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe(
+      "No adverse event reports found for this drug.",
+    );
   });
 
   test("drugLabelingTool returns parsed labeling", async () => {

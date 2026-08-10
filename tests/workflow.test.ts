@@ -2379,6 +2379,26 @@ describe("summarizeToolResult", () => {
     ).toBe("OpenFDA unavailable (retriable)");
   });
 
+  test("surfaces noResults message for empty-result success envelopes", () => {
+    const result = summarizeToolResult("medlineplus-search", {
+      ok: true,
+      data: {
+        results: [],
+        noResults: true,
+        message: "No MedlinePlus information found for this condition.",
+      },
+    });
+    expect(result).toBe("No MedlinePlus information found for this condition.");
+  });
+
+  test("falls back to generic summary when noResults has no message", () => {
+    const result = summarizeToolResult("adverse-events", {
+      ok: true,
+      data: { results: [], noResults: true },
+    });
+    expect(result).toBe("No results found");
+  });
+
   test("unwraps another medical tool result", () => {
     const result = summarizeToolResult("drug-labeling", {
       ok: true,
@@ -2563,6 +2583,42 @@ describe("createStepEventHandler", () => {
     expect(event.toolResultStatus).toBe("failed");
     expect(event.retriable).toBe(true);
     expect(event.message).toContain("failed");
+  });
+
+  test("treats noResults success envelopes as success, not failed", () => {
+    const { events, emit } = createMockEmit();
+    const handler = createStepEventHandler(
+      "generalist",
+      "job-no-results",
+      emit,
+    );
+
+    handler({
+      toolResults: [
+        {
+          payload: {
+            toolName: "medlineplus-search",
+            result: {
+              ok: true,
+              data: {
+                results: [],
+                noResults: true,
+                message: "No MedlinePlus information found for this condition.",
+              },
+            },
+            isError: false,
+          },
+        },
+      ],
+    });
+
+    const event = events.find((item) => item.eventType === "tool_result")!;
+    expect(event.success).toBe(true);
+    expect(event.toolResultStatus).toBe("success");
+    expect(event.message).toContain("completed");
+    expect(event.resultSummary).toBe(
+      "No MedlinePlus information found for this condition.",
+    );
   });
 
   test("marks partial coverage without describing complete success", () => {

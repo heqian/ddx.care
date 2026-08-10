@@ -83,6 +83,17 @@ export function summarizeToolResult(
     obj = obj.data as Record<string, unknown>;
   }
 
+  // A `noResults: true` marker indicates the API call succeeded but the
+  // source had no records for this query. Surface the tool's human-readable
+  // message (e.g. "No MedlinePlus information found for this condition.") so
+  // the agent and UI log convey why data is missing — without this, the
+  // tool-specific count branches below would print "0 results".
+  if (obj.noResults === true) {
+    const message = extractStringField(obj, "message");
+    if (message) return truncateSummary(message);
+    return truncateSummary("No results found");
+  }
+
   switch (toolName) {
     case "drug-interaction": {
       const interactions = obj.interactions;

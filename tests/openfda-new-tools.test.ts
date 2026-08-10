@@ -86,7 +86,7 @@ describe("drugShortagesTool", () => {
     expect(result.data.results[0].company).toBe("Pfizer");
   });
 
-  test("handles 404 (no shortage data)", async () => {
+  test("handles 404 with noResults (no shortage data)", async () => {
     const { drugShortagesTool } = await import("../src/backend/tools/open-fda");
 
     globalThis.fetch = vi.fn().mockResolvedValue({
@@ -99,9 +99,11 @@ describe("drugShortagesTool", () => {
       drugName: "unknown",
       limit: 5,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("No drug shortage data found.");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe("No drug shortage data found.");
   });
 
   test("handles empty results array", async () => {
@@ -201,7 +203,7 @@ describe("foodAdverseEventsTool", () => {
     expect(result.data.results[0].products).toEqual([]);
   });
 
-  test("handles 404 (no food events)", async () => {
+  test("handles 404 with noResults (no food events)", async () => {
     const { foodAdverseEventsTool } = await import(
       "../src/backend/tools/open-fda"
     );
@@ -216,9 +218,11 @@ describe("foodAdverseEventsTool", () => {
       productName: "unknown",
       limit: 5,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("No food adverse event reports found.");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe("No food adverse event reports found.");
   });
 
   test("handles empty results", async () => {
@@ -382,7 +386,7 @@ describe("deviceAdverseEventsTool", () => {
     expect(result.data.results[0].patientProblems).toEqual([]);
   });
 
-  test("handles 404 (no device events)", async () => {
+  test("handles 404 with noResults (no device events)", async () => {
     const { deviceAdverseEventsTool } = await import(
       "../src/backend/tools/open-fda"
     );
@@ -397,9 +401,11 @@ describe("deviceAdverseEventsTool", () => {
       deviceName: "unknown",
       limit: 5,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("No device adverse event reports found.");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe("No device adverse event reports found.");
   });
 
   test("handles empty results", async () => {

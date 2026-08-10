@@ -40,7 +40,7 @@ describe("hpoTermSearchTool", () => {
     expect(result.data.totalAvailable).toBe(6);
   });
 
-  test("returns error when no terms found", async () => {
+  test("returns noResults when no terms found", async () => {
     const { hpoTermSearchTool } = await import(
       "../src/backend/tools/nlm-clinical-tables"
     );
@@ -55,12 +55,14 @@ describe("hpoTermSearchTool", () => {
       query: "zzz-nonexistent",
       maxResults: 10,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("No HPO terms found matching the query.");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe("No HPO terms found matching the query.");
   });
 
-  test("handles 404 response gracefully", async () => {
+  test("handles 404 response with noResults", async () => {
     const { hpoTermSearchTool } = await import(
       "../src/backend/tools/nlm-clinical-tables"
     );
@@ -75,9 +77,11 @@ describe("hpoTermSearchTool", () => {
       query: "test",
       maxResults: 10,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("No HPO terms found matching the query.");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe("No HPO terms found matching the query.");
   });
 
   test("handles network error", async () => {
@@ -92,11 +96,12 @@ describe("hpoTermSearchTool", () => {
       maxResults: 10,
     });
     expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected error result");
     expect(result.error).toContain("Network error");
     expect(result.retriable).toBe(true);
   });
 
-  test("handles null data in response", async () => {
+  test("handles null data with noResults", async () => {
     const { hpoTermSearchTool } = await import(
       "../src/backend/tools/nlm-clinical-tables"
     );
@@ -111,9 +116,11 @@ describe("hpoTermSearchTool", () => {
       query: "test",
       maxResults: 10,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("No HPO terms found matching the query.");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe("No HPO terms found matching the query.");
   });
 });
 
@@ -172,7 +179,7 @@ describe("loincTestLookupTool", () => {
     expect(result.data.results[0].method).toBeUndefined();
   });
 
-  test("returns error when no tests found", async () => {
+  test("returns noResults when no tests found", async () => {
     const { loincTestLookupTool } = await import(
       "../src/backend/tools/nlm-clinical-tables"
     );
@@ -187,12 +194,16 @@ describe("loincTestLookupTool", () => {
       query: "zzz-nonexistent",
       maxResults: 10,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("No LOINC tests found matching the query.");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe(
+      "No LOINC tests found matching the query.",
+    );
   });
 
-  test("handles 404 response", async () => {
+  test("handles 404 with noResults", async () => {
     const { loincTestLookupTool } = await import(
       "../src/backend/tools/nlm-clinical-tables"
     );
@@ -207,9 +218,13 @@ describe("loincTestLookupTool", () => {
       query: "test",
       maxResults: 10,
     });
-    expect(result.ok).toBe(false);
-    expect(result.error).toBe("No LOINC tests found matching the query.");
-    expect(result.retriable).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("Expected success result");
+    expect(result.data.results).toEqual([]);
+    expect(result.data.noResults).toBe(true);
+    expect(result.data.message).toBe(
+      "No LOINC tests found matching the query.",
+    );
   });
 
   test("handles network error", async () => {
