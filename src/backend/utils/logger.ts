@@ -126,6 +126,7 @@ export const logger = {
     jobId: string,
     toolName: string,
     toolArgs: string | null,
+    toolCallId?: string,
   ): void {
     if (AUDIT_LOG_REDACT_TOOL_ARGS) {
       const argsPresent = toolArgs !== null && toolArgs !== "";
@@ -136,6 +137,7 @@ export const logger = {
         agentId,
         jobId,
         toolName,
+        ...(toolCallId && { toolCallId }),
         toolArgs: null,
         argsPresent,
         argCount,
@@ -145,6 +147,7 @@ export const logger = {
         agentId,
         jobId,
         toolName,
+        ...(toolCallId && { toolCallId }),
         toolArgs,
       });
     }
@@ -158,11 +161,13 @@ export const logger = {
     durationMs: number,
     resultSummary: string | null,
     retriable?: boolean,
+    toolCallId?: string,
   ): void {
     this.info("tool_result", {
       agentId,
       jobId,
       toolName,
+      ...(toolCallId && { toolCallId }),
       success: status === "success",
       status,
       ...(retriable !== undefined && { retriable }),

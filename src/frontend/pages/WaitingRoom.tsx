@@ -68,6 +68,7 @@ export function deriveToolHistory(
     if (p.eventType === "tool_call" && p.agentId && p.toolName) {
       const history = map.get(p.agentId) ?? [];
       history.push({
+        toolCallId: p.toolCallId,
         toolName: p.toolName,
         toolArgs: p.toolArgs ?? null,
         status: "running",
@@ -75,32 +76,67 @@ export function deriveToolHistory(
       map.set(p.agentId, history);
     }
     if (p.eventType === "tool_result" && p.agentId && p.toolName) {
-      const history = map.get(p.agentId);
-      if (history) {
-        const runningIdx = [...history]
-          .reverse()
-          .findIndex(
-            (e) => e.toolName === p.toolName && e.status === "running",
-          );
-        if (runningIdx !== -1) {
-          const actualIdx = history.length - 1 - runningIdx;
-          history[actualIdx] = {
-            ...history[actualIdx],
-            status:
-              p.toolResultStatus === "partial"
-                ? "partial"
-                : p.toolResultStatus === "failed" || p.success === false
-                  ? "error"
-                  : "success",
-            durationMs: p.durationMs,
-            resultSummary: p.resultSummary,
-            ...(p.cached && { cached: true }),
-          };
-        }
+      const history = map.get(p.agentId) ?? [];
+      const matchingIdx = p.toolCallId
+        ? history.findIndex((entry) => entry.toolCallId === p.toolCallId)
+        : [...history]
+            .reverse()
+            .findIndex(
+              (entry) =>
+                entry.toolName === p.toolName && entry.status === "running",
+            );
+      const actualIdx =
+        p.toolCallId || matchingIdx === -1
+          ? matchingIdx
+          : history.length - 1 - matchingIdx;
+      const completedEntry: ToolHistoryEntry = {
+        toolCallId: p.toolCallId,
+        toolName: p.toolName,
+        toolArgs:
+          p.toolArgs ?? (actualIdx === -1 ? null : history[actualIdx].toolArgs),
+        status:
+          p.toolResultStatus === "partial"
+            ? "partial"
+            : p.toolResultStatus === "failed" || p.success === false
+              ? "error"
+              : "success",
+        durationMs: p.durationMs,
+        resultSummary: p.resultSummary,
+      };
+
+      if (actualIdx === -1) {
+        history.push(completedEntry);
+      } else {
+        history[actualIdx] = { ...history[actualIdx], ...completedEntry };
       }
+      map.set(p.agentId, history);
     }
   }
   return map;
+}
+
+export function deriveVisibleProgress(
+  progress: ProgressEvent[] | undefined,
+): ProgressEvent[] {
+  if (!progress) return [];
+  const completedCallIds = new Set(
+    progress
+      .filter((event) => event.eventType === "tool_result")
+      .map((event) =>
+        event.toolCallId
+          ? `${event.agentId ?? "unknown"}:${event.toolCallId}`
+          : null,
+      )
+      .filter((toolCallId): toolCallId is string => toolCallId !== null),
+  );
+  return progress.filter(
+    (event) =>
+      event.eventType !== "tool_call" ||
+      !event.toolCallId ||
+      !completedCallIds.has(
+        `${event.agentId ?? "unknown"}:${event.toolCallId}`,
+      ),
+  );
 }
 
 export function WaitingRoom({
@@ -158,9 +194,14 @@ export function WaitingRoom({
     [status?.progress],
   );
 
+  const visibleProgress = useMemo(
+    () => deriveVisibleProgress(status?.progress),
+    [status?.progress],
+  );
+
   const showRetry = status?.status === "failed";
 
-  const hasProgress = status?.progress && status.progress.length > 0;
+  const hasProgress = visibleProgress.length > 0;
 
   const handleCancelClick = useCallback(() => {
     onCancel();
@@ -207,7 +248,7 @@ export function WaitingRoom({
               Starting analysis... consultations will appear here as they begin.
             </div>
           )}
-          {status?.progress?.map((p, i) => {
+          {visibleProgress.map((p, i) => {
             const isToolCall = p.eventType === "tool_call";
             const isToolResult = p.eventType === "tool_result";
             const isTool = isToolCall || isToolResult;
@@ -216,7 +257,6 @@ export function WaitingRoom({
 
             let statusIcon = "";
             let durationText = "";
-            let cachedText = "";
             let resultSummaryText = "";
             if (isToolResult) {
               statusIcon =
@@ -226,13 +266,10 @@ export function WaitingRoom({
                     ? " ✗"
                     : " ✓";
               if (p.durationMs !== undefined) {
-                durationText = ` (${(p.durationMs / 1000).toFixed(1)}s)`;
-              }
-              if (p.cached) {
-                cachedText = " (cached)";
+                durationText = ` (${p.durationMs < 100 ? "<0.1" : (p.durationMs / 1000).toFixed(1)}s)`;
               }
               if (p.resultSummary) {
-                resultSummaryText = `: ${p.resultSummary}`;
+                resultSummaryText = ` - ${p.resultSummary}`;
               }
             } else if (isToolCall) {
               statusIcon = " ⟳";
@@ -240,7 +277,11 @@ export function WaitingRoom({
 
             return (
               <div
-                key={i}
+                key={
+                  p.toolCallId
+                    ? `${p.eventType}-${p.agentId ?? "unknown"}-${p.toolCallId}`
+                    : i
+                }
                 className={`${baseColor} opacity-90 break-words ${indent}`}
               >
                 <span className="text-slate-500 text-xs mr-2">
@@ -250,7 +291,6 @@ export function WaitingRoom({
                 {resultSummaryText}
                 {statusIcon}
                 {durationText}
-                {cachedText}
               </div>
             );
           })}

@@ -17,7 +17,7 @@ import {
 } from "../src/backend/workflows/diagnostic-workflow";
 import { reportOutcomeSchema } from "../src/shared/report-outcome";
 import { summarizeToolResult } from "../src/backend/workflows/tool-result-summary";
-import { createStepEventHandler } from "../src/backend/workflows/on-step-finish";
+import { createToolEventHooks } from "../src/backend/workflows/tool-event-hooks";
 import type { ProgressEvent } from "../src/backend/progress-store";
 import * as abortStore from "../src/backend/utils/abort-controller-store";
 import {
@@ -26,6 +26,47 @@ import {
 } from "../src/backend/utils/errors";
 import { mastra } from "../src/backend";
 import { specialistIds, specialists } from "../src/backend/agents";
+
+function createStepEventHandler(
+  agentId: Parameters<typeof createToolEventHooks>[0],
+  jobId: string,
+  emit: Parameters<typeof createToolEventHooks>[2],
+) {
+  const hooks = createToolEventHooks(agentId, jobId, emit);
+  return (step: any) => {
+    const toolCalls = step.toolCalls ?? [];
+    const callIds = toolCalls.map(
+      (call: any, index: number) =>
+        call.payload.toolCallId ?? `test-tool-call-${index}`,
+    );
+    for (const [index, call] of toolCalls.entries()) {
+      hooks.beforeToolCall?.({
+        toolName: call.payload.toolName,
+        input: call.payload.args,
+        context: { toolCallId: callIds[index] },
+      });
+    }
+    for (const [index, result] of (step.toolResults ?? []).entries()) {
+      const thrownError =
+        result.payload.isError === true &&
+        result.payload.result instanceof Error
+          ? result.payload.result
+          : undefined;
+      hooks.afterToolCall?.({
+        toolName: result.payload.toolName,
+        input: result.payload.args,
+        output: thrownError ? undefined : result.payload.result,
+        error: thrownError,
+        context: {
+          toolCallId:
+            result.payload.toolCallId ??
+            callIds[index] ??
+            `test-tool-result-${index}`,
+        },
+      });
+    }
+  };
+}
 
 describe("splitToList", () => {
   test("returns empty array for undefined", () => {
@@ -2277,15 +2318,15 @@ describe("summarizeToolResult", () => {
 
   test("returns string truncated to 200 chars", () => {
     const long = "a".repeat(300);
-    const result = summarizeToolResult("drug-interaction", long);
+    const result = summarizeToolResult("unknown-tool", new Error(long));
     expect(result).not.toBeNull();
-    expect(result!.length).toBeLessThanOrEqual(201);
-    expect(result!.endsWith("…")).toBe(true);
+    expect(result!.length).toBeLessThanOrEqual(200);
+    expect(result!.endsWith("...")).toBe(true);
   });
 
-  test("returns short string as-is", () => {
-    expect(summarizeToolResult("drug-interaction", "short result")).toBe(
-      "short result",
+  test("does not expose arbitrary plain-text tool output", () => {
+    expect(summarizeToolResult("unknown-tool", "short result")).toBe(
+      "Tool completed with text output",
     );
   });
 
@@ -2320,7 +2361,7 @@ describe("summarizeToolResult", () => {
       },
     });
     expect(result).toBe(
-      "3 interactions found (partial coverage; 2 of 3 drugs checked)",
+      "3 FDA-label findings; 2 of 3 drugs checked. Partial coverage.",
     );
   });
 
@@ -2335,7 +2376,7 @@ describe("summarizeToolResult", () => {
       },
     });
     expect(result).toBe(
-      "No interactions found in checked FDA labels (complete coverage; 2 of 2 drugs checked; not comprehensive clearance)",
+      "No interactions found in checked FDA labels; 2 of 2 drugs checked. Not comprehensive clearance.",
     );
   });
 
@@ -2350,7 +2391,7 @@ describe("summarizeToolResult", () => {
       },
     });
     expect(result).toBe(
-      "Unknown interaction result (partial coverage; 1 of 2 drugs checked); no reliable negative result",
+      "Interaction status unknown; 1 of 2 drugs checked. No reliable negative result.",
     );
   });
 
@@ -2364,9 +2405,9 @@ describe("summarizeToolResult", () => {
         interactions: [],
       },
     });
-    expect(result).toContain("Unknown interaction result");
-    expect(result).toContain("unavailable coverage");
-    expect(result).toContain("no reliable negative result");
+    expect(result).toContain("Interaction status unknown");
+    expect(result).toContain("0 of 2 drugs checked");
+    expect(result).toContain("No reliable negative result");
   });
 
   test("summarizes semantic tool failures and retriable classification", () => {
@@ -2376,7 +2417,7 @@ describe("summarizeToolResult", () => {
         error: "OpenFDA unavailable",
         retriable: true,
       }),
-    ).toBe("OpenFDA unavailable (retriable)");
+    ).toBe("OpenFDA unavailable (retry may succeed)");
   });
 
   test("surfaces noResults message for empty-result success envelopes", () => {
@@ -2402,50 +2443,183 @@ describe("summarizeToolResult", () => {
   test("unwraps another medical tool result", () => {
     const result = summarizeToolResult("drug-labeling", {
       ok: true,
-      data: { brandName: "Lipitor" },
+      data: { results: [{ brandName: "Lipitor" }] },
     });
-    expect(result).toBe("Label found for Lipitor");
+    expect(result).toBe("1 FDA label record returned");
   });
 
   test("summarizes adverse-events with count", () => {
-    const result = summarizeToolResult("adverse-events", { count: 10 });
-    expect(result).toBe("10 adverse events");
+    const result = summarizeToolResult("adverse-events", {
+      results: [{}, {}],
+      meta: { totalResults: 10 },
+    });
+    expect(result).toBe(
+      "2 of 10 FDA adverse-event reports returned; reports do not establish causality",
+    );
   });
 
-  test("summarizes clinical-trials-search with totalResults", () => {
+  test("summarizes clinical-trials-search with totalCount", () => {
     const result = summarizeToolResult("clinical-trials-search", {
-      totalResults: 5,
+      results: [{}, {}],
+      totalCount: 5,
     });
-    expect(result).toBe("5 trials found");
+    expect(result).toBe("2 of 5 clinical trials returned");
   });
 
   test("summarizes medlineplus-search with results", () => {
     const result = summarizeToolResult("medlineplus-search", {
       results: [{}, {}],
     });
-    expect(result).toBe("2 topics");
+    expect(result).toBe("2 MedlinePlus topics returned");
   });
 
-  test("falls back to JSON for unknown tool structures", () => {
+  test("does not expose JSON for unknown tool structures", () => {
     const result = summarizeToolResult("unknown-tool", { foo: "bar" });
-    expect(result).not.toBeNull();
-    expect(result).toContain("foo");
+    expect(result).toBe("Tool completed with structured output");
   });
 
   test("summarizes rare-disease-search with results array", () => {
     const result = summarizeToolResult("rare-disease-search", {
       results: [{}, {}, {}],
     });
-    expect(result).toBe("3 rare diseases");
+    expect(result).toBe("3 rare diseases returned");
   });
 
-  test("summarizes drug-shortages with count", () => {
-    const result = summarizeToolResult("drug-shortages", { totalResults: 2 });
-    expect(result).toBe("2 shortages");
+  test("summarizes drug-shortages with canonical results", () => {
+    const result = summarizeToolResult("drug-shortages", {
+      results: [{}, {}],
+    });
+    expect(result).toBe("2 FDA shortage records returned");
+  });
+
+  test("summarizes the canonical output shape for every registered tool", () => {
+    const cases: Array<[string, unknown, string]> = [
+      [
+        "drug-lookup",
+        { ok: true, data: { name: "Aspirin", rxcui: "1191" } },
+        "RxNav drug match found",
+      ],
+      [
+        "drug-interaction",
+        {
+          ok: true,
+          data: {
+            interactionStatus: "found",
+            coverage: "complete",
+            checks: [{ status: "checked" }, { status: "checked" }],
+            interactions: [{}],
+          },
+        },
+        "1 FDA-label finding; 2 of 2 drugs checked.",
+      ],
+      [
+        "drug-labeling",
+        { ok: true, data: { results: [{}] } },
+        "1 FDA label record returned",
+      ],
+      [
+        "adverse-events",
+        {
+          ok: true,
+          data: { results: [{}, {}], meta: { totalResults: 20 } },
+        },
+        "2 of 20 FDA adverse-event reports returned; reports do not establish causality",
+      ],
+      [
+        "drug-recall",
+        { ok: true, data: { results: [{}, {}] } },
+        "2 FDA recall records returned",
+      ],
+      [
+        "substance-toxicology",
+        { ok: true, data: { results: [{}, {}] } },
+        "2 FDA substance records returned",
+      ],
+      [
+        "drug-shortages",
+        { ok: true, data: { results: [{}, {}] } },
+        "2 FDA shortage records returned",
+      ],
+      [
+        "food-adverse-events",
+        { ok: true, data: { results: [{}] } },
+        "1 FDA food adverse-event report returned; reports do not establish causality",
+      ],
+      [
+        "device-adverse-events",
+        { ok: true, data: { results: [{}] } },
+        "1 FDA device adverse-event report returned; reports do not establish causality",
+      ],
+      [
+        "clinical-trials-search",
+        { ok: true, data: { results: [{}, {}], totalCount: 9 } },
+        "2 of 9 clinical trials returned",
+      ],
+      [
+        "medlineplus-search",
+        { ok: true, data: { results: [{}, {}] } },
+        "2 MedlinePlus topics returned",
+      ],
+      [
+        "drug-spelling-suggestion",
+        { ok: true, data: { suggestions: ["aspirin", "asparaginase"] } },
+        "2 spelling suggestions",
+      ],
+      [
+        "rare-disease-search",
+        { ok: true, data: { results: [{}, {}] } },
+        "2 rare diseases returned",
+      ],
+      [
+        "rare-disease-genes",
+        { ok: true, data: { results: [{}, {}] } },
+        "2 associated genes returned",
+      ],
+      [
+        "rare-disease-phenotypes",
+        { ok: true, data: { results: [{}, {}] } },
+        "2 associated phenotypes returned",
+      ],
+      [
+        "hpo-term-search",
+        { ok: true, data: { results: [{}, {}], totalAvailable: 8 } },
+        "2 of 8 HPO terms returned",
+      ],
+      [
+        "loinc-test-lookup",
+        { ok: true, data: { results: [{}, {}], totalAvailable: 11 } },
+        "2 of 11 LOINC lab tests returned",
+      ],
+    ];
+
+    for (const [toolName, result, expected] of cases) {
+      const summary = summarizeToolResult(toolName, result);
+      expect(summary).toBe(expected);
+      expect(summary).not.toContain('{"');
+      expect(summary).not.toContain('"results"');
+    }
+  });
+
+  test("summarizes JSON-serialized canonical results instead of exposing JSON", () => {
+    const summary = summarizeToolResult(
+      "drug-labeling",
+      JSON.stringify({ ok: true, data: { results: [{ brandName: "X" }] } }),
+    );
+    expect(summary).toBe("1 FDA label record returned");
+  });
+
+  test("sanitizes URLs in tool failure summaries", () => {
+    const summary = summarizeToolResult("adverse-events", {
+      ok: false,
+      error: "Request timed out at https://api.example.test?q=sensitive",
+      retriable: true,
+    });
+    expect(summary).toContain("[url removed]");
+    expect(summary).not.toContain("sensitive");
   });
 });
 
-describe("createStepEventHandler", () => {
+describe("createToolEventHooks", () => {
   function createMockEmit() {
     const events: ProgressEvent[] = [];
     const emit = (
@@ -2682,7 +2856,7 @@ describe("createStepEventHandler", () => {
     const event = events.find((item) => item.eventType === "tool_result")!;
     expect(event.success).toBe(false);
     expect(event.toolResultStatus).toBe("failed");
-    expect(event.resultSummary).toContain("no reliable negative result");
+    expect(event.resultSummary).toContain("No reliable negative result");
   });
 
   test("errorType is set for classified AppError errors", () => {
@@ -2810,5 +2984,46 @@ describe("createStepEventHandler", () => {
     const callIndex = events.findIndex((e) => e.eventType === "tool_call");
     const resultIndex = events.findIndex((e) => e.eventType === "tool_result");
     expect(callIndex).toBeLessThan(resultIndex);
+  });
+
+  test("preserves call IDs when identical tools complete out of order", () => {
+    const { events, emit } = createMockEmit();
+    const hooks = createToolEventHooks("cardiologist", "job-pairing", emit);
+
+    hooks.beforeToolCall?.({
+      toolName: "drug-labeling",
+      input: { drugName: "first" },
+      context: { toolCallId: "call-first" },
+    });
+    hooks.beforeToolCall?.({
+      toolName: "drug-labeling",
+      input: { drugName: "second" },
+      context: { toolCallId: "call-second" },
+    });
+    hooks.afterToolCall?.({
+      toolName: "drug-labeling",
+      input: { drugName: "second" },
+      output: { ok: true, data: { results: [{}] } },
+      context: { toolCallId: "call-second" },
+    });
+    hooks.afterToolCall?.({
+      toolName: "drug-labeling",
+      input: { drugName: "first" },
+      output: { ok: true, data: { results: [{}, {}] } },
+      context: { toolCallId: "call-first" },
+    });
+
+    const results = events.filter((event) => event.eventType === "tool_result");
+    expect(results.map((event) => event.toolCallId)).toEqual([
+      "call-second",
+      "call-first",
+    ]);
+    expect(results[0].toolArgs).toBe("second");
+    expect(results[1].toolArgs).toBe("first");
+    expect(results[0].resultSummary).toBe("1 FDA label record returned");
+    expect(results[1].resultSummary).toBe("2 FDA label records returned");
+    expect(results.every((event) => typeof event.durationMs === "number")).toBe(
+      true,
+    );
   });
 });

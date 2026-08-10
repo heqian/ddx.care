@@ -112,10 +112,19 @@ test.describe("Inactivity session purge", () => {
     await page.clock.install();
     await page.clock.setFixedTime(new Date("2026-01-01T00:00:00Z"));
 
-    // Block the WebSocket so the job stays in the waiting state (no completion).
+    // Keep both stream transports pending so clock acceleration cannot advance
+    // the completed mock job to Results and reset the waiting-screen timer.
     await page.route("**/ws**", (route) =>
       route.fulfill({ status: 200, body: "" }),
     );
+    await page.route("**/v1/status/**", (route) => {
+      const jobId = new URL(route.request().url()).pathname.split("/").at(-1);
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ jobId, status: "pending", progress: [] }),
+      });
+    });
 
     await fillValidForm(page, { medicalHistory: "Waiting purge sentinel." });
     await submitCase(page);

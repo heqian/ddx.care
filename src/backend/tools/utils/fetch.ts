@@ -5,7 +5,6 @@ import {
 } from "../../utils/errors";
 import { getCached, setCached } from "./tool-cache";
 import { logger } from "../../utils/logger";
-import { markCacheHit } from "../../workflows/cache-context";
 
 export interface FetchJSONOptions extends RequestInit {
   timeoutMs?: number;
@@ -25,7 +24,6 @@ export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
   const cached = getCached(url);
   if (cached !== null) {
     logger.info("tool_cache_hit", { url });
-    markCacheHit(url);
     return cached;
   }
 
@@ -89,7 +87,6 @@ export async function fetchText(url: string, options: FetchJSONOptions = {}) {
   const cached = getCached(url);
   if (cached !== null) {
     logger.info("tool_cache_hit", { url });
-    markCacheHit(url);
     return cached as string;
   }
 

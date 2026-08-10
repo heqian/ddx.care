@@ -5,7 +5,7 @@ export const TOOL_LABELS: Record<string, string> = {
   "adverse-events": "Checking adverse events",
   "clinical-trials-search": "Searching clinical trials",
   "drug-recall": "Checking drug recalls",
-  "substance-toxicology": "Checking toxicology",
+  "substance-toxicology": "Looking up FDA substance",
   "medlineplus-search": "Searching MedlinePlus",
   "drug-spelling-suggestion": "Checking drug spelling",
   "rare-disease-search": "Searching rare diseases",

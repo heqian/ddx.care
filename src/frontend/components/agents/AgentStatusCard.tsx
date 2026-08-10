@@ -9,15 +9,7 @@ import type { ToolHistoryEntry } from "../../api/types";
 
 export type SpecialistStatus = "idle" | "active" | "completed";
 
-const MAX_VISIBLE_TOOLS = 10;
-
-function ToolHistoryItem({
-  entry,
-  isLatest,
-}: {
-  entry: ToolHistoryEntry;
-  isLatest: boolean;
-}) {
+function ToolHistoryItem({ entry }: { entry: ToolHistoryEntry }) {
   const label = formatToolLabel(entry.toolName);
 
   let icon: React.ReactNode;
@@ -39,35 +31,54 @@ function ToolHistoryItem({
     );
   }
 
+  const statusText =
+    entry.status === "running"
+      ? "Running"
+      : entry.status === "success"
+        ? "Complete"
+        : entry.status === "partial"
+          ? "Partial"
+          : "Failed";
+
   return (
-    <div className="flex items-center gap-1.5 text-xs leading-tight">
-      {icon}
-      <span
-        className={
-          entry.status === "running"
-            ? "text-primary/80"
-            : entry.status === "success"
-              ? "text-emerald-600 dark:text-emerald-400"
-              : entry.status === "partial"
-                ? "text-amber-600 dark:text-amber-400"
-                : "text-red-600 dark:text-red-400"
-        }
-      >
-        {label}
-        {isLatest && entry.toolArgs ? `: ${entry.toolArgs}` : ""}
-        {entry.status !== "running" && entry.resultSummary
-          ? ` - ${entry.resultSummary}`
-          : ""}
-      </span>
-      {entry.status !== "running" && entry.durationMs !== undefined && (
-        <span className="text-slate-400 dark:text-slate-500">
-          ({(entry.durationMs / 1000).toFixed(1)}s)
+    <div className="rounded-md border border-slate-200/80 bg-slate-50/70 px-2 py-1.5 text-xs dark:border-slate-700/70 dark:bg-slate-800/50">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="shrink-0">{icon}</span>
+        <span className="min-w-0 flex-1 truncate font-medium text-slate-700 dark:text-slate-200">
+          {label}
         </span>
+        <span
+          className={
+            entry.status === "running"
+              ? "shrink-0 text-blue-500"
+              : entry.status === "success"
+                ? "shrink-0 text-emerald-600 dark:text-emerald-400"
+                : entry.status === "partial"
+                  ? "shrink-0 text-amber-600 dark:text-amber-400"
+                  : "shrink-0 text-red-600 dark:text-red-400"
+          }
+        >
+          {statusText}
+          {entry.status !== "running" && entry.durationMs !== undefined
+            ? ` | ${entry.durationMs < 100 ? "<0.1" : (entry.durationMs / 1000).toFixed(1)}s`
+            : ""}
+        </span>
+      </div>
+      {entry.toolArgs && (
+        <p
+          className="mt-1 truncate text-slate-500 dark:text-slate-400"
+          title={entry.toolArgs}
+        >
+          Query: {entry.toolArgs}
+        </p>
       )}
-      {entry.cached && (
-        <span className="text-amber-500 dark:text-amber-400 text-[10px]">
-          cached
-        </span>
+      {entry.status !== "running" && entry.resultSummary && (
+        <p
+          className="mt-0.5 line-clamp-2 leading-relaxed text-slate-500 dark:text-slate-400"
+          title={entry.resultSummary}
+        >
+          {entry.resultSummary}
+        </p>
       )}
     </div>
   );
@@ -113,13 +124,9 @@ export function AgentStatusCard({
   toolHistory,
 }: AgentStatusCardProps) {
   const styles = statusStyles[status];
-  const visibleHistory = toolHistory?.slice(-MAX_VISIBLE_TOOLS) ?? [];
-  const hasMore = (toolHistory?.length ?? 0) > MAX_VISIBLE_TOOLS;
-  const errorCount = visibleHistory.filter((e) => e.status === "error").length;
-  const partialCount = visibleHistory.filter(
-    (e) => e.status === "partial",
-  ).length;
-  const cachedCount = visibleHistory.filter((e) => e.cached).length;
+  const fullHistory = toolHistory ?? [];
+  const errorCount = fullHistory.filter((e) => e.status === "error").length;
+  const partialCount = fullHistory.filter((e) => e.status === "partial").length;
 
   return (
     <div
@@ -147,35 +154,20 @@ export function AgentStatusCard({
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium truncate">{name}</p>
-        {status === "active" && visibleHistory.length > 0 ? (
-          <div className="mt-1 space-y-0.5">
-            {visibleHistory.map((entry, i) => (
-              <ToolHistoryItem
-                key={i}
-                entry={entry}
-                isLatest={i === visibleHistory.length - 1}
-              />
+        {status === "active" && fullHistory.length > 0 ? (
+          <div className="mt-1.5 space-y-1.5">
+            {fullHistory.map((entry, i) => (
+              <ToolHistoryItem key={entry.toolCallId ?? i} entry={entry} />
             ))}
-            {hasMore && (
-              <p className="text-xs text-slate-400 dark:text-slate-500">
-                +{toolHistory!.length - MAX_VISIBLE_TOOLS} more
-              </p>
-            )}
           </div>
-        ) : status === "completed" && visibleHistory.length > 0 ? (
+        ) : status === "completed" && fullHistory.length > 0 ? (
           <p className="text-xs truncate text-emerald-600 dark:text-emerald-400">
-            {visibleHistory.length} tool{visibleHistory.length === 1 ? "" : "s"}{" "}
-            used
+            {fullHistory.length} tool{fullHistory.length === 1 ? "" : "s"} used
             {errorCount > 0
-              ? ` — ${errorCount} failed`
+              ? ` - ${errorCount} failed`
               : partialCount > 0
-                ? ` — ${partialCount} partial`
-                : " — all successful"}
-            {cachedCount > 0 && (
-              <span className="text-amber-500 dark:text-amber-400 ml-1">
-                ({cachedCount} cached)
-              </span>
-            )}
+                ? ` - ${partialCount} partial`
+                : " - all successful"}
           </p>
         ) : (
           <p className={`text-xs truncate ${styles.text}`}>

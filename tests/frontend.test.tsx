@@ -711,7 +711,7 @@ describe("AgentStatusCard", () => {
     expect(getByText(container, /aspirin \+ warfarin/)).toBeTruthy();
   });
 
-  test("shows cached MedlinePlus no-results as a successful summary", () => {
+  test("shows MedlinePlus no-results as a compact successful summary", () => {
     resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
@@ -727,18 +727,19 @@ describe("AgentStatusCard", () => {
             durationMs: 10,
             resultSummary:
               "No MedlinePlus information found for this condition.",
-            cached: true,
           },
         ],
       }),
     );
 
-    const successText = container.querySelector(".text-emerald-600");
-    expect(successText?.textContent).toContain(
-      "No MedlinePlus information found for this condition.",
-    );
+    expect(
+      getByText(
+        container,
+        "No MedlinePlus information found for this condition.",
+      ),
+    ).toBeTruthy();
     expect(container.querySelector(".text-red-600")).toBeNull();
-    expect(getByText(container, "cached")).toBeTruthy();
+    expect(container.textContent).not.toContain("cached");
   });
 
   test("shows 'Consulting...' when active but no toolHistory", () => {
@@ -849,6 +850,29 @@ describe("AgentStatusCard", () => {
       }),
     );
     expect(getByText(container, "Running custom-future-tool")).toBeTruthy();
+  });
+
+  test("shows all tool history entries without truncation when many tools used", () => {
+    resetBody();
+    const toolHistory = Array.from({ length: 12 }, (_, i) => ({
+      toolName: "drug-interaction",
+      toolArgs: `query ${i + 1}`,
+      status: "success" as const,
+      durationMs: 100 + i,
+    }));
+    const { container } = render(
+      createElement(AgentStatusCard, {
+        name: "Cardiologist",
+        agentId: "cardiologist",
+        description: "Heart specialist",
+        status: "active",
+        toolHistory,
+      }),
+    );
+    for (const entry of toolHistory) {
+      expect(getByText(container, entry.toolArgs as string)).toBeTruthy();
+    }
+    expect(container.textContent).not.toMatch(/\+\d+\s+earlier/);
   });
 });
 
@@ -2450,7 +2474,10 @@ describe("deriveSpecialistStatuses", () => {
 // ---------------------------------------------------------------------------
 // deriveToolHistory
 // ---------------------------------------------------------------------------
-import { deriveToolHistory } from "../src/frontend/pages/WaitingRoom";
+import {
+  deriveToolHistory,
+  deriveVisibleProgress,
+} from "../src/frontend/pages/WaitingRoom";
 
 describe("deriveToolHistory", () => {
   test("returns empty map for undefined progress", () => {
@@ -2510,7 +2537,7 @@ describe("deriveToolHistory", () => {
     expect(history![0].resultSummary).toBe("2 interactions found");
   });
 
-  test("maps cached MedlinePlus no-results to success", () => {
+  test("maps MedlinePlus no-results to success", () => {
     const map = deriveToolHistory([
       {
         time: "2026-01-01T00:00:00Z",
@@ -2529,13 +2556,11 @@ describe("deriveToolHistory", () => {
         success: true,
         toolResultStatus: "success",
         resultSummary: "No MedlinePlus information found for this condition.",
-        cached: true,
       },
     ]);
 
     expect(map.get("generalist")![0]).toMatchObject({
       status: "success",
-      cached: true,
       resultSummary: "No MedlinePlus information found for this condition.",
     });
   });
@@ -2666,6 +2691,62 @@ describe("deriveToolHistory", () => {
     );
   });
 
+  test("pairs identical tools by call ID when results arrive out of order", () => {
+    const map = deriveToolHistory([
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Cardiologist: Reviewing FDA label - first",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolCallId: "call-first",
+        toolName: "drug-labeling",
+        toolArgs: "first",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Cardiologist: Reviewing FDA label - second",
+        eventType: "tool_call",
+        agentId: "cardiologist",
+        toolCallId: "call-second",
+        toolName: "drug-labeling",
+        toolArgs: "second",
+      },
+      {
+        time: "2026-01-01T00:00:02Z",
+        message: "Cardiologist: Reviewing FDA label - second completed",
+        eventType: "tool_result",
+        agentId: "cardiologist",
+        toolCallId: "call-second",
+        toolName: "drug-labeling",
+        success: true,
+        resultSummary: "1 FDA label record returned",
+      },
+      {
+        time: "2026-01-01T00:00:03Z",
+        message: "Cardiologist: Reviewing FDA label - first completed",
+        eventType: "tool_result",
+        agentId: "cardiologist",
+        toolCallId: "call-first",
+        toolName: "drug-labeling",
+        success: true,
+        resultSummary: "2 FDA label records returned",
+      },
+    ]);
+
+    expect(map.get("cardiologist")).toEqual([
+      expect.objectContaining({
+        toolCallId: "call-first",
+        toolArgs: "first",
+        resultSummary: "2 FDA label records returned",
+      }),
+      expect.objectContaining({
+        toolCallId: "call-second",
+        toolArgs: "second",
+        resultSummary: "1 FDA label record returned",
+      }),
+    ]);
+  });
+
   test("toolArgs defaults to null when not provided", () => {
     const map = deriveToolHistory([
       {
@@ -2693,6 +2774,51 @@ describe("deriveToolHistory", () => {
     ]);
     expect(map.get("cardiologist")![0].status).toBe("running");
     expect(map.get("cardiologist")![0].durationMs).toBeUndefined();
+  });
+});
+
+describe("deriveVisibleProgress", () => {
+  test("replaces completed tool call rows with their result row", () => {
+    const progress: ProgressEvent[] = [
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Reviewing label",
+        eventType: "tool_call",
+        toolCallId: "completed-call",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Reviewing label completed",
+        eventType: "tool_result",
+        toolCallId: "completed-call",
+      },
+      {
+        time: "2026-01-01T00:00:02Z",
+        message: "Searching MedlinePlus",
+        eventType: "tool_call",
+        toolCallId: "running-call",
+      },
+    ];
+
+    expect(
+      deriveVisibleProgress(progress).map((event) => event.message),
+    ).toEqual(["Reviewing label completed", "Searching MedlinePlus"]);
+  });
+
+  test("keeps legacy rows that do not have call IDs", () => {
+    const progress: ProgressEvent[] = [
+      {
+        time: "2026-01-01T00:00:00Z",
+        message: "Legacy call",
+        eventType: "tool_call",
+      },
+      {
+        time: "2026-01-01T00:00:01Z",
+        message: "Legacy result",
+        eventType: "tool_result",
+      },
+    ];
+    expect(deriveVisibleProgress(progress)).toEqual(progress);
   });
 });
 

@@ -25,6 +25,7 @@ export interface ProgressEvent {
   message: string;
   eventType?: ProgressEventType;
   agentId?: ProgressAgentId;
+  toolCallId?: string;
   toolName?: string;
   toolArgs?: string | null;
   success?: boolean;
@@ -33,7 +34,6 @@ export interface ProgressEvent {
   durationMs?: number;
   resultSummary?: string | null;
   errorType?: string;
-  cached?: boolean;
   specialistIds?: SpecialistId[];
 }
 

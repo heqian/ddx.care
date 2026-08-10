@@ -36,12 +36,12 @@ export type Diagnosis = DiagnosisReport["diagnoses"][number];
 export type ToolStatus = "running" | "success" | "partial" | "error";
 
 export interface ToolHistoryEntry {
+  toolCallId?: string;
   toolName: string;
   toolArgs: string | null;
   status: ToolStatus;
   durationMs?: number;
   resultSummary?: string | null;
-  cached?: boolean;
 }
 
 export interface ProgressEvent {
@@ -49,6 +49,7 @@ export interface ProgressEvent {
   message: string;
   eventType?: ProgressEventType;
   agentId?: string;
+  toolCallId?: string;
   toolName?: string;
   toolArgs?: string | null;
   success?: boolean;
@@ -57,7 +58,6 @@ export interface ProgressEvent {
   durationMs?: number;
   resultSummary?: string | null;
   errorType?: string;
-  cached?: boolean;
   specialistIds?: string[];
 }
 

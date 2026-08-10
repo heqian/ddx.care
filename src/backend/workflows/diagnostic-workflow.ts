@@ -21,8 +21,7 @@ import { logger } from "../utils/logger";
 import * as abortStore from "../utils/abort-controller-store";
 import { agentList, specialistIds, type SpecialistId } from "../agents";
 import { formatToolLabel } from "../tools/tool-labels";
-import { createStepEventHandler } from "./on-step-finish";
-import { runWithCacheTracking } from "./cache-context";
+import { createToolEventHooks } from "./tool-event-hooks";
 import {
   LLMTimeoutError,
   SchemaValidationError,
@@ -433,18 +432,26 @@ export async function mockDiagnosis(
       `${spec.id}: Checking drug labeling → metoprolol tartrate`,
       {
         agentId: spec.id,
+        toolCallId: `${spec.id}-mock-label`,
         toolName: "drug-labeling",
         toolArgs: "metoprolol tartrate",
       },
     );
     await delay(stepDelay * 1.5);
-    emit("tool_result", `${spec.id}: Checking drug labeling completed`, {
-      agentId: spec.id,
-      toolName: "drug-labeling",
-      success: true,
-      durationMs: 1200,
-      resultSummary: "Label found for Lopressor",
-    });
+    emit(
+      "tool_result",
+      `${spec.id}: Checking drug labeling → metoprolol tartrate completed`,
+      {
+        agentId: spec.id,
+        toolCallId: `${spec.id}-mock-label`,
+        toolName: "drug-labeling",
+        toolArgs: "metoprolol tartrate",
+        success: true,
+        toolResultStatus: "success",
+        durationMs: 1200,
+        resultSummary: "1 FDA label record returned",
+      },
+    );
     await delay(stepDelay * 0.5);
     emit("specialist_complete", `Received analysis from ${spec.id}`, {
       agentId: spec.id,
@@ -652,25 +659,19 @@ export async function generateFinalReport(opts: {
     jobId,
   } = opts;
 
-  const cmoOnStepFinish = createStepEventHandler(
-    "chiefMedicalOfficer",
-    jobId,
-    emit,
-  );
+  const cmoToolHooks = createToolEventHooks("chiefMedicalOfficer", jobId, emit);
 
   let correctionReason =
     "The previous attempt did not return a validated structured report.";
   try {
-    const finalResponse = await runWithCacheTracking(() =>
-      cmo.generate(prompt, {
-        structuredOutput: {
-          jsonPromptInjection: true,
-          schema: diagnosisReportSchema,
-        },
-        abortSignal,
-        onStepFinish: cmoOnStepFinish,
-      }),
-    );
+    const finalResponse = await cmo.generate(prompt, {
+      structuredOutput: {
+        jsonPromptInjection: true,
+        schema: diagnosisReportSchema,
+      },
+      abortSignal,
+      hooks: cmoToolHooks,
+    });
     const inspected = inspectReportAttempt(finalResponse);
     if (inspected.success) {
       return { status: "available", diagnosisReport: inspected.report };
@@ -706,16 +707,14 @@ export async function generateFinalReport(opts: {
 
   let finalErrorCode: ReportGenerationErrorCode;
   try {
-    const correctionResponse = await runWithCacheTracking(() =>
-      cmo.generate(correctionPrompt, {
-        structuredOutput: {
-          jsonPromptInjection: true,
-          schema: diagnosisReportSchema,
-        },
-        abortSignal,
-        onStepFinish: cmoOnStepFinish,
-      }),
-    );
+    const correctionResponse = await cmo.generate(correctionPrompt, {
+      structuredOutput: {
+        jsonPromptInjection: true,
+        schema: diagnosisReportSchema,
+      },
+      abortSignal,
+      hooks: cmoToolHooks,
+    });
     const inspected = inspectReportAttempt(correctionResponse);
     if (inspected.success) {
       return { status: "available", diagnosisReport: inspected.report };
@@ -838,57 +837,55 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
           "round_start",
           `Round ${round} Analysis: Asking CMO for decision on needed specialists...`,
         );
-        const cmoOnStepFinish = createStepEventHandler(
+        const cmoToolHooks = createToolEventHooks(
           "chiefMedicalOfficer",
           runId ?? "unknown",
           emit,
         );
         let cmoDecision: Awaited<ReturnType<typeof cmo.generate>> | undefined;
         try {
-          cmoDecision = await runWithCacheTracking(() =>
-            withRetry(
-              () =>
-                cmo.generate(prompt, {
-                  structuredOutput: {
-                    jsonPromptInjection: true,
-                    schema: z.object({
-                      specialistsToConsult: z
-                        .array(
-                          z.object({
-                            id: specialistIdSchema.describe(
-                              "Specialist ID (e.g. 'generalist', 'cardiologist')",
+          cmoDecision = await withRetry(
+            () =>
+              cmo.generate(prompt, {
+                structuredOutput: {
+                  jsonPromptInjection: true,
+                  schema: z.object({
+                    specialistsToConsult: z
+                      .array(
+                        z.object({
+                          id: specialistIdSchema.describe(
+                            "Specialist ID (e.g. 'generalist', 'cardiologist')",
+                          ),
+                          contextDirective: z
+                            .string()
+                            .optional()
+                            .describe(
+                              "Brief instruction telling this specialist what prior findings to focus on. 1-3 sentences. Omit if no relevant prior findings exist.",
                             ),
-                            contextDirective: z
-                              .string()
-                              .optional()
-                              .describe(
-                                "Brief instruction telling this specialist what prior findings to focus on. 1-3 sentences. Omit if no relevant prior findings exist.",
-                              ),
-                          }),
-                        )
-                        .describe(
-                          "List of specialists to consult this round. Empty if no more needed.",
-                        ),
-                      isFinal: z
-                        .boolean()
-                        .describe(
-                          "True if you are ready to produce the final report.",
-                        ),
-                      finalReport: diagnosisReportSchema
-                        .optional()
-                        .describe(
-                          "The final comprehensive differential diagnosis report. Only required if isFinal is true.",
-                        ),
-                    }),
-                  },
-                  abortSignal: abortController.signal,
-                  onStepFinish: cmoOnStepFinish,
-                }),
-              AGENT_GENERATE_MAX_RETRIES,
-              AGENT_GENERATE_RETRY_BASE_DELAY,
-              abortController.signal,
-              isRetriableError,
-            ),
+                        }),
+                      )
+                      .describe(
+                        "List of specialists to consult this round. Empty if no more needed.",
+                      ),
+                    isFinal: z
+                      .boolean()
+                      .describe(
+                        "True if you are ready to produce the final report.",
+                      ),
+                    finalReport: diagnosisReportSchema
+                      .optional()
+                      .describe(
+                        "The final comprehensive differential diagnosis report. Only required if isFinal is true.",
+                      ),
+                  }),
+                },
+                abortSignal: abortController.signal,
+                hooks: cmoToolHooks,
+              }),
+            AGENT_GENERATE_MAX_RETRIES,
+            AGENT_GENERATE_RETRY_BASE_DELAY,
+            abortController.signal,
+            isRetriableError,
           );
         } catch (e) {
           if (
@@ -1036,39 +1033,37 @@ If you have enough information to make a final diagnosis, set "isFinal" to true 
                   : `Please analyze this case from the perspective of a ${specId}:\n\n${patientSummary}`;
 
                 const specStart = Date.now();
-                const specOnStepFinish = createStepEventHandler(
+                const specToolHooks = createToolEventHooks(
                   specId,
                   runId ?? "unknown",
                   emit,
                 );
-                const specResponse = await runWithCacheTracking(() =>
-                  withRetry(
-                    () =>
-                      specAgent
-                        .generate(specPrompt, {
-                          abortSignal: abortController.signal,
-                          onStepFinish: specOnStepFinish,
-                        })
-                        .catch((e: unknown) => {
-                          // Classify timeout errors from LLM calls
-                          if (e instanceof Error && e.name === "AbortError")
-                            throw e;
-                          if (
-                            e instanceof Error &&
-                            /timeout|timed out/i.test(e.message)
-                          ) {
-                            throw new LLMTimeoutError(
-                              `Specialist ${specId} call timed out: ${e.message}`,
-                              e instanceof Error ? e : undefined,
-                            );
-                          }
+                const specResponse = await withRetry(
+                  () =>
+                    specAgent
+                      .generate(specPrompt, {
+                        abortSignal: abortController.signal,
+                        hooks: specToolHooks,
+                      })
+                      .catch((e: unknown) => {
+                        // Classify timeout errors from LLM calls
+                        if (e instanceof Error && e.name === "AbortError")
                           throw e;
-                        }),
-                    AGENT_GENERATE_MAX_RETRIES,
-                    AGENT_GENERATE_RETRY_BASE_DELAY,
-                    abortController.signal,
-                    isRetriableError,
-                  ),
+                        if (
+                          e instanceof Error &&
+                          /timeout|timed out/i.test(e.message)
+                        ) {
+                          throw new LLMTimeoutError(
+                            `Specialist ${specId} call timed out: ${e.message}`,
+                            e instanceof Error ? e : undefined,
+                          );
+                        }
+                        throw e;
+                      }),
+                  AGENT_GENERATE_MAX_RETRIES,
+                  AGENT_GENERATE_RETRY_BASE_DELAY,
+                  abortController.signal,
+                  isRetriableError,
                 );
                 logger.specialistCall(
                   specId,
