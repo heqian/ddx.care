@@ -1,22 +1,25 @@
 ## Why
 
-The core case-entry flow lacks programmatic labels and native form semantics. The Age, Sex, and Chief Complaint labels are not connected with `htmlFor`; the three clinical textareas have no labels at all. There is no `<form>` or `onSubmit`, no field names, and no mobile numeric input hint for age. The requirement that at least one text area be populated is represented only by a silently disabled submit button, leaving users without an explanation for why they cannot proceed. This fails WCAG 1.3.1, 3.3.2, and potentially 4.1.2 for the application's primary task: screen-reader and voice-control users cannot reliably identify fields, Enter does not submit, and all users can be left without an explanation for the disabled action.
+The case-entry screen lacks a native form contract, complete programmatic labels, and persistent instructions for its primary controls. Its invalid-state submit button is silently disabled, so users cannot attempt submission to learn what is required or use standard Enter-to-submit behavior.
 
 ## What Changes
 
-- **Native form with labels**: the case-entry fields SHALL be wrapped in a `<form>` with an `onSubmit` handler; every input SHALL have an associated `<label>` via `htmlFor`/`id`; the three textareas SHALL have labels.
-- **Field semantics**: the age input SHALL use `inputMode="numeric"` and a numeric hint; fields SHALL have `name` attributes; `fieldset`/`legend` SHALL group the patient-context fields.
-- **Submit-time validation feedback**: when submission is disabled because no clinical content is present, the UI SHALL show a visible, programmatic error message explaining the requirement; pressing Enter SHALL attempt submission and surface validation feedback.
-- **Accessible descriptions**: character limits and instructions SHALL be associated via `aria-describedby`.
+- Make the form's `onSubmit` handler the sole submission path. Keep the submit control activatable for validation, disable it natively only while a request is submitting, and give every non-submit button inside the form an explicit `type="button"`.
+- On any client-invalid submission attempt, show and focus a programmatically focusable `role="alert"` summary instead of silently blocking activation. Validate an untouched invalid Age and a 50,001-character clinical field, associate their field-level feedback, refocus the summary on repeated attempts, and clear corrected feedback without stealing focus.
+- Give the six primary controls - Age, Sex, Chief Complaint, Medical History, Conversation Transcript, and Lab Results - associated labels plus stable `id` and `name` attributes. Preserve the clinical section headings and scope each label only to its control.
+- Group Age, Sex, and Chief Complaint with `fieldset`/`legend`, and give Age a numeric mobile-input hint plus persistent format guidance.
+- Associate persistent field instructions, character counters, and applicable Age or over-limit errors through stable `aria-describedby` references. Do not announce a changing count on every keystroke; live validation feedback is limited to meaningful validation transitions or submit attempts.
+- Keep the existing hidden, `aria-hidden` FileDropZone file inputs outside the six-primary-control labeling requirement unless FileDropZone is redesigned to expose those inputs directly.
+- Add component and real Chromium coverage for Enter behavior, untouched invalid Age, a 50,001-character field, repeated invalid attempts, correction focus behavior, associations, and button types. Replace form placeholder locators and obsolete invalid-state disabled assertions with role/label-based expectations, then run the full project and opt-in integration verification with any skips recorded.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `form-semantics-and-labels`: The case-entry form SHALL use native form semantics, programmatic labels, field grouping, accessible descriptions, and visible submit-time validation so the primary task is accessible and understandable.
+- `form-semantics-and-labels`: The case-entry form provides one native submission path, complete primary-control labels and grouping, persistent accessible guidance, and actionable validation feedback.
 
 ## Impact
 
-- **Frontend**: `src/frontend/pages/InputDashboard.tsx` (form, labels, fieldset/legend, inputMode, validation message, aria-describedby), `src/frontend/components/ui/Button.tsx` (submit type).
-- **Tests**: `tests/frontend.test.tsx` (label association, form submission, validation message), E2E helpers using labels instead of placeholders.
-- **Documentation**: `AGENTS.md` (accessibility).
+- **Frontend**: `src/frontend/pages/InputDashboard.tsx` gains the form, submission guards, labels, grouping, descriptions, and explicit button types. `src/frontend/components/ui/FileDropZone.tsx` is not redesigned by this change.
+- **Tests**: `tests/frontend.test.tsx`, `tests/e2e/helpers.ts`, `tests/full-flow.spec.ts`, and `tests/inactivity-purge.spec.ts` gain or update semantic selectors and form-behavior coverage.
+- **Backend and data**: No API, payload, persistence, dependency, or migration changes.

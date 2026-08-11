@@ -1,61 +1,223 @@
 ## Purpose
 
-Ensures printed and shared diagnostic artifacts are produced through distinct, explicitly confirmed actions and always carry the research-only disclaimer and report scope, so users do not unintentionally expose health data or receive authoritative-looking exports stripped of warnings.
+Ensures strict evidence outcome v2 printing and Web Share preserve explicit user intent, structured source traceability, degraded-execution context, bounded disclosure, and PHI-free export metadata across supported browsers and viewport sizes.
 
 ## ADDED Requirements
 
-### Requirement: Print and Share are distinct actions
+### Requirement: Export consumes strict evidence outcome v2 in one coordinated release
 
-The UI SHALL provide separate Print and Share actions with distinct labels and icons. The Print action SHALL always invoke the browser print dialog and SHALL NOT switch to `navigator.share()` based on user-agent sniffing. The Share action SHALL invoke `navigator.share()` only when the API is available and only after explicit user confirmation.
+`evidence-provenance-ledger` SHALL first provide, as implementation/schema prerequisites, strict report outcome v2, the shared privacy-safe source-label formatter, and the basic v2 screen renderer. Print and Share SHALL accept only an `available` v2 outcome containing structured `SupportingEvidenceItem { statement, sourceRefs[] }`, required `executionQuality`, required `traceabilityNotice`, and required `ProvenanceV1`. Export SHALL consume the evidence-owned formatter and renderer without independently resolving labels, parsing legacy string evidence, fabricating source references, reconstructing provenance from progress text, or adding a permissive compatibility adapter.
 
-#### Scenario: Print button always prints
-- **WHEN** the user clicks Print on any device
-- **THEN** the browser print dialog opens and `navigator.share()` is not invoked
+After persisted legacy jobs drain, strict outcome v2 and this export frontend SHALL deploy together. Strict v2 SHALL NOT be released through the legacy frontend that routes mobile Print into immediate Web Share. If operational sequencing makes an intermediate v2 deployment unavoidable, both Print and Share SHALL remain disabled and no legacy export path SHALL be available until the combined v2 export frontend is active.
 
-#### Scenario: Share button invokes share only after confirmation
-- **WHEN** the user clicks Share and `navigator.share()` is available
-- **THEN** a privacy confirmation modal appears, and only after explicit confirmation does the share sheet open
+#### Scenario: Strict outcome v2 is available
+- **WHEN** a validated available outcome v2 reaches ResultsView
+- **THEN** print and Share consume its structured evidence, evidence-owned privacy-safe labels, execution quality, traceability notice, timestamp, and disclaimer directly
 
-#### Scenario: Share is unavailable
-- **WHEN** the user clicks Share and `navigator.share()` is not available
-- **THEN** the action is disabled or shows an explanatory message and does not fall back to printing
+#### Scenario: Legacy evidence outcome is encountered
+- **WHEN** an outcome has string supporting evidence or omits a required v2 field
+- **THEN** the shared parser rejects it before ResultsView and no print/share compatibility path decorates or exports it
 
-### Requirement: Share requires a privacy confirmation and preview
+#### Scenario: Infrastructure requires an intermediate v2 deployment
+- **WHEN** strict v2 backend or transport components must be deployed before the combined export frontend is active
+- **THEN** Print and Share are disabled throughout that intermediate state and the legacy mobile Print-to-Share path is unreachable
 
-Before invoking `navigator.share()`, the UI SHALL display a confirmation modal that previews the exact text to be shared and warns that sharing transmits health data to another application. The share SHALL proceed only after explicit confirmation.
+### Requirement: Report safety metadata has one exact versioned source
 
-#### Scenario: User confirms share
-- **WHEN** the user clicks Share, reviews the preview, and confirms
-- **THEN** the share sheet opens with the previewed text
+The system SHALL define one immutable report disclaimer version, one canonical disclaimer string, and one canonical report scope line in the shared report contract. For this version, the values SHALL be:
 
-#### Scenario: User cancels share
-- **WHEN** the user clicks Share and dismisses the confirmation modal
-- **THEN** no share sheet opens and no data leaves the page
+- Version: `v1`
+- Scope: `AI-generated differential diagnosis - research proof-of-concept only; not for clinical use.`
+- Degraded warning: `DEGRADED EXECUTION: One or more consultations or cited medical sources failed or were limited. This report may be incomplete.`
+- Disclaimer: `REPORT DISCLAIMER v1: RESEARCH USE ONLY - NOT FOR CLINICAL USE. This report is generated by a proof-of-concept AI system and is not a medical device. It is not HIPAA-compliant and has no regulatory approval. All outputs are AI-generated suggestions with no guarantee of accuracy. Never rely on this report for medical diagnosis, treatment decisions, or patient care. Always consult a qualified healthcare professional. By using this tool, you accept all risk and release the operators from any liability.`
 
-### Requirement: Exported artifacts include disclaimer and report scope
+Every newly produced available report outcome SHALL carry that exact disclaimer, a disclaimer containing at least one non-whitespace character SHALL be required by the outcome schema, and `generatedAt` SHALL be a valid ISO 8601 datetime. Screen, print, and Share SHALL consume the outcome disclaimer, exact `generatedAt`, shared scope line, shared degraded warning when execution is degraded, and outcome v2 `traceabilityNotice` without paraphrase or truncation. The serializer SHALL never normalize `outcome.disclaimer`.
 
-Every printed or shared artifact SHALL include the generated date, a one-line report scope (e.g., "AI-generated differential diagnosis — research use only"), and the full research-only disclaimer. Print CSS SHALL NOT hide the disclaimer.
+#### Scenario: Producer emits canonical safety metadata
+- **WHEN** a diagnostic report is successfully formatted
+- **THEN** its disclaimer equals the shared `v1` disclaimer byte-for-byte and its `generatedAt` value is an ISO 8601 UTC timestamp
 
-#### Scenario: Printed report includes disclaimer
-- **WHEN** the user prints the report
-- **THEN** the printed pages include the generated date, report scope, and the full disclaimer text
+#### Scenario: Blank disclaimer is rejected
+- **WHEN** an available report outcome contains an empty or whitespace-only disclaimer
+- **THEN** shared outcome validation rejects the outcome
 
-#### Scenario: Shared text includes disclaimer
-- **WHEN** the user confirms a share
-- **THEN** the shared text includes the generated date, report scope, and the full disclaimer
+#### Scenario: Non-ISO generation timestamp is rejected
+- **WHEN** an available report outcome contains a `generatedAt` value that is not an ISO 8601 datetime
+- **THEN** shared outcome validation rejects the outcome
 
-#### Scenario: Print CSS does not hide the disclaimer
-- **WHEN** print CSS is applied
-- **THEN** the disclaimer element remains visible (not `display: none`)
+#### Scenario: Every representation uses the report source
+- **WHEN** an available outcome is rendered on screen, printed, or serialized for Share
+- **THEN** each representation contains the exact outcome disclaimer, exact ISO timestamp, exact shared scope line, exact degraded warning when applicable, and exact outcome traceability notice, with no independently maintained copies
 
-### Requirement: Print and Share controls have accessible names
+#### Scenario: Historical noncanonical disclaimer remains exact
+- **WHEN** a valid persisted v2 outcome contains a nonblank historical disclaimer that differs from the current canonical constant
+- **THEN** screen, print, and Share preserve that historical disclaimer byte-for-byte rather than replacing, trimming, or normalizing it
 
-The Print and Share buttons SHALL have visible text labels or explicit `aria-label`s on all viewport sizes, including narrow mobile screens where icon-only buttons may be used.
+### Requirement: Evidence exports reuse exact evidence-owned privacy-safe source labels
 
-#### Scenario: Mobile print button has an accessible name
-- **WHEN** the Print button renders on a narrow viewport with a hidden visible label
-- **THEN** the button has an `aria-label` of "Print report"
+Print and Share SHALL serialize each selected `SupportingEvidenceItem.statement` followed by labels for all of its `sourceRefs` in source-array order. They SHALL reuse the shared formatter owned by `evidence-provenance-ledger`; export SHALL NOT implement a second formatter, duplicate its allowlists, or independently resolve raw source references. Export conformance SHALL accept only these exact shared-formatter forms:
 
-#### Scenario: Mobile share button has an accessible name
-- **WHEN** the Share button renders on a narrow viewport with a hidden visible label
-- **THEN** the button has an `aria-label` of "Share report"
+- `Patient input: Medical history`
+- `Patient input: Conversation transcript`
+- `Patient input: Lab results`
+- `Specialist consultation: <canonical specialist display name> (round <positive integer>)`
+- `Medical source: <allowlisted tool display name>`
+- `Medical source: <allowlisted tool display name> (<allowlisted namespace>: <allowlisted public record ID>)`
+
+The evidence-owned formatter SHALL resolve consultation and tool labels from validated successful v2 records and fixed display allowlists. Every substituted label component SHALL be a bounded single-line allowlisted value with no control, CR, or LF character. Export SHALL consume its success or invariant-failure result unchanged. It SHALL NOT expose source-reference JSON, hashes, offsets, offset units, execution IDs, raw tool IDs, digests, timestamps, URLs, queries, arguments, cache/retrieval facts, warning/failure/limitation codes, or any raw `ProvenanceV1` field. An invariant failure SHALL make Share serialization unavailable and SHALL NOT trigger export-side resolution or a raw identifier fallback.
+
+#### Scenario: Structured evidence has multiple source classes
+- **WHEN** one supporting-evidence statement references patient input, a succeeded consultation, and a succeeded tool with an allowlisted public record ID
+- **THEN** print and Share show the statement once followed by three labels in source-ref order using only the exact privacy-safe forms
+
+#### Scenario: Raw provenance cannot form a label
+- **WHEN** a source label would require an unallowlisted tool name, unresolved execution record, raw ID, hash, offset, URL, query, argument, or provenance serialization
+- **THEN** Share is unavailable and no raw fallback label or partial payload is produced
+
+### Requirement: Print is a complete same-document action
+
+The Results view SHALL provide a dedicated Print action that calls the current window's browser print function exactly once on every device. Print SHALL NOT call Web Share, open a new window or popup, inspect the user agent, or use clipboard/download fallback. Print media SHALL contain the complete v2 report: exact generated timestamp, exact scope line and full disclaimer, degraded warning when applicable, exact traceability notice, chief complaint, patient summary, succeeded specialists consulted, every ranked diagnosis with rationale, each structured supporting-evidence statement and its privacy-safe source labels, contradictory evidence and next steps, cross-specialty observations, and recommended immediate actions. Collapsed or inactive screen state SHALL NOT omit report content from print.
+
+ConsultNotes SHALL render `crossSpecialtyObservations` and `recommendedImmediateActions` through the unchanged baseline marked-plus-DOMPurify sanitization pipeline in Full Report and SHALL print that same sanitized DOM. It SHALL preserve baseline markdown bullet, bold, plain-text, and malicious-HTML behavior rather than introducing a raw or divergent print renderer.
+
+During the print call, the document title and requested default print-to-PDF basename SHALL be the static PHI-free value `ddx.care Research Differential Report`. The prior title SHALL be restored after the call returns or throws. The canonical warning SHALL be prominent near the report heading. Any print privacy notice SHALL be informational and SHALL NOT add a confirmation gate.
+
+#### Scenario: Print never switches channels
+- **WHEN** the user activates Print on a desktop or mobile user agent
+- **THEN** the current window's print function is called exactly once and Web Share, clipboard, download, and popup APIs are not invoked
+
+#### Scenario: Print media contains the full report
+- **WHEN** print media is applied while another tab is selected or diagnosis details are collapsed on screen
+- **THEN** every report section and every diagnosis detail is visible in print, with no duplicate summary panel replacing or obscuring the Full Report
+
+#### Scenario: Printed warning is canonical and prominent
+- **WHEN** the report is rendered in print media
+- **THEN** the report heading is followed by the exact scope line, exact ISO generation timestamp, degraded warning when applicable, exact traceability notice, and full untruncated outcome disclaimer
+
+#### Scenario: Print contains structured evidence without raw provenance
+- **WHEN** print media renders a v2 diagnosis with supporting-evidence items
+- **THEN** each statement and exact privacy-safe source label is visible while raw source refs and `ProvenanceV1` remain absent
+
+#### Scenario: Full Report markdown remains sanitized in print
+- **WHEN** cross-specialty observations or immediate actions contain markdown and malicious HTML
+- **THEN** screen and print retain marked formatting from the same sanitized DOM and DOMPurify removes unsafe markup under the unchanged baseline contract
+
+#### Scenario: Print title is static and restored
+- **WHEN** Print is activated from a page with any existing document title
+- **THEN** the title observed by the print call is `ddx.care Research Differential Report` and the original title is restored afterward without using patient-derived content
+
+#### Scenario: Print invocation fails
+- **WHEN** the browser print function throws
+- **THEN** the original document title is restored, the UI shows `Printing is unavailable. Please try again.` with `role=alert`, no exception or report content appears in the error, and no share or other export fallback runs
+
+### Requirement: Share is support-gated and explicitly confirmed
+
+The Results view SHALL provide a Share action distinct from Print. Share SHALL be enabled only when the browser exposes Web Share; otherwise it SHALL remain visibly disabled, SHALL have `aria-describedby` referencing an in-DOM explanation with exact text `Sharing is not supported by this browser.`, and SHALL perform no fallback. Activating supported Share SHALL open a privacy confirmation before any Web Share call.
+
+The modal panel SHALL fit within `calc(100dvh - 2rem)`. The exact payload preview SHALL use preformatted wrapping, `overflow-y: auto`, and `max-height: min(50dvh, 24rem)` while the privacy warning and Cancel/Confirm controls remain outside the scroll region and visible. The first Confirm activation SHALL synchronously enter a pending state, disable Confirm with `aria-busy=true`, and permit at most one `navigator.share()` call for that stored payload until its promise settles.
+
+#### Scenario: Web Share is unsupported
+- **WHEN** the browser does not expose Web Share
+- **THEN** Share is disabled, its `aria-describedby` resolves to `Sharing is not supported by this browser.`, and no modal, print, clipboard, popup, or share call occurs
+
+#### Scenario: Supported Share opens confirmation only
+- **WHEN** the browser exposes Web Share and the user activates Share
+- **THEN** a viewport-bounded confirmation opens with the exact payload in a wrapping vertically scrollable preview, fixed visible warning/actions, and Web Share has not yet been invoked
+
+#### Scenario: Confirmation is dismissed
+- **WHEN** the user cancels or closes the share confirmation
+- **THEN** the modal closes and Web Share is not invoked
+
+#### Scenario: Confirm remains single-flight while Web Share is pending
+- **WHEN** the user activates Confirm more than once before the first Web Share promise settles
+- **THEN** Confirm is disabled and busy after the first activation and `navigator.share()` is called exactly once with the stored payload
+
+### Requirement: Share text is deterministic, bounded, and complete within its stated scope
+
+The system SHALL serialize share text as a pure deterministic function of strict available outcome v2, following the normative pseudocode and golden full-output fixture in `design.md` D5. Output SHALL include the exact scope and ISO timestamp; at most the first three diagnoses in report order with rank, name, confidence, urgency, rationale, every `SupportingEvidenceItem.statement` plus exact privacy-safe source labels, contradictory evidence, and next steps; the diagnosis-count line; recommended immediate actions; exact degraded warning when applicable; exact traceability notice; and the full exact disclaimer.
+
+Only diagnosis names, rationales, supporting-evidence statements, contradictory-evidence items, next-step items, and recommended immediate actions SHALL pass through the clinical normalizer. That normalizer SHALL convert CRLF/lone CR to LF, remove trailing ASCII spaces/tabs per line, remove leading/trailing whitespace-only lines, and classify a result whose ECMAScript `trim()` is empty as `EMPTY`; it SHALL preserve leading whitespace and internal blank lines otherwise. `outcome.disclaimer` SHALL never be trimmed, normalized, or truncated. Empty scalar/list sections SHALL emit exactly `- (none provided)` where D5 specifies and SHALL not create participating slots; a whitespace-only supporting-evidence statement SHALL make serialization unavailable because it violates v2.
+
+Top-level clinical list values SHALL use exact prefix `- `. Source labels SHALL use exact nested prefix `  - ` after exact line `  Sources:`. Every embedded LF in a participating clinical slot SHALL gain exactly two ASCII spaces of continuation indentation. D5's exact section order and blank lines SHALL be used, and one serializer-owned final LF SHALL be appended after the unchanged disclaimer bytes. The diagnosis-count line SHALL be exactly `Diagnoses included: 3 of N; remaining diagnoses omitted.` for `N > 3` or `Diagnoses included: N of N.` otherwise.
+
+The text SHALL be no more than 16,384 UTF-8 bytes. Participating slots SHALL be determined only after normalization, whitespace-only removal, and placeholder insertion, in the exact D5 order. The fixed mandatory bytes SHALL include all labels/bullet prefixes/placeholders/blank lines/final LF, exact source labels, scope/timestamp/count, full disclaimer, exact degraded warning when applicable, and exact traceability notice. On overflow, the serializer SHALL use D5's monotone fixed-point algorithm: divide remaining content bytes across all participating slots, assign one-byte remainders to earliest slots, grow the oversized set, reserve exactly one `... [truncated]` marker per final oversized slot, and repeat until stable. It SHALL use D5's `truncateRenderedSlot` at Unicode code-point boundaries while treating each inserted `LF + SPACE + SPACE` continuation as an atomic structural token. A truncated slot SHALL never end with LF or LF plus one indentation space immediately before the marker. Bytes unused by short participating slots, code-point rounding, or structural-token backtracking SHALL NOT be redistributed; fixed placeholders never receive an allocation. If fixed bytes plus one marker for each final oversized participating slot cannot fit, serialization SHALL return unavailable without dropping mandatory content.
+
+#### Scenario: Report has more than three diagnoses
+- **WHEN** a report with `N > 3` diagnoses is serialized
+- **THEN** the payload contains only the first three diagnoses, every structured evidence statement/source label and required detail section, recommended immediate actions, degraded warning when applicable, traceability notice, exact `3 of N` omission marker, and full disclaimer
+
+#### Scenario: Whitespace-only optional clinical content
+- **WHEN** a rationale, contradictory-evidence item, next-step item, or immediate-actions value contains only ECMAScript whitespace after line-ending normalization
+- **THEN** it is removed from participating slots and its empty scalar/list section emits the exact fixed placeholder form specified by D5
+
+#### Scenario: Embedded newlines use exact indentation
+- **WHEN** a participating clinical value contains CRLF, lone CR, or LF between nonblank lines
+- **THEN** line endings become LF and every continuation line in its rendered slot begins with exactly two ASCII spaces while top-level and nested bullets remain exactly `- ` and `  - `
+
+#### Scenario: Truncation reaches an incomplete continuation token
+- **WHEN** a final oversized slot's byte allocation would otherwise end immediately after an embedded LF or after the first of its two inserted indentation spaces
+- **THEN** `truncateRenderedSlot` backtracks to the last safe code-point boundary before that LF, appends the marker there, and does not redistribute the unused structural bytes
+
+#### Scenario: Truncation includes a complete continuation token
+- **WHEN** a final oversized slot's allocation includes the complete `LF + SPACE + SPACE` token but not the following clinical code point
+- **THEN** the complete token remains and the marker begins after exactly two ASCII spaces on that continuation line
+
+#### Scenario: Clinical fields exceed the share budget
+- **WHEN** long or multi-byte diagnosis fields would make the share text exceed 16,384 UTF-8 bytes
+- **THEN** the fixed-point allocation keeps the text at or below the limit, marks exactly the final oversized participating slots, performs no redistribution, and preserves all source labels, degraded warning, traceability notice, mandatory sections, diagnosis-count marker, and full disclaimer
+
+#### Scenario: Mandatory warning cannot fit
+- **WHEN** fixed mandatory bytes plus one marker for every final oversized participating slot exceed 16,384 UTF-8 bytes
+- **THEN** no share payload is produced and the UI reports only the generic non-PHI share failure
+
+#### Scenario: Serialization is repeatable
+- **WHEN** the same available outcome is serialized more than once
+- **THEN** every result is byte-for-byte identical and does not depend on locale, current time, browser, route, or job credentials
+
+#### Scenario: Golden fixture is serialized
+- **WHEN** the exact degraded v2 fixture described in `design.md` D5 is serialized without exceeding the limit
+- **THEN** its complete UTF-8 output is byte-for-byte equal to the normative golden block, including source-label forms, bullets, indentation, blank lines, disclaimer bytes, and final `0x0A`
+
+### Requirement: Share preview and invocation use the same privacy-minimized data
+
+The confirmation SHALL preview the exact stored `ShareData` title and text, and confirmation SHALL pass that same stored object to Web Share without recomputation, normalization, or display transformation. The share arguments SHALL contain exactly a static `title` of `ddx.care Research Differential Report - Research Use Only` and the bounded `text`. They SHALL NOT contain a URL, files, attachments, job ID, token, route, patient-derived title, patient-derived filename, or raw provenance.
+
+#### Scenario: Preview equals Web Share arguments
+- **WHEN** a user opens the confirmation and then confirms Share
+- **THEN** the previewed title and text are byte-for-byte equal to the title and text passed to Web Share and the argument has no additional fields
+
+#### Scenario: Shared metadata is static
+- **WHEN** reports containing different patient-derived content are shared
+- **THEN** both use the same research-only title and neither includes a URL, attachment, job capability, or patient-derived title/filename metadata
+
+### Requirement: Share cancellation and failure do not change channels
+
+The UI SHALL treat a Web Share rejection named `AbortError` as a quiet user cancellation with no error notice. Every other synchronous throw, rejected result, or serialization-unavailable result SHALL show only `Sharing could not be completed. Please try again.` in an element with `role=alert`. The UI SHALL NOT expose exception/report details and SHALL NOT fall back to print, clipboard, download, a URL, or a popup. Export actions SHALL operate under the existing CSP without adding a source or weakening a directive.
+
+#### Scenario: User cancels the native share sheet
+- **WHEN** Web Share rejects with `AbortError`
+- **THEN** the confirmation closes or returns to its idle state without an error message and no fallback runs
+
+#### Scenario: Web Share rejects for another reason
+- **WHEN** Web Share throws or rejects with any non-`AbortError` value
+- **THEN** the UI shows the generic non-PHI share failure with `role=alert` and no print, clipboard, download, URL, attachment, or popup fallback runs
+
+#### Scenario: Export does not require CSP relaxation or a popup
+- **WHEN** Print and Share are exercised under the existing application CSP
+- **THEN** both operate without `window.open`, a popup event, inline script, an external connection, an object/embed, or any CSP directive change
+
+### Requirement: Production Caddy policy is validated separately from API CSP
+
+Release verification SHALL validate the production Caddyfile independently of API route-header tests. It SHALL run `caddy validate --config Caddyfile`, run `caddy adapt --config Caddyfile --pretty` and parse the adapted output, and perform a separate static/adapted-policy assertion that production retains `script-src 'self'`, `connect-src 'self'`, and `object-src 'none'` without an export-specific source or unsafe script exception. A Caddy validation/adaptation/assertion failure SHALL block release even when API CSP tests pass.
+
+#### Scenario: API CSP passes but Caddy policy is invalid
+- **WHEN** API response-header tests pass but Caddy validation, adaptation, or static policy assertion fails
+- **THEN** export release verification fails and does not treat API coverage as a substitute
+
+### Requirement: Rollback cannot restore the unsafe export frontend
+
+Before deployment, operators SHALL retain a separately built immutable safe artifact that has passed outcome-v2, print/share, warning/notice/source-label, exact serializer, no-popup, CSP, and Caddy verification. Rollback SHALL deploy only that tested safe artifact. If no compatible safe artifact is available, recovery SHALL be a fix-forward release with Share disabled while same-window Print and complete v2 safety content remain available. Operators SHALL NOT revert to or rebuild the prior frontend that user-agent-sniffs Print, routes mobile Print into Share, hides disclaimers, omits v2 warnings/notices/source labels, or uses print/clipboard/popup fallback.
+
+#### Scenario: Share regression requires emergency recovery
+- **WHEN** a deployed Share regression requires immediate mitigation
+- **THEN** operators deploy the separately retained tested safe artifact or fix forward with Share disabled and never deploy the unsafe prior frontend
