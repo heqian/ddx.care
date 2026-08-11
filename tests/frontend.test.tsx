@@ -1840,61 +1840,476 @@ describe("Accessibility — FileDropZone", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Accessibility — InputDashboard (age validation)
+// Accessibility — InputDashboard (form semantics, labels, validation)
 // ---------------------------------------------------------------------------
 import {
   InputDashboard,
   type InputDashboardHandle,
 } from "../src/frontend/pages/InputDashboard";
 
-describe("Accessibility — InputDashboard", () => {
-  test("age input has no aria-invalid when valid", () => {
-    resetBody();
-    const { container } = render(
-      createElement(InputDashboard, { onSubmit: () => {} }),
+// Render InputDashboard, optionally seeding a sessionStorage draft. Each
+// render starts from a clean body so queried output reflects one mount.
+function renderDashboard(
+  draft: Record<string, string> | null = null,
+  onSubmit: () => void = () => {},
+) {
+  resetBody();
+  if (draft) {
+    happyWindow.sessionStorage.setItem("ddx_draft", JSON.stringify(draft));
+  } else {
+    happyWindow.sessionStorage.removeItem("ddx_draft");
+  }
+  const utils = render(createElement(InputDashboard, { onSubmit }));
+  return utils;
+}
+
+function setDraft(draft: Record<string, string> | null) {
+  if (draft) {
+    happyWindow.sessionStorage.setItem("ddx_draft", JSON.stringify(draft));
+  } else {
+    happyWindow.sessionStorage.removeItem("ddx_draft");
+  }
+}
+
+describe("InputDashboard — labels and stable identifiers (task 4.1)", () => {
+  test("all six primary controls are queryable by label with stable id and name", () => {
+    const { container, getByLabelText } = renderDashboard();
+
+    // Each control is uniquely available by its visible label, including Sex.
+    const age = getByLabelText("Age") as HTMLInputElement;
+    const sex = getByLabelText("Sex") as HTMLSelectElement;
+    const chief = getByLabelText("Chief Complaint") as HTMLInputElement;
+    const history = getByLabelText("Medical History") as HTMLTextAreaElement;
+    const transcript = getByLabelText(
+      "Conversation Transcript",
+    ) as HTMLTextAreaElement;
+    const labs = getByLabelText("Lab Results") as HTMLTextAreaElement;
+
+    // Stable id mapping
+    expect(age.id).toBe("age-input");
+    expect(sex.id).toBe("sex-select");
+    expect(chief.id).toBe("chief-complaint-input");
+    expect(history.id).toBe("medical-history-input");
+    expect(transcript.id).toBe("conversation-transcript-input");
+    expect(labs.id).toBe("lab-results-input");
+
+    // Stable name mapping
+    expect(age.getAttribute("name")).toBe("age");
+    expect(sex.getAttribute("name")).toBe("sex");
+    expect(chief.getAttribute("name")).toBe("chiefComplaint");
+    expect(history.getAttribute("name")).toBe("medicalHistory");
+    expect(transcript.getAttribute("name")).toBe("conversationTranscript");
+    expect(labs.getAttribute("name")).toBe("labResults");
+
+    // Labels are associated through htmlFor
+    const labels = container.querySelectorAll("label");
+    const htmlFor = Array.from(labels).map((l) => l.getAttribute("for"));
+    expect(htmlFor).toEqual(
+      expect.arrayContaining([
+        "age-input",
+        "sex-select",
+        "chief-complaint-input",
+        "medical-history-input",
+        "conversation-transcript-input",
+        "lab-results-input",
+      ]),
     );
-    const ageInput = container.querySelector("#age-input") as HTMLInputElement;
-    expect(ageInput.getAttribute("aria-invalid")).toBeNull();
+  });
+});
+
+describe("InputDashboard — grouping, headings, and descriptions (task 4.2)", () => {
+  test("patient context is a fieldset with a non-empty legend", () => {
+    const { container } = renderDashboard();
+    const fieldset = container.querySelector("fieldset");
+    expect(fieldset).toBeTruthy();
+    const legend = fieldset?.querySelector("legend");
+    expect(legend).toBeTruthy();
+    expect((legend?.textContent ?? "").trim().length).toBeGreaterThan(0);
+    // The Age/Sex/Chief Complaint controls live inside the fieldset.
+    expect(fieldset?.querySelector("#age-input")).toBeTruthy();
+    expect(fieldset?.querySelector("#sex-select")).toBeTruthy();
+    expect(fieldset?.querySelector("#chief-complaint-input")).toBeTruthy();
   });
 
-  // Note: React 19 controlled inputs + happy-dom don't process fireEvent.change
-  // into state updates, so interaction-based tests for aria-invalid are deferred
-  // to E2E. The static attribute structure (id, aria-describedby link) is
-  // verified implicitly by the first test and by the source review.
-
-  test("error and validation banners use role=alert", () => {
-    resetBody();
-    // Render InputDashboard with a pre-populated draft that exceeds char limit
-    // to trigger the validation warning banner
-    try {
-      happyWindow.sessionStorage.setItem(
-        "ddx_draft",
-        JSON.stringify({
-          age: "",
-          sex: "",
-          chiefComplaint: "",
-          medicalHistory: "x".repeat(50001),
-          transcript: "",
-          labResults: "",
-        }),
-      );
-    } catch {
-      /* ignore */
-    }
-
-    const { container } = render(
-      createElement(InputDashboard, { onSubmit: () => {} }),
+  test("clinical section headings are retained for heading navigation", () => {
+    const { container } = renderDashboard();
+    const headings = Array.from(container.querySelectorAll("h2")).map((h) =>
+      (h.textContent ?? "").trim(),
     );
+    expect(headings).toEqual(
+      expect.arrayContaining([
+        "Patient Context",
+        "Medical History",
+        "Conversation Transcript",
+        "Lab Results",
+      ]),
+    );
+  });
 
-    const alertEl = container.querySelector('[role="alert"]');
-    expect(alertEl).toBeTruthy();
-    expect(alertEl?.textContent).toContain("character limit");
+  test("age input has inputMode=numeric and a persistent hint", () => {
+    const { container } = renderDashboard();
+    const age = container.querySelector("#age-input") as HTMLInputElement;
+    expect(age.getAttribute("inputmode")).toBe("numeric");
+    expect(age.getAttribute("type")).toBe("text");
+    // Persistent hint with a stable id referenced by age's describedby.
+    const hint = container.querySelector("#age-hint");
+    expect(hint).toBeTruthy();
+    const describedBy = (age.getAttribute("aria-describedby") ?? "").split(" ");
+    expect(describedBy).toContain("age-hint");
+  });
 
-    try {
-      happyWindow.sessionStorage.removeItem("ddx_draft");
-    } catch {
-      /* ignore */
+  test("textarea aria-describedby references all resolve to real elements", () => {
+    const { container } = renderDashboard();
+    const ids = [
+      "medical-history-input",
+      "conversation-transcript-input",
+      "lab-results-input",
+    ];
+    for (const id of ids) {
+      const ta = container.querySelector(`#${id}`) as HTMLTextAreaElement;
+      const ref = ta.getAttribute("aria-describedby");
+      expect(ref).toBeTruthy();
+      for (const part of ref!.split(" ")) {
+        expect(container.querySelector(`#${part}`)).toBeTruthy();
+      }
+      // Each textarea references the shared requirement, its own instruction,
+      // and its own counter.
+      expect(ref!.split(" ")).toEqual(
+        expect.arrayContaining([
+          "clinical-required-hint",
+          `${id.replace("-input", "-instruction")}`,
+          `${id.replace("-input", "-count")}`,
+        ]),
+      );
     }
+  });
+
+  test("character counters are not live regions", () => {
+    const { container } = renderDashboard();
+    const counters = container.querySelectorAll(
+      "#medical-history-count, #conversation-transcript-count, #lab-results-count",
+    );
+    expect(counters.length).toBe(3);
+    for (const c of counters) {
+      expect(c.getAttribute("aria-live")).toBeNull();
+      expect(c.getAttribute("role")).toBeNull();
+    }
+  });
+});
+
+describe("InputDashboard — validation summary (task 4.3)", () => {
+  test("empty submit control remains activatable", () => {
+    const { container } = renderDashboard();
+    const submitBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => (b.textContent ?? "").includes("Submit for Diagnosis"),
+    );
+    expect(submitBtn).toBeTruthy();
+    // Not natively disabled by invalid state.
+    expect(submitBtn!.disabled).toBe(false);
+  });
+
+  test("submitting an empty form shows and focuses the validation summary and makes no request", () => {
+    const onSubmit = vi.fn();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("{}", { status: 202 }));
+    const { container } = renderDashboard(null, onSubmit);
+    const form = container.querySelector("form")!;
+    // No summary before a submit attempt.
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+
+    act(() => {
+      fireEvent.submit(form);
+    });
+
+    // No submission occurred: neither the network call nor the parent callback.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+    // The single client-validation summary is now visible.
+    const summary = container.querySelector('[role="alert"]');
+    expect(summary).toBeTruthy();
+    expect(summary?.getAttribute("tabindex")).toBe("-1");
+    expect(summary?.textContent).toContain("at least one field");
+    // The summary received focus.
+    expect(happyDocument.activeElement).toBe(summary);
+    fetchSpy.mockRestore();
+  });
+});
+
+describe("InputDashboard — button types (task 4.4)", () => {
+  test("diagnosis submit is the only type=submit; all other native buttons are type=button", () => {
+    const { container } = renderDashboard();
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const submitButtons = buttons.filter(
+      (b) => b.getAttribute("type") === "submit",
+    );
+    expect(submitButtons.length).toBe(1);
+    expect(submitButtons[0].textContent).toContain("Submit for Diagnosis");
+    const nonSubmit = buttons.filter((b) => b !== submitButtons[0]);
+    for (const b of nonSubmit) {
+      expect(b.getAttribute("type")).toBe("button");
+    }
+  });
+
+  test("native disabled is used only during submission", () => {
+    const { container } = renderDashboard();
+    const submitBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => (b.textContent ?? "").includes("Submit for Diagnosis"),
+    )!;
+    // Not submitting → not disabled, even though the form is empty/invalid.
+    expect(submitBtn.disabled).toBe(false);
+  });
+});
+
+describe("InputDashboard — untouched invalid Age (task 4.5)", () => {
+  const validClinicalDraft = {
+    age: "abc",
+    sex: "",
+    chiefComplaint: "",
+    medicalHistory: "Patient reports persistent cough for two weeks.",
+    transcript: "",
+    labResults: "",
+  };
+
+  test("valid clinical content with untouched invalid age blocks submission and marks age invalid", () => {
+    const onSubmit = vi.fn();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("{}", { status: 202 }));
+    const { container } = renderDashboard(validClinicalDraft, onSubmit);
+    const ageInput = container.querySelector("#age-input") as HTMLInputElement;
+
+    // Before a submit attempt, an untouched invalid age shows no error.
+    expect(ageInput.getAttribute("aria-invalid")).toBeNull();
+    let describedBy = (ageInput.getAttribute("aria-describedby") ?? "").split(
+      " ",
+    );
+    expect(describedBy).toContain("age-hint");
+    expect(describedBy).not.toContain("age-error");
+
+    const form = container.querySelector("form")!;
+    act(() => {
+      fireEvent.submit(form);
+    });
+
+    // No submission: neither network nor callback.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+    // Age is now in its touched/validated state.
+    expect(ageInput.getAttribute("aria-invalid")).toBe("true");
+    describedBy = (ageInput.getAttribute("aria-describedby") ?? "").split(" ");
+    expect(describedBy).toEqual(
+      expect.arrayContaining(["age-hint", "age-error"]),
+    );
+    // The age field-level error text is present and associated.
+    const ageError = container.querySelector("#age-error");
+    expect(ageError).toBeTruthy();
+    expect(ageError?.textContent).toContain("1–3 digits");
+    // Summary is visible and focused.
+    const summary = container.querySelector('[role="alert"]');
+    expect(summary).toBeTruthy();
+    expect(happyDocument.activeElement).toBe(summary);
+
+    fetchSpy.mockRestore();
+    setDraft(null);
+  });
+
+  test("repeated invalid submit refocuses the summary", () => {
+    const onSubmit = vi.fn();
+    const { container } = renderDashboard(validClinicalDraft, onSubmit);
+    const form = container.querySelector("form")!;
+    const summary = () => container.querySelector('[role="alert"]');
+
+    act(() => {
+      fireEvent.submit(form);
+    });
+    expect(summary()).toBeTruthy();
+    expect(happyDocument.activeElement).toBe(summary());
+
+    // Move focus away, then submit again with unchanged errors.
+    (container.querySelector("#age-input") as HTMLElement).focus();
+    expect(happyDocument.activeElement).not.toBe(summary());
+
+    act(() => {
+      fireEvent.submit(form);
+    });
+    // Focus returns to the same summary element.
+    expect(happyDocument.activeElement).toBe(summary());
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    setDraft(null);
+  });
+
+  test("valid age has no error and a hint-only description (correction clears age error)", () => {
+    // A separate mount with a valid age proves that a valid value clears the
+    // resolved error state and describedby reference. Keystroke-driven
+    // correction and focus retention are covered by Chromium E2E.
+    const { container } = renderDashboard({
+      ...validClinicalDraft,
+      age: "45",
+    });
+    const ageInput = container.querySelector("#age-input") as HTMLInputElement;
+    expect(ageInput.getAttribute("aria-invalid")).toBeNull();
+    const describedBy = (ageInput.getAttribute("aria-describedby") ?? "").split(
+      " ",
+    );
+    expect(describedBy).toEqual(["age-hint"]);
+    expect(container.querySelector("#age-error")).toBeNull();
+    // No validation summary when the form is valid.
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+
+    setDraft(null);
+  });
+});
+
+describe("InputDashboard — over-limit field (task 4.6)", () => {
+  const overLimitDraft = {
+    age: "",
+    sex: "",
+    chiefComplaint: "",
+    medicalHistory: "x".repeat(50_001),
+    transcript: "",
+    labResults: "",
+  };
+
+  test("a 50,001-character field blocks submission with associated over-limit feedback", () => {
+    const onSubmit = vi.fn();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("{}", { status: 202 }));
+    const { container } = renderDashboard(overLimitDraft, onSubmit);
+    const ta = container.querySelector(
+      "#medical-history-input",
+    ) as HTMLTextAreaElement;
+
+    // Over-limit is a value-based error: feedback is associated even before submit.
+    expect(ta.getAttribute("aria-invalid")).toBe("true");
+    const describedBy = ta.getAttribute("aria-describedby") ?? "";
+    expect(describedBy.split(" ")).toContain("medical-history-overlimit");
+    const overMsg = container.querySelector("#medical-history-overlimit");
+    expect(overMsg).toBeTruthy();
+
+    const form = container.querySelector("form")!;
+    act(() => {
+      fireEvent.submit(form);
+    });
+
+    // No submission.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+    // Summary now lists the over-limit error and is focused.
+    const summary = container.querySelector('[role="alert"]');
+    expect(summary).toBeTruthy();
+    expect(summary?.textContent).toContain("50,000-character limit");
+    expect(happyDocument.activeElement).toBe(summary);
+
+    fetchSpy.mockRestore();
+    setDraft(null);
+  });
+
+  test("repeated invalid submit refocuses the summary for the over-limit case", () => {
+    const onSubmit = vi.fn();
+    const { container } = renderDashboard(overLimitDraft, onSubmit);
+    const form = container.querySelector("form")!;
+    const summary = () => container.querySelector('[role="alert"]');
+
+    act(() => {
+      fireEvent.submit(form);
+    });
+    (container.querySelector("#medical-history-input") as HTMLElement).focus();
+    act(() => {
+      fireEvent.submit(form);
+    });
+    expect(happyDocument.activeElement).toBe(summary());
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    setDraft(null);
+  });
+
+  test("a 50,000-character field has no over-limit error (correction clears feedback)", () => {
+    // A separate mount at the exact limit proves the resolved error clears when
+    // the value returns to 50,000 or fewer characters.
+    const { container } = renderDashboard({
+      ...overLimitDraft,
+      medicalHistory: "x".repeat(50_000),
+    });
+    const ta = container.querySelector(
+      "#medical-history-input",
+    ) as HTMLTextAreaElement;
+    expect(ta.getAttribute("aria-invalid")).toBeNull();
+    const describedBy = (ta.getAttribute("aria-describedby") ?? "").split(" ");
+    expect(describedBy).not.toContain("medical-history-overlimit");
+    expect(container.querySelector("#medical-history-overlimit")).toBeNull();
+    // No validation summary when the form is valid.
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+
+    setDraft(null);
+  });
+
+  test("a composed payload over the limit (history at limit + patient context) blocks submission", () => {
+    // Regression: Age/Sex/Chief Complaint are prepended to Medical History for
+    // the backend payload. A history at the 50,000 limit plus patient context
+    // would previously pass client validation but exceed the backend per-field
+    // limit. The composed-length check now blocks it before any request.
+    const composedDraft = {
+      age: "45",
+      sex: "Male",
+      chiefComplaint: "Severe headache with blurred vision",
+      medicalHistory: "x".repeat(50_000),
+      transcript: "",
+      labResults: "",
+    };
+    const onSubmit = vi.fn();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response("{}", { status: 202 }));
+    const { container } = renderDashboard(composedDraft, onSubmit);
+    const ta = container.querySelector(
+      "#medical-history-input",
+    ) as HTMLTextAreaElement;
+
+    // The textarea itself is exactly at the limit (no textarea-level error),
+    // but the composed payload is over, so the field is marked invalid with the
+    // composed-limit message.
+    expect(ta.getAttribute("aria-invalid")).toBe("true");
+    const describedBy = (ta.getAttribute("aria-describedby") ?? "").split(" ");
+    expect(describedBy).toContain("medical-history-overlimit");
+    const overMsg = container.querySelector("#medical-history-overlimit");
+    expect(overMsg?.textContent).toContain("patient context");
+
+    const form = container.querySelector("form")!;
+    act(() => {
+      fireEvent.submit(form);
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+    const summary = container.querySelector('[role="alert"]');
+    expect(summary?.textContent).toContain("patient context");
+
+    fetchSpy.mockRestore();
+    setDraft(null);
+  });
+
+  test("a composed payload under the limit (history shortened + patient context) clears feedback", () => {
+    // Counterpart: shortening Medical History so the composed payload fits clears
+    // the composed-limit error, invalid state, and summary.
+    const { container } = renderDashboard({
+      age: "45",
+      sex: "Male",
+      chiefComplaint: "Severe headache with blurred vision",
+      medicalHistory: "x".repeat(1_000),
+      transcript: "",
+      labResults: "",
+    });
+    const ta = container.querySelector(
+      "#medical-history-input",
+    ) as HTMLTextAreaElement;
+    expect(ta.getAttribute("aria-invalid")).toBeNull();
+    expect(container.querySelector("#medical-history-overlimit")).toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+
+    setDraft(null);
   });
 });
 

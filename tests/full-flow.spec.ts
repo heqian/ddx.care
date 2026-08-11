@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import {
   acceptConsent,
   fillValidForm,
@@ -8,6 +8,15 @@ import {
   authenticatedStatusRequest,
 } from "./e2e/helpers";
 import { specialistIds } from "../src/backend/agents/manifest";
+
+// Count POST /v1/diagnose requests fired during a test.
+function countDiagnosePosts(page: Page): { count: () => number } {
+  let n = 0;
+  page.on("request", (req) => {
+    if (req.method() === "POST" && req.url().includes("/v1/diagnose")) n++;
+  });
+  return { count: () => n };
+}
 
 test("agent API exposes the stable canonical specialist IDs", async ({
   request,
@@ -103,30 +112,40 @@ test.describe("Full diagnosis flow", () => {
     const submitBtn = page.getByRole("button", {
       name: "Submit for Diagnosis",
     });
-    await expect(submitBtn).toBeDisabled();
-
-    // Fill some simple fields
-    await page.getByPlaceholder("e.g., 45").fill("45");
-    await page
-      .getByPlaceholder(/Chest pain, shortness of breath/)
-      .fill("Headache");
-
-    // Submit should still be disabled because at least one of medical history, transcript, or labs is required.
-    await expect(submitBtn).toBeDisabled();
-
-    // Add medical history
-    await page
-      .getByPlaceholder(/Past diagnoses, medications/)
-      .fill("Some history");
+    // The submit control remains activatable even with an empty/invalid form.
     await expect(submitBtn).toBeEnabled();
 
-    // Use Clear All
+    // Submitting an empty form surfaces the validation summary and focuses it,
+    // without navigating away or starting a diagnosis.
+    await submitBtn.click();
+    const summary = page.getByRole("alert");
+    await expect(summary).toBeVisible();
+    await expect(summary).toBeFocused();
+
+    // Fill Age and Chief Complaint via their labels.
+    await page.getByLabel("Age", { exact: true }).fill("45");
+    await page.getByLabel("Chief Complaint", { exact: true }).fill("Headache");
+
+    // Still blocked because at least one clinical field is required.
+    await submitBtn.click();
+    await expect(summary).toBeVisible();
+    await expect(summary).toBeFocused();
+
+    // Adding clinical content clears the summary without a new submission.
+    await page
+      .getByLabel("Medical History", { exact: true })
+      .fill("Some history");
+    await expect(summary).toHaveCount(0);
+
+    // Use Clear All (resets validation state and fields).
     await page.getByRole("button", { name: "Clear All" }).click();
-    await expect(page.getByPlaceholder("e.g., 45")).toHaveValue("");
+    await expect(page.getByLabel("Age", { exact: true })).toHaveValue("");
     await expect(
-      page.getByPlaceholder(/Past diagnoses, medications/),
+      page.getByLabel("Medical History", { exact: true }),
     ).toHaveValue("");
-    await expect(submitBtn).toBeDisabled();
+    // After clearing, the submit control stays activatable and no summary shows.
+    await expect(submitBtn).toBeEnabled();
+    await expect(summary).toHaveCount(0);
   });
 
   test("submits a case and views the results", async ({ page }) => {
@@ -134,15 +153,17 @@ test.describe("Full diagnosis flow", () => {
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
 
     // 2. Fill the form and submit
+    const posts = countDiagnosePosts(page);
     await fillValidForm(page);
     await submitCase(page);
 
-    // 4. Waiting room should appear (briefly — mock completes quickly)
+    // The click submission path produces exactly one diagnosis request.
     await expect(
       page.getByRole("heading", { name: "Analyzing Case..." }),
     ).toBeVisible({
       timeout: 10_000,
     });
+    expect(posts.count()).toBe(1);
 
     // Verify Cancel button exists in the waiting room
     await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
@@ -208,7 +229,7 @@ test.describe("Full diagnosis flow", () => {
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
 
     // Type into medical history field
-    const historyField = page.getByPlaceholder(/Past diagnoses, medications/);
+    const historyField = page.getByLabel("Medical History", { exact: true });
     await historyField.fill("Some test medical history input");
 
     // Look for character count text (e.g. "31 / 50,000" or similar)
@@ -487,6 +508,178 @@ test.describe("Full diagnosis flow", () => {
   });
 });
 
+test.describe("Form submission and keyboard behavior", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+    await acceptConsent(page);
+  });
+
+  test("Enter in a single-line input with empty clinical fields focuses the validation alert", async ({
+    page,
+  }) => {
+    const posts = countDiagnosePosts(page);
+
+    // Press Enter in a labeled single-line text input with all clinical
+    // textareas empty.
+    await page.getByLabel("Chief Complaint", { exact: true }).focus();
+    await page.keyboard.press("Enter");
+
+    // No diagnosis request started.
+    expect(posts.count()).toBe(0);
+    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
+
+    const alert = page.getByRole("alert");
+    await expect(alert).toBeVisible();
+    await expect(alert).toBeFocused();
+    await expect(alert).toContainText(/at least one field/i);
+  });
+
+  test("Enter in a single-line input with valid clinical content submits the case once", async ({
+    page,
+  }) => {
+    const posts = countDiagnosePosts(page);
+
+    await page.getByLabel("Age", { exact: true }).fill("45");
+    await page
+      .getByLabel("Medical History", { exact: true })
+      .fill("Valid clinical history content.");
+
+    // Press Enter in a labeled single-line text input.
+    await page.getByLabel("Chief Complaint", { exact: true }).focus();
+    await page.keyboard.press("Enter");
+
+    // Exactly one native form submission reaches the waiting/results flow.
+    await expect(
+      page.getByRole("heading", { name: "Analyzing Case..." }),
+    ).toBeVisible({ timeout: 10_000 });
+    expect(posts.count()).toBe(1);
+  });
+
+  test("Enter in a clinical textarea inserts a newline without submitting", async ({
+    page,
+  }) => {
+    const posts = countDiagnosePosts(page);
+
+    const ta = page.getByLabel("Medical History", { exact: true });
+    await ta.fill("line one");
+    await ta.focus();
+    await page.keyboard.press("Enter");
+
+    // A newline is inserted.
+    await expect(ta).toHaveValue("line one\n");
+    // No submission or navigation.
+    expect(posts.count()).toBe(0);
+    await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible();
+  });
+
+  test("untouched invalid Age from a draft blocks submission and is correctable without focus theft", async ({
+    page,
+  }) => {
+    const posts = countDiagnosePosts(page);
+
+    // Seed a draft with valid clinical content and an invalid, untouched Age.
+    await page.evaluate(() => {
+      sessionStorage.setItem(
+        "ddx_draft",
+        JSON.stringify({
+          age: "abc",
+          sex: "",
+          chiefComplaint: "",
+          medicalHistory: "Valid clinical content for the age case.",
+          transcript: "",
+          labResults: "",
+        }),
+      );
+    });
+    await page.reload();
+    await acceptConsent(page);
+
+    const ageInput = page.getByLabel("Age", { exact: true });
+    // Before any submit/interaction, the untouched invalid Age shows no error.
+    await expect(ageInput).not.toHaveAttribute("aria-invalid", "true");
+
+    // Attempt submission via Enter in a single-line input.
+    await page.getByLabel("Chief Complaint", { exact: true }).focus();
+    await page.keyboard.press("Enter");
+
+    expect(posts.count()).toBe(0);
+    // Age is now touched/validated and invalid.
+    await expect(ageInput).toHaveAttribute("aria-invalid", "true");
+    const describedBy = await ageInput.evaluate(
+      (el) => el.getAttribute("aria-describedby") ?? "",
+    );
+    expect(describedBy.split(" ")).toEqual(
+      expect.arrayContaining(["age-hint", "age-error"]),
+    );
+
+    const summary = page.getByRole("alert");
+    await expect(summary).toBeVisible();
+    await expect(summary).toBeFocused();
+
+    // Repeated invalid attempt refocuses the summary.
+    await ageInput.focus();
+    await page.keyboard.press("Enter");
+    await expect(summary).toBeFocused();
+    expect(posts.count()).toBe(0);
+
+    // Correct Age: focus stays on the Age input and the resolved error clears.
+    await ageInput.fill("45");
+    await expect(ageInput).toBeFocused();
+    await expect(ageInput).not.toHaveAttribute("aria-invalid", "true");
+    const correctedDescribedBy = await ageInput.evaluate(
+      (el) => el.getAttribute("aria-describedby") ?? "",
+    );
+    expect(correctedDescribedBy.split(" ")).toEqual(["age-hint"]);
+    await expect(page.locator("#age-error")).toHaveCount(0);
+    // Correction also clears the validation summary (form is now valid).
+    await expect(summary).toHaveCount(0);
+  });
+
+  test("a 50,001-character field blocks submission and clears feedback on truncation without focus theft", async ({
+    page,
+  }) => {
+    const posts = countDiagnosePosts(page);
+
+    const ta = page.getByLabel("Medical History", { exact: true });
+    await ta.fill("x".repeat(50_001));
+
+    // Over-limit feedback is associated before submit.
+    await expect(ta).toHaveAttribute("aria-invalid", "true");
+    let describedBy = await ta.evaluate(
+      (el) => el.getAttribute("aria-describedby") ?? "",
+    );
+    expect(describedBy.split(" ")).toContain("medical-history-overlimit");
+    await expect(page.locator("#medical-history-overlimit")).toBeVisible();
+
+    // Attempt submission.
+    await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
+    expect(posts.count()).toBe(0);
+
+    const summary = page.getByRole("alert");
+    await expect(summary).toBeVisible();
+    await expect(summary).toBeFocused();
+    await expect(summary).toContainText("50,000-character limit");
+
+    // Repeated invalid attempt refocuses the summary.
+    await ta.focus();
+    await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
+    await expect(summary).toBeFocused();
+    expect(posts.count()).toBe(0);
+
+    // Truncate to 50,000: feedback clears, focus stays on the textarea.
+    await ta.fill("x".repeat(50_000));
+    await expect(ta).toBeFocused();
+    await expect(ta).not.toHaveAttribute("aria-invalid", "true");
+    describedBy = await ta.evaluate(
+      (el) => el.getAttribute("aria-describedby") ?? "",
+    );
+    expect(describedBy.split(" ")).not.toContain("medical-history-overlimit");
+    await expect(page.locator("#medical-history-overlimit")).toHaveCount(0);
+    // Truncation also clears the validation summary (form is now valid).
+    await expect(summary).toHaveCount(0);
+  });
+});
+
 test.describe("Accessibility — keyboard navigation", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
@@ -495,9 +688,9 @@ test.describe("Accessibility — keyboard navigation", () => {
 
   test("tab keyboard navigation with arrow keys", async ({ page }) => {
     // Submit a case to reach the results view
-    await page.getByPlaceholder("e.g., 45").fill("45");
+    await page.getByLabel("Age", { exact: true }).fill("45");
     await page
-      .getByPlaceholder(/Past diagnoses, medications/)
+      .getByLabel("Medical History", { exact: true })
       .fill("Some history");
     await page.getByRole("button", { name: "Submit for Diagnosis" }).click();
 

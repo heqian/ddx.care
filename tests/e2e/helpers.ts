@@ -39,25 +39,27 @@ export async function fillValidForm(
   page: Page,
   overrides: FormOverrides = {},
 ): Promise<void> {
-  await page.getByPlaceholder("e.g., 45").fill(overrides.age ?? "45");
-  await page.getByRole("combobox").selectOption(overrides.sex ?? "Male");
+  await page.getByLabel("Age", { exact: true }).fill(overrides.age ?? "45");
   await page
-    .getByPlaceholder(/Chest pain, shortness of breath/)
+    .getByLabel("Sex", { exact: true })
+    .selectOption(overrides.sex ?? "Male");
+  await page
+    .getByLabel("Chief Complaint", { exact: true })
     .fill(overrides.chiefComplaint ?? "Severe headache with blurred vision");
   await page
-    .getByPlaceholder(/Past diagnoses, medications/)
+    .getByLabel("Medical History", { exact: true })
     .fill(
       overrides.medicalHistory ??
         "Hypertension diagnosed 5 years ago. On lisinopril 10mg daily.",
     );
   await page
-    .getByPlaceholder(/Doctor-patient encounter/)
+    .getByLabel("Conversation Transcript", { exact: true })
     .fill(
       overrides.transcript ??
         "The individual reports a severe headache for 3 days. Clinician asked about vision changes. Confirmed blurred vision present.",
     );
   await page
-    .getByPlaceholder(/Blood panels, urinalysis/)
+    .getByLabel("Lab Results", { exact: true })
     .fill(overrides.labs ?? "BP: 180/110. HR: 90.");
 }
 

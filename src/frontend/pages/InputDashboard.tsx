@@ -83,13 +83,57 @@ function clearDraft() {
   }
 }
 
-function CharCount({ value, max }: { value: string; max: number }) {
+function isAgeInvalid(age: string): boolean {
+  return age !== "" && !/^\d{1,3}$/.test(age);
+}
+
+function hasClinicalContent(
+  history: string,
+  transcript: string,
+  labs: string,
+): boolean {
+  return Boolean(history.trim() || transcript.trim() || labs.trim());
+}
+
+/**
+ * Compose the `medicalHistory` payload sent to the backend. Age, Sex, and
+ * Chief Complaint are prepended to the history text. The composed string must
+ * satisfy the backend's per-field length limit, so validation and submission
+ * share this single helper to stay in agreement.
+ */
+function composeMedicalHistory(
+  age: string,
+  sex: string,
+  chiefComplaint: string,
+  medicalHistory: string,
+): string {
+  const contextPrefix = [
+    age && `Age: ${age}`,
+    sex && `Sex: ${sex}`,
+    chiefComplaint && `Chief Complaint: ${chiefComplaint}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return contextPrefix
+    ? `${contextPrefix}\n\n${medicalHistory}`
+    : medicalHistory;
+}
+
+interface CharCountProps {
+  id: string;
+  value: string;
+  max: number;
+}
+
+function CharCount({ id, value, max }: CharCountProps) {
   const len = value.length;
   const pct = len / max;
   const nearLimit = pct > 0.8;
   const overLimit = len > max;
   return (
     <span
+      id={id}
       className={`text-xs tabular-nums transition-colors ${
         overLimit
           ? "text-danger font-medium"
@@ -123,8 +167,16 @@ export const InputDashboard = forwardRef<
   const [activeVoiceTarget, setActiveVoiceTarget] = useState<
     "history" | "transcript" | null
   >(null);
-  const [touched, setTouched] = useState(false);
+  // Whether Age has been interacted with or validated by a submit attempt.
+  // Drives whether the Age error is shown; submission sets this to true so an
+  // invalid Age loaded from a draft is still validated.
+  const [ageValidated, setAgeValidated] = useState(false);
+  // Incremented on every failed client-validation attempt. The summary is
+  // rendered while errors remain after an attempt; this counter drives the
+  // refocus effect so repeated attempts refocus the summary.
+  const [validationAttempt, setValidationAttempt] = useState(0);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
 
   // Persist draft on change (debounced 500ms)
   useEffect(() => {
@@ -140,18 +192,39 @@ export const InputDashboard = forwardRef<
     return () => clearTimeout(id);
   }, [age, sex, chiefComplaint, medicalHistory, transcript, labResults]);
 
-  const ageError = touched && age !== "" && !/^\d{1,3}$/.test(age);
+  // Refocus the stable validation summary after every failed submit attempt,
+  // including repeated attempts with unchanged errors.
+  useEffect(() => {
+    if (validationAttempt > 0 && summaryRef.current) {
+      summaryRef.current.focus();
+    }
+  }, [validationAttempt]);
 
-  const historyLen = medicalHistory.length;
-  const transcriptLen = transcript.length;
-  const labLen = labResults.length;
-  const anyOverLimit =
-    historyLen > MAX_CHARS || transcriptLen > MAX_CHARS || labLen > MAX_CHARS;
+  const ageInvalid = isAgeInvalid(age);
+  const ageError = ageValidated && ageInvalid;
 
-  const canSubmit =
-    !anyOverLimit &&
-    !ageError &&
-    Boolean(medicalHistory.trim() || transcript.trim() || labResults.trim());
+  const historyOver = medicalHistory.length > MAX_CHARS;
+  const transcriptOver = transcript.length > MAX_CHARS;
+  const labsOver = labResults.length > MAX_CHARS;
+  // The composed medicalHistory payload (patient-context prefix + history)
+  // must also fit the backend per-field limit. When patient context is present
+  // the composed length can exceed MAX_CHARS even when the textarea alone does
+  // not, so the composed length is the authoritative history error.
+  const historyComposedOver =
+    composeMedicalHistory(age, sex, chiefComplaint, medicalHistory).length >
+    MAX_CHARS;
+  const historyError = historyOver || historyComposedOver;
+
+  const clinicalEmpty = !hasClinicalContent(
+    medicalHistory,
+    transcript,
+    labResults,
+  );
+
+  const hasClientErrors =
+    clinicalEmpty || ageError || historyError || transcriptOver || labsOver;
+
+  const showSummary = validationAttempt > 0 && hasClientErrors;
 
   const stopVoiceInput = useCallback(() => {
     if (recognitionRef.current) {
@@ -165,44 +238,73 @@ export const InputDashboard = forwardRef<
     setActiveVoiceTarget(null);
   }, []);
 
-  const handleSubmit = useCallback(async () => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const contextPrefix = [
-        age && `Age: ${age}`,
-        sex && `Sex: ${sex}`,
-        chiefComplaint && `Chief Complaint: ${chiefComplaint}`,
-      ]
-        .filter(Boolean)
-        .join("\n");
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (submitting) return;
 
-      const fullHistory = contextPrefix
-        ? `${contextPrefix}\n\n${medicalHistory}`
-        : medicalHistory;
+      // Validate the current values independently of prior interaction so an
+      // invalid Age loaded from a draft is still caught.
+      setAgeValidated(true);
 
-      const payload: DiagnoseRequest = {
-        medicalHistory: fullHistory,
-        conversationTranscript: transcript,
+      const currentAgeError = isAgeInvalid(age);
+      const currentHistoryComposedOver =
+        composeMedicalHistory(age, sex, chiefComplaint, medicalHistory).length >
+        MAX_CHARS;
+      const currentTranscriptOver = transcript.length > MAX_CHARS;
+      const currentLabsOver = labResults.length > MAX_CHARS;
+      const currentClinicalEmpty = !hasClinicalContent(
+        medicalHistory,
+        transcript,
         labResults,
-      };
-      const { jobId, token, wsTicket } = await submitDiagnosis(payload);
-      clearDraft();
-      onSubmit(jobId, payload, token, wsTicket);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Submission failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }, [
-    age,
-    sex,
-    chiefComplaint,
-    medicalHistory,
-    transcript,
-    labResults,
-    onSubmit,
-  ]);
+      );
+
+      if (
+        currentClinicalEmpty ||
+        currentAgeError ||
+        currentHistoryComposedOver ||
+        currentTranscriptOver ||
+        currentLabsOver
+      ) {
+        setValidationAttempt((n) => n + 1);
+        return;
+      }
+
+      setSubmitting(true);
+      setError(null);
+      try {
+        const fullHistory = composeMedicalHistory(
+          age,
+          sex,
+          chiefComplaint,
+          medicalHistory,
+        );
+
+        const payload: DiagnoseRequest = {
+          medicalHistory: fullHistory,
+          conversationTranscript: transcript,
+          labResults,
+        };
+        const { jobId, token, wsTicket } = await submitDiagnosis(payload);
+        clearDraft();
+        onSubmit(jobId, payload, token, wsTicket);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Submission failed");
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      submitting,
+      age,
+      sex,
+      chiefComplaint,
+      medicalHistory,
+      transcript,
+      labResults,
+      onSubmit,
+    ],
+  );
 
   const handleClearAll = useCallback(() => {
     setAge("");
@@ -212,7 +314,8 @@ export const InputDashboard = forwardRef<
     setTranscript("");
     setLabResults("");
     setError(null);
-    setTouched(false);
+    setAgeValidated(false);
+    setValidationAttempt(0);
     clearDraft();
   }, []);
 
@@ -270,8 +373,19 @@ export const InputDashboard = forwardRef<
     [stopVoiceInput],
   );
 
+  const historyDescribedBy = `clinical-required-hint medical-history-instruction medical-history-count${
+    historyError ? " medical-history-overlimit" : ""
+  }`;
+  const transcriptDescribedBy = `clinical-required-hint conversation-transcript-instruction conversation-transcript-count${
+    transcriptOver ? " conversation-transcript-overlimit" : ""
+  }`;
+  const labsDescribedBy = `clinical-required-hint lab-results-instruction lab-results-count${
+    labsOver ? " lab-results-overlimit" : ""
+  }`;
+  const ageDescribedBy = `age-hint${ageError ? " age-error" : ""}`;
+
   return (
-    <div className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6" noValidate>
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-display">New Case</h1>
@@ -280,6 +394,7 @@ export const InputDashboard = forwardRef<
           </p>
         </div>
         <button
+          type="button"
           onClick={handleClearAll}
           className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-danger transition-colors mt-1"
           title="Clear all fields"
@@ -294,67 +409,101 @@ export const InputDashboard = forwardRef<
         <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-4">
           Patient Context
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Age</label>
-            <input
-              id="age-input"
-              type="text"
-              value={age}
-              onChange={(e) => {
-                setAge(e.target.value);
-                setTouched(true);
-              }}
-              placeholder="e.g., 45"
-              aria-invalid={ageError || undefined}
-              aria-describedby={ageError ? "age-error" : undefined}
-              className={`${inputClass} ${ageError ? "border-danger focus:ring-danger" : ""}`}
-            />
-            {ageError && (
-              <p
-                id="age-error"
-                className="text-xs text-danger mt-1"
-                role="alert"
+        <fieldset>
+          <legend className="sr-only">Patient Context</legend>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label
+                htmlFor="age-input"
+                className="block text-sm font-medium mb-1"
               >
-                Age must be a number (1–3 digits)
+                Age
+              </label>
+              <input
+                id="age-input"
+                name="age"
+                type="text"
+                inputMode="numeric"
+                value={age}
+                onChange={(e) => {
+                  setAge(e.target.value);
+                  setAgeValidated(true);
+                }}
+                placeholder="e.g., 45"
+                aria-invalid={ageError || undefined}
+                aria-describedby={ageDescribedBy}
+                className={`${inputClass} ${ageError ? "border-danger focus:ring-danger" : ""}`}
+              />
+              <p
+                id="age-hint"
+                className="text-xs text-slate-400 dark:text-slate-500 mt-1"
+              >
+                Age in years; use 1 to 3 digits.
               </p>
-            )}
+              {ageError && (
+                <p id="age-error" className="text-xs text-danger mt-1">
+                  Age must be a number (1–3 digits).
+                </p>
+              )}
+            </div>
+            <div>
+              <label
+                htmlFor="sex-select"
+                className="block text-sm font-medium mb-1"
+              >
+                Sex
+              </label>
+              <select
+                id="sex-select"
+                name="sex"
+                value={sex}
+                onChange={(e) => setSex(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Select...</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="chief-complaint-input"
+                className="block text-sm font-medium mb-1"
+              >
+                Chief Complaint
+              </label>
+              <input
+                id="chief-complaint-input"
+                name="chiefComplaint"
+                type="text"
+                value={chiefComplaint}
+                onChange={(e) => setChiefComplaint(e.target.value)}
+                placeholder="e.g., Chest pain, shortness of breath"
+                className={inputClass}
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Sex</label>
-            <select
-              value={sex}
-              onChange={(e) => setSex(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">Select...</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Chief Complaint
-            </label>
-            <input
-              type="text"
-              value={chiefComplaint}
-              onChange={(e) => setChiefComplaint(e.target.value)}
-              placeholder="e.g., Chest pain, shortness of breath"
-              className={inputClass}
-            />
-          </div>
-        </div>
+        </fieldset>
       </Card>
+
+      {/* Shared clinical requirement */}
+      <p
+        id="clinical-required-hint"
+        className="text-xs text-slate-500 dark:text-slate-400"
+      >
+        At least one of Medical History, Conversation Transcript, or Lab Results
+        is required.
+      </p>
 
       {/* Medical History */}
       <Card>
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-            Medical History
+            <label htmlFor="medical-history-input">Medical History</label>
           </h2>
           <button
+            type="button"
             onClick={() =>
               activeVoiceTarget === "history"
                 ? stopVoiceInput()
@@ -373,15 +522,39 @@ export const InputDashboard = forwardRef<
             {activeVoiceTarget === "history" ? "Stop" : "Dictate"}
           </button>
         </div>
+        <p
+          id="medical-history-instruction"
+          className="text-xs text-slate-500 dark:text-slate-400 mb-1"
+        >
+          Past diagnoses, medications, allergies, and family history.
+        </p>
         <div className="flex justify-end mb-1">
-          <CharCount value={medicalHistory} max={MAX_CHARS} />
+          <CharCount
+            id="medical-history-count"
+            value={medicalHistory}
+            max={MAX_CHARS}
+          />
         </div>
+        {historyError && (
+          <p
+            id="medical-history-overlimit"
+            className="text-xs text-danger mb-1"
+          >
+            {historyOver
+              ? "Medical History exceeds the 50,000-character limit."
+              : "Medical History plus patient context exceeds the 50,000-character limit."}
+          </p>
+        )}
         <textarea
+          id="medical-history-input"
+          name="medicalHistory"
           value={medicalHistory}
           onChange={(e) => setMedicalHistory(e.target.value)}
-          placeholder="Past diagnoses, medications, allergies, family history...&#10;You can also paste EHR summaries or drop a file below."
+          placeholder="You can paste EHR summaries or drop a file below."
           rows={4}
-          className={textareaClass}
+          aria-invalid={historyError || undefined}
+          aria-describedby={historyDescribedBy}
+          className={`${textareaClass} ${historyError ? "border-danger focus:ring-danger" : ""}`}
         />
         <div className="mt-3">
           <FileDropZone
@@ -399,10 +572,13 @@ export const InputDashboard = forwardRef<
       <Card>
         <div className="flex items-center justify-between mb-1">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-            <DocumentTextIcon className="h-4 w-4" />
-            Conversation Transcript
+            <DocumentTextIcon className="h-4 w-4" aria-hidden="true" />
+            <label htmlFor="conversation-transcript-input">
+              Conversation Transcript
+            </label>
           </h2>
           <button
+            type="button"
             onClick={() =>
               activeVoiceTarget === "transcript"
                 ? stopVoiceInput()
@@ -423,15 +599,37 @@ export const InputDashboard = forwardRef<
             {activeVoiceTarget === "transcript" ? "Stop" : "Dictate"}
           </button>
         </div>
+        <p
+          id="conversation-transcript-instruction"
+          className="text-xs text-slate-500 dark:text-slate-400 mb-1"
+        >
+          Doctor-patient encounter notes or transcript.
+        </p>
         <div className="flex justify-end mb-1">
-          <CharCount value={transcript} max={MAX_CHARS} />
+          <CharCount
+            id="conversation-transcript-count"
+            value={transcript}
+            max={MAX_CHARS}
+          />
         </div>
+        {transcriptOver && (
+          <p
+            id="conversation-transcript-overlimit"
+            className="text-xs text-danger mb-1"
+          >
+            Conversation Transcript exceeds the 50,000-character limit.
+          </p>
+        )}
         <textarea
+          id="conversation-transcript-input"
+          name="conversationTranscript"
           value={transcript}
           onChange={(e) => setTranscript(e.target.value)}
           placeholder="Doctor-patient encounter notes or transcript..."
           rows={4}
-          className={textareaClass}
+          aria-invalid={transcriptOver || undefined}
+          aria-describedby={transcriptDescribedBy}
+          className={`${textareaClass} ${transcriptOver ? "border-danger focus:ring-danger" : ""}`}
         />
         <div className="mt-3">
           <FileDropZone
@@ -449,20 +647,39 @@ export const InputDashboard = forwardRef<
       <Card>
         <div className="flex items-center justify-between mb-1">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-            <BeakerIcon className="h-4 w-4" />
-            Lab Results
+            <BeakerIcon className="h-4 w-4" aria-hidden="true" />
+            <label htmlFor="lab-results-input">Lab Results</label>
           </h2>
           <div /> {/* align with voice buttons */}
         </div>
+        <p
+          id="lab-results-instruction"
+          className="text-xs text-slate-500 dark:text-slate-400 mb-1"
+        >
+          Blood panels, urinalysis, imaging reports.
+        </p>
         <div className="flex justify-end mb-1">
-          <CharCount value={labResults} max={MAX_CHARS} />
+          <CharCount
+            id="lab-results-count"
+            value={labResults}
+            max={MAX_CHARS}
+          />
         </div>
+        {labsOver && (
+          <p id="lab-results-overlimit" className="text-xs text-danger mb-1">
+            Lab Results exceeds the 50,000-character limit.
+          </p>
+        )}
         <textarea
+          id="lab-results-input"
+          name="labResults"
           value={labResults}
           onChange={(e) => setLabResults(e.target.value)}
           placeholder="Blood panels, urinalysis, imaging reports..."
           rows={4}
-          className={textareaClass}
+          aria-invalid={labsOver || undefined}
+          aria-describedby={labsDescribedBy}
+          className={`${textareaClass} ${labsOver ? "border-danger focus:ring-danger" : ""}`}
         />
         <div className="mt-3">
           <FileDropZone
@@ -476,24 +693,51 @@ export const InputDashboard = forwardRef<
         </div>
       </Card>
 
-      {/* Error */}
+      {/* Client-validation summary (single, focusable alert) */}
+      {showSummary && (
+        <div
+          ref={summaryRef}
+          role="alert"
+          tabIndex={-1}
+          className="text-sm text-danger bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-danger focus:ring-offset-2 dark:focus:ring-offset-slate-900"
+        >
+          <p className="font-medium">
+            Please correct the following before submitting:
+          </p>
+          <ul className="list-disc ml-5 mt-1">
+            {clinicalEmpty && (
+              <li>
+                Enter content in at least one field: Medical History,
+                Conversation Transcript, or Lab Results.
+              </li>
+            )}
+            {ageError && <li>Age must be a number using 1 to 3 digits.</li>}
+            {historyError && (
+              <li>
+                {historyOver
+                  ? "Medical History exceeds the 50,000-character limit."
+                  : "Medical History plus patient context exceeds the 50,000-character limit."}
+              </li>
+            )}
+            {transcriptOver && (
+              <li>
+                Conversation Transcript exceeds the 50,000-character limit.
+              </li>
+            )}
+            {labsOver && (
+              <li>Lab Results exceeds the 50,000-character limit.</li>
+            )}
+          </ul>
+        </div>
+      )}
+
+      {/* Server error (distinct from client validation) */}
       {error && (
         <div
           role="alert"
           className="text-sm text-danger bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-4 py-3"
         >
           {error}
-        </div>
-      )}
-
-      {/* Validation hint */}
-      {anyOverLimit && (
-        <div
-          role="alert"
-          className="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3"
-        >
-          One or more fields exceed the character limit. Please shorten before
-          submitting.
         </div>
       )}
 
@@ -535,13 +779,13 @@ export const InputDashboard = forwardRef<
       {/* Submit */}
       <div className="flex justify-stretch sm:justify-end">
         <Button
-          onClick={handleSubmit}
-          disabled={!canSubmit || submitting}
+          type="submit"
+          disabled={submitting}
           className="w-full sm:w-auto"
         >
           {submitting ? "Submitting..." : "Submit for Diagnosis"}
         </Button>
       </div>
-    </div>
+    </form>
   );
 });

@@ -102,9 +102,9 @@ test.describe("Inactivity session purge", () => {
       timeout: 5_000,
     });
     // The form fields should be blank (draft was purged).
-    await expect(page.getByPlaceholder("e.g., 45")).toHaveValue("");
+    await expect(page.getByLabel("Age", { exact: true })).toHaveValue("");
     await expect(
-      page.getByPlaceholder(/Past diagnoses, medications/),
+      page.getByLabel("Medical History", { exact: true }),
     ).toHaveValue("");
   });
 
@@ -168,9 +168,9 @@ test.describe("Inactivity session purge", () => {
     await page.locator("body").click();
 
     // Type into the form to seed the autosave draft (wait for the 500ms debounce).
-    await page.getByPlaceholder("e.g., 45").fill("55");
+    await page.getByLabel("Age", { exact: true }).fill("55");
     await page
-      .getByPlaceholder(/Past diagnoses, medications/)
+      .getByLabel("Medical History", { exact: true })
       .fill("Input purge sentinel");
     // Click to reset the timer onto the mocked clock (fill may not dispatch
     // keydown, so the auto-logout timer may still be on the real clock).
@@ -196,7 +196,7 @@ test.describe("Inactivity session purge", () => {
     ).toBeNull();
 
     // The form content must NOT be visible (locked view replaces it).
-    await expect(page.getByPlaceholder("e.g., 45")).toHaveCount(0);
+    await expect(page.getByLabel("Age", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Input purge sentinel")).toHaveCount(0);
 
     // Tapping Continue shows a blank input form.
@@ -204,7 +204,7 @@ test.describe("Inactivity session purge", () => {
     await expect(page.getByRole("heading", { name: "New Case" })).toBeVisible({
       timeout: 5_000,
     });
-    await expect(page.getByPlaceholder("e.g., 45")).toHaveValue("");
+    await expect(page.getByLabel("Age", { exact: true })).toHaveValue("");
   });
 
   test("autosave disclosure is visible on the input form", async ({ page }) => {
