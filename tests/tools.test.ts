@@ -220,7 +220,7 @@ describe("Tool Assignments", () => {
   test("every specialist has the exact expected tool categories", async () => {
     const { toolAssignments } = await import("../src/backend/tools/index");
 
-    expect(toolAssignments).toEqual(EXPECTED_TOOL_ASSIGNMENTS);
+    expect(toolAssignments).toEqual(EXPECTED_TOOL_ASSIGNMENTS as any);
   });
 
   test("formerly mismatched specialists use canonical runtime IDs and exact tools", async () => {
@@ -247,7 +247,7 @@ describe("Tool Assignments", () => {
 
       expect(specialists[canonicalId].id).toBe(canonicalId);
       expect(specialists[canonicalId].id).not.toBe(legacyId);
-      expect(toolAssignments[canonicalId]).toEqual(categories);
+      expect(toolAssignments[canonicalId]).toEqual(categories as any);
       expect(Object.keys(getToolsForSpecialist(canonicalId))).toEqual(
         expectedToolIds,
       );

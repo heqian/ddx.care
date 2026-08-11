@@ -1,216 +1,458 @@
 /**
- * Unit tests for WebSocket origin validation logic.
+ * WebSocket origin validation tests.
  *
- * These tests directly verify the origin checking behavior without needing
- * a separate server instance with different ALLOWED_ORIGINS config.
+ * These tests exercise the production /ws route handler via the composition
+ * seam with injected trusted/allowed origins and token service. No local
+ * origin allowlist or token algorithm is implemented here — all behavior is
+ * produced by production code.
  */
 import { test, expect, describe } from "bun:test";
+import {
+  createComposedRoutes,
+  type CompositionDependencies,
+} from "../src/backend/composition";
+import { buildConfig } from "../src/backend/app-config";
+import { createTokenService } from "../src/backend/token-service";
+import { JobStore } from "../src/backend/progress-store";
+import { RateLimiter } from "../src/backend/utils/rate-limiter";
+import { agentList } from "../src/backend/agents/index";
 
-/**
- * Extracted origin validation logic matching routes.ts implementation.
- * This mirrors the exact check in the /ws route handler.
- */
-function isOriginAllowed(
-  allowedOrigins: string,
-  requestOrigin: string | null,
-): boolean {
-  if (!requestOrigin) return false;
-  if (allowedOrigins === "*") return true;
-  const allowed = allowedOrigins.split(",").map((o) => o.trim());
-  return allowed.includes(requestOrigin);
+function makeRoutes(opts?: {
+  trustedOrigins?: string;
+  allowedOrigins?: string;
+  secret?: string;
+}) {
+  const cfg = buildConfig({
+    MOCK_LLM: "1",
+    PORT: "0",
+    TRUSTED_ORIGINS: opts?.trustedOrigins ?? "",
+    ALLOWED_ORIGINS: opts?.allowedOrigins ?? "*",
+    WS_TOKEN_SECRET: opts?.secret ?? "",
+    TOOL_CACHE_TTL_MS: "0",
+    ORPHADATA_ENABLED: "0",
+    RATE_LIMIT_MAX_REQUESTS: "100",
+    MAX_CONCURRENT_WORKFLOWS: "20",
+  });
+  const jobStore = new JobStore(":memory:");
+  const rateLimiter = new RateLimiter({
+    maxRequests: cfg.rateLimitMaxRequests,
+    windowMs: cfg.rateLimitWindowMs,
+    maxConcurrent: cfg.maxConcurrentWorkflows,
+  });
+  const tokenService = createTokenService({
+    secret: cfg.wsTokenSecret,
+    jobTtlMs: cfg.jobTtlMs,
+  });
+  const deps: CompositionDependencies = {
+    config: cfg,
+    jobStore,
+    abortStore: {
+      set() {},
+      get() {
+        return undefined;
+      },
+      remove() {},
+    } as any,
+    rateLimiter,
+    tokenService,
+    workflowFactory: {
+      async createRun() {
+        return { start: async () => ({ status: "ok" }) };
+      },
+    },
+    cacheStatus: {
+      enabled: false,
+      getStats: () => ({ entries: 0, hits: 0, misses: 0 }),
+    },
+    logger: {
+      info() {},
+      warn() {},
+      error() {},
+      request() {},
+      workflowStart() {},
+      workflowComplete() {},
+      workflowFail() {},
+    },
+    clock: { now: () => Date.now() },
+    idSource: { newJobId: () => crypto.randomUUID() },
+    agentList: () => agentList,
+    appHtml: "<html></html>",
+  };
+  // The server adapter always refuses upgrade so we can observe the 500
+  // path; origin validation happens before upgrade.
+  return createComposedRoutes(deps, {
+    upgrade: () => false,
+  }) as Record<string, { GET?: (req: Request) => Response | undefined }>;
 }
 
-describe("WebSocket origin validation logic", () => {
+describe("WebSocket origin validation — production /ws handler", () => {
   describe("wildcard mode (ALLOWED_ORIGINS='*')", () => {
-    test("allows any origin", () => {
-      expect(isOriginAllowed("*", "https://evil.example.com")).toBe(true);
+    test("allows any origin", async () => {
+      const routes = makeRoutes({ allowedOrigins: "*" });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://evil.example.com" },
+        }),
+      ) as Response;
+      // Not 403 — wildcard allows everything (upgrade then fails with 500).
+      expect(res.status).not.toBe(403);
     });
 
-    test("rejects null origin — browsers always send Origin for WebSocket upgrades", () => {
-      expect(isOriginAllowed("*", null)).toBe(false);
+    test("rejects request with no Origin header", () => {
+      const routes = makeRoutes({ allowedOrigins: "*" });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", { headers: {} }),
+      ) as Response;
+      expect(res.status).toBe(403);
     });
   });
 
-  describe("restricted mode", () => {
+  describe("restricted mode (explicit allowed list)", () => {
     const ORIGINS = "https://app.ddx.care,https://staging.ddx.care";
 
     test("rejects request with no origin", () => {
-      expect(isOriginAllowed(ORIGINS, null)).toBe(false);
+      const routes = makeRoutes({ allowedOrigins: ORIGINS });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", { headers: {} }),
+      ) as Response;
+      expect(res.status).toBe(403);
     });
 
     test("rejects disallowed origin", () => {
-      expect(isOriginAllowed(ORIGINS, "https://evil.example.com")).toBe(false);
+      const routes = makeRoutes({ allowedOrigins: ORIGINS });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://evil.example.com" },
+        }),
+      ) as Response;
+      expect(res.status).toBe(403);
     });
 
     test("allows first listed origin", () => {
-      expect(isOriginAllowed(ORIGINS, "https://app.ddx.care")).toBe(true);
+      const routes = makeRoutes({ allowedOrigins: ORIGINS });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://app.ddx.care" },
+        }),
+      ) as Response;
+      expect(res.status).not.toBe(403);
     });
 
     test("allows second listed origin", () => {
-      expect(isOriginAllowed(ORIGINS, "https://staging.ddx.care")).toBe(true);
+      const routes = makeRoutes({ allowedOrigins: ORIGINS });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://staging.ddx.care" },
+        }),
+      ) as Response;
+      expect(res.status).not.toBe(403);
     });
 
     test("rejects origin that is a substring of allowed", () => {
-      expect(isOriginAllowed(ORIGINS, "https://app.ddx.care.evil.com")).toBe(
-        false,
-      );
+      const routes = makeRoutes({ allowedOrigins: ORIGINS });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://app.ddx.care.evil.com" },
+        }),
+      ) as Response;
+      expect(res.status).toBe(403);
     });
 
     test("rejects origin with different scheme", () => {
-      expect(isOriginAllowed(ORIGINS, "http://app.ddx.care")).toBe(false);
+      const routes = makeRoutes({ allowedOrigins: ORIGINS });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "http://app.ddx.care" },
+        }),
+      ) as Response;
+      expect(res.status).toBe(403);
     });
 
     test("handles whitespace in origin list", () => {
-      const origins = "https://a.com , https://b.com";
-      expect(isOriginAllowed(origins, "https://a.com")).toBe(true);
-      expect(isOriginAllowed(origins, "https://b.com")).toBe(true);
+      const routes = makeRoutes({
+        allowedOrigins: "https://a.com , https://b.com",
+      });
+      let res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://a.com" },
+        }),
+      ) as Response;
+      expect(res.status).not.toBe(403);
+      res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://b.com" },
+        }),
+      ) as Response;
+      expect(res.status).not.toBe(403);
     });
 
     test("is case-sensitive", () => {
-      expect(
-        isOriginAllowed("https://App.DDX.Care", "https://app.ddx.care"),
-      ).toBe(false);
+      const routes = makeRoutes({ allowedOrigins: "https://App.DDX.Care" });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://app.ddx.care" },
+        }),
+      ) as Response;
+      expect(res.status).toBe(403);
     });
 
     test("rejects empty origin list", () => {
-      expect(isOriginAllowed("", "https://app.ddx.care")).toBe(false);
+      const routes = makeRoutes({ allowedOrigins: "" });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://app.ddx.care" },
+        }),
+      ) as Response;
+      expect(res.status).toBe(403);
     });
 
     test("rejects origin with trailing slash mismatch", () => {
-      expect(
-        isOriginAllowed("https://app.ddx.care", "https://app.ddx.care/"),
-      ).toBe(false);
+      const routes = makeRoutes({ allowedOrigins: "https://app.ddx.care" });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://app.ddx.care/" },
+        }),
+      ) as Response;
+      expect(res.status).toBe(403);
     });
 
     test("rejects origin with port number", () => {
-      expect(
-        isOriginAllowed("https://app.ddx.care", "https://app.ddx.care:443"),
-      ).toBe(false);
+      const routes = makeRoutes({ allowedOrigins: "https://app.ddx.care" });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://app.ddx.care:443" },
+        }),
+      ) as Response;
+      expect(res.status).toBe(403);
     });
   });
 
   describe("single origin mode", () => {
     test("allows exact match", () => {
-      expect(
-        isOriginAllowed("https://app.ddx.care", "https://app.ddx.care"),
-      ).toBe(true);
+      const routes = makeRoutes({ allowedOrigins: "https://app.ddx.care" });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://app.ddx.care" },
+        }),
+      ) as Response;
+      expect(res.status).not.toBe(403);
     });
 
     test("rejects non-match", () => {
-      expect(isOriginAllowed("https://app.ddx.care", "https://other.com")).toBe(
-        false,
-      );
+      const routes = makeRoutes({ allowedOrigins: "https://app.ddx.care" });
+      const res = routes["/ws"].GET!(
+        new Request("http://x/ws?jobId=test", {
+          headers: { Origin: "https://other.com" },
+        }),
+      ) as Response;
+      expect(res.status).toBe(403);
     });
   });
-});
 
-describe("WebSocket origin validation (integration — wildcard mode)", () => {
-  let BASE: string;
-
-  test("GET /ws allows any origin when ALLOWED_ORIGINS is wildcard", async () => {
-    process.env.MOCK_LLM = "1";
-    process.env.PORT = "3997";
-
-    const { server } = await import("../index");
-    BASE = `http://localhost:${server.port}`;
-
-    const res = await fetch(`${BASE}/ws?jobId=ws-origin-test`, {
-      headers: { Origin: "https://evil.example.com" },
-    });
-    // Should NOT be 403 — wildcard mode allows everything
-    expect(res.status).not.toBe(403);
-  });
-
-  test("GET /ws returns 400 without jobId", async () => {
-    process.env.MOCK_LLM = "1";
-    process.env.PORT = "3997";
-
-    const { server } = await import("../index");
-    BASE = `http://localhost:${server.port}`;
-
-    const res = await fetch(`${BASE}/ws`);
+  test("returns 400 without jobId query parameter", () => {
+    const routes = makeRoutes({ allowedOrigins: "*" });
+    const res = routes["/ws"].GET!(new Request("http://x/ws")) as Response;
     expect(res.status).toBe(400);
   });
 });
 
-describe("WebSocket token authentication logic", () => {
-  function generateToken(jobId: string, secret: string): string {
-    if (!secret) return "";
-    const { createHmac } = require("node:crypto");
-    return createHmac("sha256", secret).update(jobId).digest("hex");
-  }
-
-  function verifyToken(jobId: string, token: string, secret: string): boolean {
-    if (!secret) return true;
-    const expected = generateToken(jobId, secret);
-    if (!expected || !token) return false;
-    if (expected.length !== token.length) return false;
-    const { timingSafeEqual } = require("node:crypto");
-    return timingSafeEqual(Buffer.from(expected), Buffer.from(token));
-  }
-
-  test("generateToken produces consistent HMAC for same jobId", () => {
-    const token1 = generateToken("job-123", "test-secret-key");
-    const token2 = generateToken("job-123", "test-secret-key");
-    expect(token1).toBe(token2);
-    expect(token1.length).toBeGreaterThan(0);
+describe("WebSocket origin — TRUSTED_ORIGINS precedence", () => {
+  test("TRUSTED_ORIGINS takes precedence over ALLOWED_ORIGINS", () => {
+    const routes = makeRoutes({
+      trustedOrigins: "https://ddx.care",
+      allowedOrigins: "*",
+    });
+    let res = routes["/ws"].GET!(
+      new Request("http://x/ws?jobId=test", {
+        headers: { Origin: "https://ddx.care" },
+      }),
+    ) as Response;
+    expect(res.status).not.toBe(403);
+    res = routes["/ws"].GET!(
+      new Request("http://x/ws?jobId=test", {
+        headers: { Origin: "https://evil.com" },
+      }),
+    ) as Response;
+    expect(res.status).toBe(403);
   });
 
-  test("verifyToken returns true for valid token", () => {
-    const token = generateToken("job-456", "test-secret-key");
-    expect(verifyToken("job-456", token, "test-secret-key")).toBe(true);
+  test("empty TRUSTED_ORIGINS falls back to ALLOWED_ORIGINS wildcard", () => {
+    const routes = makeRoutes({
+      trustedOrigins: "",
+      allowedOrigins: "*",
+    });
+    const res = routes["/ws"].GET!(
+      new Request("http://x/ws?jobId=test", {
+        headers: { Origin: "https://anything.com" },
+      }),
+    ) as Response;
+    expect(res.status).not.toBe(403);
+  });
+});
+
+describe("WebSocket token authentication — production /ws handler", () => {
+  test("rejects missing credential when secret is set", () => {
+    const routes = makeRoutes({
+      allowedOrigins: "*",
+      secret: "ws-origin-secret",
+    });
+    const res = routes["/ws"].GET!(
+      new Request("http://x/ws?jobId=test", {
+        headers: { Origin: "http://localhost" },
+      }),
+    ) as Response;
+    expect(res.status).toBe(403);
   });
 
-  test("verifyToken returns false for wrong token", () => {
-    expect(verifyToken("job-456", "invalid-token", "test-secret-key")).toBe(
-      false,
-    );
-  });
-
-  test("verifyToken returns false for token from different jobId", () => {
-    const token = generateToken("job-A", "test-secret-key");
-    expect(verifyToken("job-B", token, "test-secret-key")).toBe(false);
-  });
-
-  test("verifyToken returns true when secret is empty (dev mode)", () => {
-    expect(verifyToken("job-123", "any-token", "")).toBe(true);
-  });
-
-  test("generateToken returns empty string when secret is empty", () => {
-    expect(generateToken("job-123", "")).toBe("");
-  });
-
-  test("different secrets produce different tokens", () => {
-    const token1 = generateToken("job-123", "secret-A");
-    const token2 = generateToken("job-123", "secret-B");
-    expect(token1).not.toBe(token2);
-  });
-
-  test("TRUSTED_ORIGINS takes precedence over ALLOWED_ORIGINS for WS", () => {
-    const isOriginAllowed = (
-      trustedOrigins: string,
-      allowedOrigins: string,
-      requestOrigin: string | null,
-    ): boolean => {
-      if (!requestOrigin) return false;
-      const originsList = trustedOrigins
-        ? trustedOrigins.split(",").map((o) => o.trim())
-        : allowedOrigins === "*"
-          ? null
-          : allowedOrigins.split(",").map((o) => o.trim());
-      if (!originsList) return true;
-      return originsList.includes(requestOrigin);
+  test("accepts a valid ticket via production token service", () => {
+    const secret = "ws-origin-secret";
+    const cfg = buildConfig({
+      MOCK_LLM: "1",
+      PORT: "0",
+      ALLOWED_ORIGINS: "*",
+      WS_TOKEN_SECRET: secret,
+      TOOL_CACHE_TTL_MS: "0",
+      ORPHADATA_ENABLED: "0",
+      RATE_LIMIT_MAX_REQUESTS: "100",
+      MAX_CONCURRENT_WORKFLOWS: "20",
+    });
+    const tokenService = createTokenService({
+      secret: cfg.wsTokenSecret,
+      jobTtlMs: cfg.jobTtlMs,
+    });
+    const jobStore = new JobStore(":memory:");
+    const rateLimiter = new RateLimiter({
+      maxRequests: cfg.rateLimitMaxRequests,
+      windowMs: cfg.rateLimitWindowMs,
+      maxConcurrent: cfg.maxConcurrentWorkflows,
+    });
+    const deps: CompositionDependencies = {
+      config: cfg,
+      jobStore,
+      abortStore: {
+        set() {},
+        get() {
+          return undefined;
+        },
+        remove() {},
+      } as any,
+      rateLimiter,
+      tokenService,
+      workflowFactory: {
+        async createRun() {
+          return { start: async () => ({ status: "ok" }) };
+        },
+      },
+      cacheStatus: {
+        enabled: false,
+        getStats: () => ({ entries: 0, hits: 0, misses: 0 }),
+      },
+      logger: {
+        info() {},
+        warn() {},
+        error() {},
+        request() {},
+        workflowStart() {},
+        workflowComplete() {},
+        workflowFail() {},
+      },
+      clock: { now: () => Date.now() },
+      idSource: { newJobId: () => crypto.randomUUID() },
+      agentList: () => agentList,
+      appHtml: "<html></html>",
     };
+    const routes = createComposedRoutes(deps, {
+      upgrade: () => false,
+    }) as any;
+    const ticket = tokenService.generateWsTicket("job-1");
+    const res = routes["/ws"].GET(
+      new Request(`http://x/ws?jobId=job-1&ticket=${ticket}`, {
+        headers: { Origin: "http://localhost" },
+      }),
+    ) as Response;
+    // Ticket valid — upgrade then fails with 500 (not 403).
+    expect(res.status).not.toBe(403);
+  });
 
-    expect(isOriginAllowed("https://ddx.care", "*", "https://ddx.care")).toBe(
-      true,
-    );
-    expect(isOriginAllowed("https://ddx.care", "*", "https://evil.com")).toBe(
-      false,
-    );
-    expect(isOriginAllowed("", "https://other.com", "https://other.com")).toBe(
-      true,
-    );
-    expect(isOriginAllowed("", "*", "https://anything.com")).toBe(true);
+  test("rejects an invalid ticket", () => {
+    const routes = makeRoutes({
+      allowedOrigins: "*",
+      secret: "ws-origin-secret",
+    });
+    const res = routes["/ws"].GET!(
+      new Request("http://x/ws?jobId=job-1&ticket=invalid", {
+        headers: { Origin: "http://localhost" },
+      }),
+    ) as Response;
+    expect(res.status).toBe(403);
+  });
+
+  test("rejects a ticket bound to a different job", () => {
+    const secret = "ws-origin-secret";
+    const cfg = buildConfig({
+      MOCK_LLM: "1",
+      PORT: "0",
+      ALLOWED_ORIGINS: "*",
+      WS_TOKEN_SECRET: secret,
+      TOOL_CACHE_TTL_MS: "0",
+      ORPHADATA_ENABLED: "0",
+      RATE_LIMIT_MAX_REQUESTS: "100",
+      MAX_CONCURRENT_WORKFLOWS: "20",
+    });
+    const tokenService = createTokenService({
+      secret: cfg.wsTokenSecret,
+      jobTtlMs: cfg.jobTtlMs,
+    });
+    const jobStore = new JobStore(":memory:");
+    const rateLimiter = new RateLimiter({
+      maxRequests: cfg.rateLimitMaxRequests,
+      windowMs: cfg.rateLimitWindowMs,
+      maxConcurrent: cfg.maxConcurrentWorkflows,
+    });
+    const deps: CompositionDependencies = {
+      config: cfg,
+      jobStore,
+      abortStore: {
+        set() {},
+        get() {
+          return undefined;
+        },
+        remove() {},
+      } as any,
+      rateLimiter,
+      tokenService,
+      workflowFactory: {
+        async createRun() {
+          return { start: async () => ({ status: "ok" }) };
+        },
+      },
+      cacheStatus: {
+        enabled: false,
+        getStats: () => ({ entries: 0, hits: 0, misses: 0 }),
+      },
+      logger: {
+        info() {},
+        warn() {},
+        error() {},
+        request() {},
+        workflowStart() {},
+        workflowComplete() {},
+        workflowFail() {},
+      },
+      clock: { now: () => Date.now() },
+      idSource: { newJobId: () => crypto.randomUUID() },
+      agentList: () => agentList,
+      appHtml: "<html></html>",
+    };
+    const routes = createComposedRoutes(deps, {
+      upgrade: () => false,
+    }) as any;
+    const ticket = tokenService.generateWsTicket("job-A");
+    const res = routes["/ws"].GET(
+      new Request(`http://x/ws?jobId=job-B&ticket=${ticket}`, {
+        headers: { Origin: "http://localhost" },
+      }),
+    ) as Response;
+    expect(res.status).toBe(403);
   });
 });

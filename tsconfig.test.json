@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "outDir": "dist",
+    "jsx": "react-jsx",
+    "types": ["bun"]
+  },
+  "include": [
+    "tests/**/*.test.ts",
+    "tests/**/*.test.tsx",
+    "tests/runner/**/*.ts",
+    "tests/e2e/helpers.ts",
+    "src/frontend/types/speech.d.ts",
+    "src/**/*",
+    "index.ts"
+  ],
+  "exclude": [
+    "tests/**/*.spec.ts",
+    "tests/e2e/network-fixture.ts",
+    "playwright.config.ts"
+  ]
+}

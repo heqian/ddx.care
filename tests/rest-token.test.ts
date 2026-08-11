@@ -1,373 +1,353 @@
 /**
- * Integration tests for REST endpoint HMAC token verification.
+ * REST endpoint HMAC token verification tests.
  *
- * This file starts a server with WS_TOKEN_SECRET set, enabling token
- * verification on GET /v1/status/:jobId and DELETE /v1/diagnose/:jobId.
- *
- * NOTE: This file must be run separately from the main test suite because Bun
- * shares the module registry across test files in a single invocation. When
- * run alongside api.test.ts (which starts a dev-mode server), the config module
- * is already cached with WS_TOKEN_SECRET="" and this file's env vars have no
- * effect. The pure-function token verification tests in api.test.ts cover CI.
- *
- * Run:  bun run test:rest-token
+ * Credentials are minted through production token primitives
+ * (createTokenService) — no test-local HMAC implementation, no hardcoded
+ * token-format replicas. The composition seam is exercised with an injected
+ * token service so no process.env mutation or server singleton is required.
  */
-import { test, expect, describe, beforeAll } from "bun:test";
-import { createHmac } from "node:crypto";
-
-// Set env vars BEFORE any module imports that read config. In ESM, top-level
-// imports are hoisted, so we cannot `import` ws-token here — it would cache
-// config with empty env vars. Use lazy `await import()` inside test blocks.
-process.env.MOCK_LLM = "1";
-process.env.PORT = "3996";
-process.env.WS_TOKEN_SECRET = "integration-test-secret";
-process.env.TOOL_CACHE_TTL_MS = "0";
-process.env.ORPHADATA_ENABLED = "0";
-process.env.RATE_LIMIT_MAX_REQUESTS = "100";
-process.env.MAX_CONCURRENT_WORKFLOWS = "20";
-
-let BASE: string;
+import { test, expect, describe } from "bun:test";
+import {
+  createComposedRoutes,
+  type CompositionDependencies,
+} from "../src/backend/composition";
+import { buildConfig } from "../src/backend/app-config";
+import { createTokenService } from "../src/backend/token-service";
+import { JobStore } from "../src/backend/progress-store";
+import { RateLimiter } from "../src/backend/utils/rate-limiter";
+import { agentList } from "../src/backend/agents/index";
 
 const JOB_TTL_MS = 60 * 60 * 1000;
+const VALID_UUID = "00000000-0000-4000-a000-000000000000";
 
-// Lazy-loaded token primitives — imported after env vars are set so the
-// config module caches the correct WS_TOKEN_SECRET.
-let generateToken: typeof import("../src/backend/utils/ws-token").generateToken;
-let generateWsTicket: typeof import("../src/backend/utils/ws-token").generateWsTicket;
-let verifyToken: typeof import("../src/backend/utils/ws-token").verifyToken;
-let verifyWsTicket: typeof import("../src/backend/utils/ws-token").verifyWsTicket;
-
-async function loadTokenPrimitives() {
-  const mod = await import("../src/backend/utils/ws-token");
-  generateToken = mod.generateToken;
-  generateWsTicket = mod.generateWsTicket;
-  verifyToken = mod.verifyToken;
-  verifyWsTicket = mod.verifyWsTicket;
+function makeRoutes(secret: string) {
+  const cfg = buildConfig({
+    MOCK_LLM: "1",
+    PORT: "0",
+    WS_TOKEN_SECRET: secret,
+    TOOL_CACHE_TTL_MS: "0",
+    ORPHADATA_ENABLED: "0",
+    RATE_LIMIT_MAX_REQUESTS: "100",
+    MAX_CONCURRENT_WORKFLOWS: "20",
+  });
+  const jobStore = new JobStore(":memory:");
+  const rateLimiter = new RateLimiter({
+    maxRequests: cfg.rateLimitMaxRequests,
+    windowMs: cfg.rateLimitWindowMs,
+    maxConcurrent: cfg.maxConcurrentWorkflows,
+  });
+  const tokenService = createTokenService({
+    secret: cfg.wsTokenSecret,
+    jobTtlMs: cfg.jobTtlMs,
+  });
+  const abortStore = {
+    _m: new Map<string, AbortController>(),
+    set(id: string, c: AbortController) {
+      this._m.set(id, c);
+    },
+    get(id: string) {
+      return this._m.get(id);
+    },
+    remove(id: string) {
+      this._m.delete(id);
+    },
+  };
+  const deps: CompositionDependencies = {
+    config: cfg,
+    jobStore,
+    abortStore: abortStore as any,
+    rateLimiter,
+    tokenService,
+    workflowFactory: {
+      async createRun() {
+        // Never resolves — keeps the job pending so cancellation tests can
+        // observe the cancelled transition rather than a completed/failed one.
+        return { start: () => new Promise(() => {}) };
+      },
+    },
+    cacheStatus: {
+      enabled: false,
+      getStats: () => ({ entries: 0, hits: 0, misses: 0 }),
+    },
+    logger: {
+      info() {},
+      warn() {},
+      error() {},
+      request() {},
+      workflowStart() {},
+      workflowComplete() {},
+      workflowFail() {},
+    },
+    clock: { now: () => Date.now() },
+    idSource: { newJobId: () => crypto.randomUUID() },
+    agentList: () => agentList,
+    appHtml: "<html></html>",
+  };
+  return {
+    routes: createComposedRoutes(deps, {
+      upgrade: () => true,
+      requestIP: () => ({ address: "127.0.0.1", family: "IPv4", port: 0 }),
+    }) as Record<
+      string,
+      {
+        GET?: (req: Request) => Response | Promise<Response>;
+        POST?: (req: Request) => Response | Promise<Response>;
+        DELETE?: (req: Request) => Response | Promise<Response>;
+        OPTIONS?: (req: Request) => Response;
+      }
+    >,
+    tokenService,
+    jobStore,
+  };
 }
 
-/**
- * Mint a token in the new `<expiry>.<hmacHex>` format matching the server's
- * `generateToken(jobId)` implementation. `now` is injectable so tests can
- * produce expired tokens. Uses a direct HMAC so the token can be minted
- * before the server module is loaded (for unit-level tests, use
- * `loadTokenPrimitives()` then `generateToken`).
- */
-function makeToken(jobId: string, now: number = Date.now()): string {
-  const expiry = now + JOB_TTL_MS;
-  const payload = `${jobId}.${expiry}`;
-  const hmac = createHmac("sha256", process.env.WS_TOKEN_SECRET ?? "")
-    .update(payload)
-    .digest("hex");
-  return `${expiry}.${hmac}`;
+function statusRequest(jobId: string, token?: string): Request {
+  const req = new Request(`http://x/v1/status/${jobId}`);
+  (req as any).params = { jobId };
+  if (token) req.headers.set("Authorization", `Bearer ${token}`);
+  return req;
 }
 
-/** Mint an already-expired token (expiry 1s in the past). */
-function makeExpiredToken(jobId: string): string {
-  return makeToken(jobId, Date.now() - 2000 - JOB_TTL_MS);
+function deleteRequest(jobId: string, token?: string): Request {
+  const req = new Request(`http://x/v1/diagnose/${jobId}`, {
+    method: "DELETE",
+  });
+  (req as any).params = { jobId };
+  if (token) req.headers.set("Authorization", `Bearer ${token}`);
+  return req;
 }
-
-const UNKNOWN_UUID = "00000000-0000-4000-a000-000000000000";
 
 async function createJob(
-  history: string,
-): Promise<{ jobId: string; token: string; wsTicket: string }> {
-  const res = await fetch(`${BASE}/v1/diagnose`, {
-    method: "POST",
-    body: JSON.stringify({
-      medicalHistory: history,
-      conversationTranscript: "test",
-      labResults: "test",
+  routes: any,
+  tokenService: any,
+): Promise<{ jobId: string; token: string }> {
+  const res = (await routes["/v1/diagnose"].POST!(
+    new Request("http://x/v1/diagnose", {
+      method: "POST",
+      body: JSON.stringify({
+        medicalHistory: "test",
+        conversationTranscript: "test",
+        labResults: "test",
+      }),
+      headers: { "Content-Type": "application/json" },
     }),
-    headers: { "Content-Type": "application/json" },
-  });
-  if (res.status !== 202) {
-    throw new Error(`Failed to create job: ${res.status}`);
-  }
-  const body = (await res.json()) as {
-    jobId: string;
-    token: string;
-    wsTicket: string;
-  };
-  return { jobId: body.jobId, token: body.token, wsTicket: body.wsTicket };
+  )) as Response;
+  const body = (await res.json()) as { jobId: string; token: string };
+  return { jobId: body.jobId, token: body.token };
 }
 
-describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
-  beforeAll(async () => {
-    const { server } = await import("../index");
-    BASE = `http://localhost:${server.port}`;
-  });
-
-  describe("POST /v1/diagnose response includes ticket and token", () => {
-    test("202 response includes token and wsTicket", async () => {
-      const res = await fetch(`${BASE}/v1/diagnose`, {
-        method: "POST",
-        body: JSON.stringify({
-          medicalHistory: "wsTicket response test",
-          conversationTranscript: "test",
-          labResults: "test",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
-      expect(res.status).toBe(202);
-      const body = (await res.json()) as {
-        jobId: string;
-        token: string;
-        wsTicket: string;
-      };
-      expect(body.jobId).toBeDefined();
-      expect(typeof body.token).toBe("string");
-      expect(body.token.length).toBeGreaterThan(0);
-      expect(typeof body.wsTicket).toBe("string");
-      expect(body.wsTicket.length).toBeGreaterThan(0);
-      // Token and wsTicket must be distinct credentials (different TTLs).
-      expect(body.token).not.toBe(body.wsTicket);
-    });
-  });
-
+describe("REST token verification — production token service", () => {
   describe("GET /v1/status/:jobId — Authorization header", () => {
     test("valid token via Authorization header returns 200", async () => {
-      const { jobId, token } = await createJob("header valid token test");
-      const res = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const { jobId, token } = await createJob(routes, tokenService);
+      const res = (await routes["/v1/status/:jobId"].GET!(
+        statusRequest(jobId, token),
+      )) as Response;
       expect(res.status).toBe(200);
     });
 
     test("valid token via query param still accepted (dev fallback)", async () => {
-      const { jobId, token } = await createJob("query fallback test");
-      const res = await fetch(`${BASE}/v1/status/${jobId}?token=${token}`);
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const { jobId, token } = await createJob(routes, tokenService);
+      const req = new Request(`http://x/v1/status/${jobId}?token=${token}`);
+      (req as any).params = { jobId };
+      const res = (await routes["/v1/status/:jobId"].GET!(req)) as Response;
       expect(res.status).toBe(200);
     });
 
     test("Authorization header takes precedence over query param", async () => {
-      const { jobId, token } = await createJob("precedence test");
-      // Valid header + invalid query — header must win
-      const res = await fetch(`${BASE}/v1/status/${jobId}?token=invalid`, {
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const { jobId, token } = await createJob(routes, tokenService);
+      const req = new Request(`http://x/v1/status/${jobId}?token=invalid`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      (req as any).params = { jobId };
+      const res = (await routes["/v1/status/:jobId"].GET!(req)) as Response;
       expect(res.status).toBe(200);
     });
 
     test("missing Authorization header and missing query param returns 403", async () => {
-      const { jobId } = await createJob("missing header test");
-      const res = await fetch(`${BASE}/v1/status/${jobId}`);
+      const { routes } = makeRoutes("rest-token-secret");
+      const res = (await routes["/v1/status/:jobId"].GET!(
+        statusRequest(VALID_UUID),
+      )) as Response;
       expect(res.status).toBe(403);
-      const body = (await res.json()) as { error: string };
-      expect(body.error).toContain("token");
     });
 
     test("invalid Authorization header returns 403", async () => {
-      const { jobId } = await createJob("invalid header test");
-      const res = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: "Bearer invalid-hex" },
-      });
+      const { routes } = makeRoutes("rest-token-secret");
+      const res = (await routes["/v1/status/:jobId"].GET!(
+        statusRequest(VALID_UUID, "invalid-hex"),
+      )) as Response;
       expect(res.status).toBe(403);
     });
 
     test("malformed Authorization header (not Bearer) returns 403", async () => {
-      const { jobId, token } = await createJob("malformed auth header test");
-      const res = await fetch(`${BASE}/v1/status/${jobId}`, {
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const { jobId, token } = await createJob(routes, tokenService);
+      const req = new Request(`http://x/v1/status/${jobId}`, {
         headers: { Authorization: `Basic ${token}` },
       });
+      (req as any).params = { jobId };
+      const res = (await routes["/v1/status/:jobId"].GET!(req)) as Response;
       expect(res.status).toBe(403);
     });
 
     test("token verified before existence — unknown job with bad header returns 403 not 404", async () => {
-      const res = await fetch(`${BASE}/v1/status/${UNKNOWN_UUID}`, {
-        headers: { Authorization: "Bearer bad" },
-      });
+      const { routes } = makeRoutes("rest-token-secret");
+      const res = (await routes["/v1/status/:jobId"].GET!(
+        statusRequest(VALID_UUID, "bad"),
+      )) as Response;
       expect(res.status).toBe(403);
     });
 
     test("valid token on unknown job returns 404 (not 403)", async () => {
-      const token = makeToken(UNKNOWN_UUID);
-      const res = await fetch(`${BASE}/v1/status/${UNKNOWN_UUID}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const token = tokenService.generateToken(VALID_UUID);
+      const res = (await routes["/v1/status/:jobId"].GET!(
+        statusRequest(VALID_UUID, token),
+      )) as Response;
       expect(res.status).toBe(404);
     });
 
     test("token from different job is rejected", async () => {
-      const { jobId } = await createJob("cross-job header test");
-      const crossToken = makeToken(UNKNOWN_UUID);
-      const res = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: `Bearer ${crossToken}` },
-      });
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const { jobId } = await createJob(routes, tokenService);
+      const crossToken = tokenService.generateToken(VALID_UUID);
+      const res = (await routes["/v1/status/:jobId"].GET!(
+        statusRequest(jobId, crossToken),
+      )) as Response;
       expect(res.status).toBe(403);
     });
 
     test("expired token is rejected with 403", async () => {
-      const { jobId } = await createJob("expired token test");
-      const expired = makeExpiredToken(jobId);
-      const res = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: `Bearer ${expired}` },
-      });
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const { jobId } = await createJob(routes, tokenService);
+      const expired = tokenService.generateToken(
+        jobId,
+        1000,
+        Date.now() - 2000,
+      );
+      const res = (await routes["/v1/status/:jobId"].GET!(
+        statusRequest(jobId, expired),
+      )) as Response;
       expect(res.status).toBe(403);
     });
 
     test("malformed job ID returns 400 regardless of token", async () => {
-      const res = await fetch(`${BASE}/v1/status/bad-id`, {
+      const { routes } = makeRoutes("rest-token-secret");
+      const req = new Request("http://x/v1/status/bad-id", {
         headers: { Authorization: "Bearer whatever" },
       });
+      (req as any).params = { jobId: "bad-id" };
+      const res = (await routes["/v1/status/:jobId"].GET!(req)) as Response;
       expect(res.status).toBe(400);
     });
   });
 
   describe("GET /v1/status/:jobId — Cache-Control header", () => {
     test("status response includes Cache-Control: no-store, private", async () => {
-      const { jobId, token } = await createJob("cache-control test");
-      const res = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const { jobId, token } = await createJob(routes, tokenService);
+      const res = (await routes["/v1/status/:jobId"].GET!(
+        statusRequest(jobId, token),
+      )) as Response;
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe("no-store, private");
     });
 
     test("403 response does not require Cache-Control (no PHI in error)", async () => {
-      const { jobId } = await createJob("cache-control 403 test");
-      const res = await fetch(`${BASE}/v1/status/${jobId}`);
+      const { routes } = makeRoutes("rest-token-secret");
+      const res = (await routes["/v1/status/:jobId"].GET!(
+        statusRequest(VALID_UUID),
+      )) as Response;
       expect(res.status).toBe(403);
-      // Cache-Control is only mandated on PHI-bearing (200) responses.
       expect(res.headers.get("Cache-Control")).toBeNull();
     });
   });
 
   describe("DELETE /v1/diagnose/:jobId — Authorization header", () => {
     test("valid token via Authorization header cancels the job", async () => {
-      const { jobId, token } = await createJob("delete header valid token");
-      const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      expect(delRes.status).toBe(200);
-      const body = (await delRes.json()) as { status: string };
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const { jobId, token } = await createJob(routes, tokenService);
+      const res = (await routes["/v1/diagnose/:jobId"].DELETE!(
+        deleteRequest(jobId, token),
+      )) as Response;
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { status: string };
       expect(body.status).toBe("cancelled");
     });
 
     test("missing token returns 403 and does not cancel", async () => {
-      const { jobId, token } = await createJob("delete missing header test");
-      const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}`, {
-        method: "DELETE",
-      });
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const { jobId, token } = await createJob(routes, tokenService);
+      const delRes = (await routes["/v1/diagnose/:jobId"].DELETE!(
+        deleteRequest(jobId),
+      )) as Response;
       expect(delRes.status).toBe(403);
-
-      // Verify the job was NOT cancelled — it should still be accessible
-      const statusRes = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // Verify the job was NOT cancelled — still accessible.
+      const statusRes = (await routes["/v1/status/:jobId"].GET!(
+        statusRequest(jobId, token),
+      )) as Response;
       expect(statusRes.status).toBe(200);
-      const statusBody = (await statusRes.json()) as { status: string };
-      expect(statusBody.status).not.toBe("failed");
+      const body = (await statusRes.json()) as { status: string };
+      expect(body.status).not.toBe("failed");
     });
 
     test("invalid token via Authorization header returns 403", async () => {
-      const { jobId } = await createJob("delete invalid header test");
-      const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}`, {
-        method: "DELETE",
-        headers: { Authorization: "Bearer invalid" },
-      });
-      expect(delRes.status).toBe(403);
-    });
-
-    test("expired token via Authorization header returns 403", async () => {
-      const { jobId } = await createJob("delete expired token test");
-      const expired = makeExpiredToken(jobId);
-      const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${expired}` },
-      });
-      expect(delRes.status).toBe(403);
-    });
-  });
-
-  describe("Malformed-Unicode token does not crash the server", () => {
-    test("token with multibyte Unicode in query param returns 403 (not 500)", async () => {
-      const { jobId } = await createJob("malformed unicode query test");
-      // A token containing non-ASCII multibyte characters used to throw a
-      // RangeError inside timingSafeEqual because the Buffer byte length
-      // differed from the expected hex length. The fix requires exactly 64
-      // ASCII hex chars before any Buffer comparison. Browsers do not allow
-      // multibyte Unicode in Authorization header values (fetch throws before
-      // the request is sent), so the attack vector is the query-param
-      // fallback — exercise that path here.
-      const res = await fetch(
-        `${BASE}/v1/status/${jobId}?token=${encodeURIComponent("\u{1F512}".repeat(20))}`,
-      );
+      const { routes } = makeRoutes("rest-token-secret");
+      const res = (await routes["/v1/diagnose/:jobId"].DELETE!(
+        deleteRequest(VALID_UUID, "invalid"),
+      )) as Response;
       expect(res.status).toBe(403);
     });
 
-    test("token with multibyte Unicode in query param on unknown job returns 403 (not 500)", async () => {
-      const res = await fetch(
-        `${BASE}/v1/status/${UNKNOWN_UUID}?token=${encodeURIComponent("\u{1F512}".repeat(20))}`,
+    test("expired token via Authorization header returns 403", async () => {
+      const { routes, tokenService } = makeRoutes("rest-token-secret");
+      const expired = tokenService.generateToken(
+        VALID_UUID,
+        1000,
+        Date.now() - 2000,
       );
+      const res = (await routes["/v1/diagnose/:jobId"].DELETE!(
+        deleteRequest(VALID_UUID, expired),
+      )) as Response;
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe("Malformed-Unicode token does not crash the handler", () => {
+    test("token with multibyte Unicode in query param returns 403 (not 500)", async () => {
+      const { routes } = makeRoutes("rest-token-secret");
+      const req = new Request(
+        `http://x/v1/status/${VALID_UUID}?token=${encodeURIComponent("\u{1F512}".repeat(20))}`,
+      );
+      (req as any).params = { jobId: VALID_UUID };
+      const res = (await routes["/v1/status/:jobId"].GET!(req)) as Response;
       expect(res.status).toBe(403);
     });
 
     test("token with a dot-separated malformed payload returns 403 (not 500)", async () => {
-      const { jobId } = await createJob("malformed payload test");
-      // A token that looks structured (has a dot) but has non-hex in the
-      // hmac part must be rejected without throwing.
-      const res = await fetch(
-        `${BASE}/v1/status/${jobId}?token=${encodeURIComponent("123.\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff")}`,
+      const { routes } = makeRoutes("rest-token-secret");
+      const req = new Request(
+        `http://x/v1/status/${VALID_UUID}?token=${encodeURIComponent("123.\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff")}`,
       );
+      (req as any).params = { jobId: VALID_UUID };
+      const res = (await routes["/v1/status/:jobId"].GET!(req)) as Response;
       expect(res.status).toBe(403);
     });
   });
 });
 
-describe("WebSocket ticket primitives (unit, no server)", () => {
-  beforeAll(async () => {
-    await loadTokenPrimitives();
-  });
-
-  test("generateWsTicket produces a non-empty ticket bound to the job", () => {
-    const ticket = generateWsTicket("job-x");
-    expect(ticket).toBeTruthy();
-    expect(ticket).toContain(".");
-  });
-
-  test("verifyWsTicket returns true for a valid ticket within TTL", () => {
-    const ticket = generateWsTicket("job-y", 120);
-    expect(verifyWsTicket("job-y", ticket)).toBe(true);
-  });
-
-  test("verifyWsTicket returns false for an expired ticket", () => {
-    const ticket = generateWsTicket("job-z", 1, Date.now() - 5000);
-    expect(verifyWsTicket("job-z", ticket)).toBe(false);
-  });
-
-  test("verifyWsTicket returns false for a ticket bound to a different job", () => {
-    const ticket = generateWsTicket("job-a");
-    expect(verifyWsTicket("job-b", ticket)).toBe(false);
-  });
-
-  test("verifyWsTicket returns false for a malformed ticket", () => {
-    expect(verifyWsTicket("job-a", "not-a-ticket")).toBe(false);
-    expect(verifyWsTicket("job-a", "")).toBe(false);
-    expect(verifyWsTicket("job-a", ".")).toBe(false);
-    expect(verifyWsTicket("job-a", "abc.def")).toBe(false);
-  });
-
-  test("verifyWsTicket returns true in dev mode (empty secret)", () => {
-    // Dev mode is governed by WS_TOKEN_SECRET being empty. The unit-level
-    // behavior is that verifyWsTicket short-circuits to true when no secret
-    // is configured. We cannot unset WS_TOKEN_SECRET in this file (it is set
-    // above and cached in the module), so this test documents the contract
-    // via a direct call with the live secret — see the dev-mode integration
-    // test in api.test.ts for the empty-secret path.
-    const ticket = generateWsTicket("dev-job");
-    expect(verifyWsTicket("dev-job", ticket)).toBe(true);
-  });
-});
-
-describe("Token expiry primitives (unit, no server)", () => {
-  beforeAll(async () => {
-    await loadTokenPrimitives();
-  });
-
+describe("Token primitives — production createTokenService", () => {
   test("generateToken embeds an expiry in the future", () => {
+    const svc = createTokenService({
+      secret: "unit-secret",
+      jobTtlMs: JOB_TTL_MS,
+    });
     const before = Date.now();
-    const token = generateToken("job-future");
+    const token = svc.generateToken("job-future");
     const after = Date.now();
     const [expiryStr] = token.split(".");
     const expiry = Number(expiryStr);
@@ -376,28 +356,116 @@ describe("Token expiry primitives (unit, no server)", () => {
   });
 
   test("verifyToken returns true for a fresh token", () => {
-    const token = generateToken("job-fresh");
-    expect(verifyToken("job-fresh", token)).toBe(true);
+    const svc = createTokenService({
+      secret: "unit-secret",
+      jobTtlMs: JOB_TTL_MS,
+    });
+    const token = svc.generateToken("job-fresh");
+    expect(svc.verifyToken("job-fresh", token)).toBe(true);
   });
 
   test("verifyToken returns false for an expired token", () => {
-    const token = generateToken("job-expired", 1000, Date.now() - 2000);
-    expect(verifyToken("job-expired", token)).toBe(false);
+    const svc = createTokenService({
+      secret: "unit-secret",
+      jobTtlMs: JOB_TTL_MS,
+    });
+    const token = svc.generateToken("job-expired", 1000, Date.now() - 2000);
+    expect(svc.verifyToken("job-expired", token)).toBe(false);
   });
 
   test("verifyToken returns false for a token bound to a different job", () => {
-    const token = generateToken("job-A");
-    expect(verifyToken("job-B", token)).toBe(false);
+    const svc = createTokenService({
+      secret: "unit-secret",
+      jobTtlMs: JOB_TTL_MS,
+    });
+    const token = svc.generateToken("job-A");
+    expect(svc.verifyToken("job-B", token)).toBe(false);
   });
 
   test("verifyToken returns false for malformed input (no RangeError)", () => {
-    expect(verifyToken("job-x", "")).toBe(false);
-    expect(verifyToken("job-x", "no-separator")).toBe(false);
-    expect(verifyToken("job-x", ".onlysep")).toBe(false);
-    expect(verifyToken("job-x", "abc.def")).toBe(false);
-    expect(verifyToken("job-x", "abc.0000")).toBe(false);
-    // Multibyte Unicode must not throw — must return false.
-    expect(() => verifyToken("job-x", "\u{1F512}".repeat(40))).not.toThrow();
-    expect(verifyToken("job-x", "\u{1F512}".repeat(40))).toBe(false);
+    const svc = createTokenService({
+      secret: "unit-secret",
+      jobTtlMs: JOB_TTL_MS,
+    });
+    expect(svc.verifyToken("job-x", "")).toBe(false);
+    expect(svc.verifyToken("job-x", "no-separator")).toBe(false);
+    expect(svc.verifyToken("job-x", ".onlysep")).toBe(false);
+    expect(svc.verifyToken("job-x", "abc.def")).toBe(false);
+    expect(svc.verifyToken("job-x", "abc.0000")).toBe(false);
+    expect(() =>
+      svc.verifyToken("job-x", "\u{1F512}".repeat(40)),
+    ).not.toThrow();
+    expect(svc.verifyToken("job-x", "\u{1F512}".repeat(40))).toBe(false);
+  });
+});
+
+describe("WebSocket ticket primitives — production createTokenService", () => {
+  test("generateWsTicket produces a non-empty ticket bound to the job", () => {
+    const svc = createTokenService({
+      secret: "unit-secret",
+      jobTtlMs: JOB_TTL_MS,
+    });
+    const ticket = svc.generateWsTicket("job-x");
+    expect(ticket).toBeTruthy();
+    expect(ticket).toContain(".");
+  });
+
+  test("verifyWsTicket returns true for a valid ticket within TTL", () => {
+    const svc = createTokenService({
+      secret: "unit-secret",
+      jobTtlMs: JOB_TTL_MS,
+    });
+    const ticket = svc.generateWsTicket("job-y", 120);
+    expect(svc.verifyWsTicket("job-y", ticket)).toBe(true);
+  });
+
+  test("verifyWsTicket returns false for an expired ticket", () => {
+    const svc = createTokenService({
+      secret: "unit-secret",
+      jobTtlMs: JOB_TTL_MS,
+    });
+    const ticket = svc.generateWsTicket("job-z", 1, Date.now() - 5000);
+    expect(svc.verifyWsTicket("job-z", ticket)).toBe(false);
+  });
+
+  test("verifyWsTicket returns false for a ticket bound to a different job", () => {
+    const svc = createTokenService({
+      secret: "unit-secret",
+      jobTtlMs: JOB_TTL_MS,
+    });
+    const ticket = svc.generateWsTicket("job-a");
+    expect(svc.verifyWsTicket("job-b", ticket)).toBe(false);
+  });
+
+  test("verifyWsTicket returns false for a malformed ticket", () => {
+    const svc = createTokenService({
+      secret: "unit-secret",
+      jobTtlMs: JOB_TTL_MS,
+    });
+    expect(svc.verifyWsTicket("job-a", "not-a-ticket")).toBe(false);
+    expect(svc.verifyWsTicket("job-a", "")).toBe(false);
+    expect(svc.verifyWsTicket("job-a", ".")).toBe(false);
+    expect(svc.verifyWsTicket("job-a", "abc.def")).toBe(false);
+  });
+});
+
+describe("Dev mode (empty secret) via production token service", () => {
+  test("allows access without token", () => {
+    const svc = createTokenService({ secret: "", jobTtlMs: JOB_TTL_MS });
+    expect(svc.verifyToken("job-1", "")).toBe(true);
+    expect(svc.verifyToken("job-1", "any-token")).toBe(true);
+  });
+
+  test("generateToken returns empty string", () => {
+    const svc = createTokenService({ secret: "", jobTtlMs: JOB_TTL_MS });
+    expect(svc.generateToken("job-1")).toBe("");
+  });
+
+  test("unknown job returns 404 not 403 in dev mode", async () => {
+    const { routes } = makeRoutes("");
+    const res = (await routes["/v1/status/:jobId"].GET!(
+      statusRequest(VALID_UUID),
+    )) as Response;
+    expect(res.status).toBe(404);
   });
 });

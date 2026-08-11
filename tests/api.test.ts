@@ -1,5 +1,4 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
-import { createHmac, timingSafeEqual } from "node:crypto";
 
 const _savedMockLlm = process.env.MOCK_LLM;
 const _savedPort = process.env.PORT;
@@ -428,7 +427,7 @@ describe("API Endpoints", () => {
   describe("Rate limit reservation", () => {
     test("workflow slot is released on invalid JSON body", async () => {
       // Import the rate limiter to reset state for a clean test
-      const { rateLimiter } = await import("../src/backend/api/routes");
+      const { rateLimiter } = await import("../index");
 
       // Reset rate limit state for this test
       const savedReset = rateLimiter["hasLoggedReset"];
@@ -451,7 +450,7 @@ describe("API Endpoints", () => {
     });
 
     test("returns 429 with Retry-After header when rate limit exceeded", async () => {
-      const { rateLimiter } = await import("../src/backend/api/routes");
+      const { rateLimiter } = await import("../index");
 
       // Reset rate limit state for a clean test
       const savedReset = rateLimiter["hasLoggedReset"];
@@ -510,66 +509,123 @@ describe("API Endpoints", () => {
     });
   });
 
-  describe("TRUSTED_ORIGINS CORS validation", () => {
-    function buildCorsHeaders(
-      trustedOrigins: string,
-      allowedOrigins: string,
-      origin: string | null,
-    ): Record<string, string> {
-      const headers: Record<string, string> = {
-        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  describe("TRUSTED_ORIGINS CORS validation — production composition seam", () => {
+    // These tests exercise the production corsHeaders helper via the
+    // composition seam with injected TRUSTED_ORIGINS — no local CORS builder.
+    function makeRoutesWithTrustedOrigins(trustedOrigins: string) {
+      const { createComposedRoutes } = require("../src/backend/composition");
+      const { buildConfig } = require("../src/backend/app-config");
+      const { createTokenService } = require("../src/backend/token-service");
+      const { JobStore } = require("../src/backend/progress-store");
+      const { RateLimiter } = require("../src/backend/utils/rate-limiter");
+      const { agentList } = require("../src/backend/agents/index");
+      const cfg = buildConfig({
+        MOCK_LLM: "1",
+        PORT: "0",
+        TRUSTED_ORIGINS: trustedOrigins,
+        ALLOWED_ORIGINS: "*",
+        TOOL_CACHE_TTL_MS: "0",
+        ORPHADATA_ENABLED: "0",
+        RATE_LIMIT_MAX_REQUESTS: "100",
+        MAX_CONCURRENT_WORKFLOWS: "20",
+      });
+      const jobStore = new JobStore(":memory:");
+      const rateLimiter = new RateLimiter({
+        maxRequests: cfg.rateLimitMaxRequests,
+        windowMs: cfg.rateLimitWindowMs,
+        maxConcurrent: cfg.maxConcurrentWorkflows,
+      });
+      const deps = {
+        config: cfg,
+        jobStore,
+        abortStore: {
+          set() {},
+          get() {
+            return undefined;
+          },
+          remove() {},
+        },
+        rateLimiter,
+        tokenService: createTokenService({
+          secret: cfg.wsTokenSecret,
+          jobTtlMs: cfg.jobTtlMs,
+        }),
+        workflowFactory: {
+          async createRun() {
+            return { start: async () => ({ status: "ok" }) };
+          },
+        },
+        cacheStatus: {
+          enabled: false,
+          getStats: () => ({ entries: 0, hits: 0, misses: 0 }),
+        },
+        logger: {
+          info() {},
+          warn() {},
+          error() {},
+          request() {},
+          workflowStart() {},
+          workflowComplete() {},
+          workflowFail() {},
+        },
+        clock: { now: () => Date.now() },
+        idSource: { newJobId: () => crypto.randomUUID() },
+        agentList: () => agentList,
+        appHtml: "<html></html>",
       };
-
-      if (trustedOrigins) {
-        const allowed = trustedOrigins.split(",").map((o) => o.trim());
-        if (origin && allowed.includes(origin)) {
-          headers["Access-Control-Allow-Origin"] = origin;
-        }
-        // Dynamic origin reflection requires Vary: Origin
-        headers["Vary"] = "Origin";
-      } else {
-        headers["Access-Control-Allow-Origin"] = allowedOrigins;
-      }
-
-      return headers;
+      return createComposedRoutes(deps, { upgrade: () => true });
     }
 
-    test("reflects matching origin when TRUSTED_ORIGINS is set", () => {
-      const headers = buildCorsHeaders(
-        "https://ddx.care",
-        "*",
-        "https://ddx.care",
-      );
-      expect(headers["Access-Control-Allow-Origin"]).toBe("https://ddx.care");
-    });
-
-    test("does not set ACAO for non-matching origin", () => {
-      const headers = buildCorsHeaders(
-        "https://ddx.care",
-        "*",
-        "https://evil.example.com",
-      );
-      expect(headers["Access-Control-Allow-Origin"]).toBeUndefined();
-    });
-
-    test("falls back to ALLOWED_ORIGINS when TRUSTED_ORIGINS is empty", () => {
-      const headers = buildCorsHeaders("", "*", "https://anything.com");
-      expect(headers["Access-Control-Allow-Origin"]).toBe("*");
-    });
-
-    test("includes Vary: Origin when TRUSTED_ORIGINS is set", () => {
-      const headers = buildCorsHeaders(
-        "https://ddx.care",
-        "*",
+    test("reflects matching origin when TRUSTED_ORIGINS is set", async () => {
+      const routes = makeRoutesWithTrustedOrigins("https://ddx.care") as any;
+      const res = (await routes["/v1/agents"].GET(
+        new Request("http://x/v1/agents", {
+          headers: { Origin: "https://ddx.care" },
+        }),
+      )) as Response;
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
         "https://ddx.care",
       );
-      expect(headers["Vary"]).toBe("Origin");
     });
 
-    test("does not include Vary: Origin when using wildcard ALLOWED_ORIGINS", () => {
-      const headers = buildCorsHeaders("", "*", "https://anything.com");
-      expect(headers["Vary"]).toBeUndefined();
+    test("does not set ACAO for non-matching origin", async () => {
+      const routes = makeRoutesWithTrustedOrigins("https://ddx.care") as any;
+      const res = (await routes["/v1/agents"].GET(
+        new Request("http://x/v1/agents", {
+          headers: { Origin: "https://evil.example.com" },
+        }),
+      )) as Response;
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBeNull();
+    });
+
+    test("falls back to ALLOWED_ORIGINS when TRUSTED_ORIGINS is empty", async () => {
+      const routes = makeRoutesWithTrustedOrigins("") as any;
+      const res = (await routes["/v1/agents"].GET(
+        new Request("http://x/v1/agents", {
+          headers: { Origin: "https://anything.com" },
+        }),
+      )) as Response;
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    });
+
+    test("includes Vary: Origin when TRUSTED_ORIGINS is set", async () => {
+      const routes = makeRoutesWithTrustedOrigins("https://ddx.care") as any;
+      const res = (await routes["/v1/agents"].GET(
+        new Request("http://x/v1/agents", {
+          headers: { Origin: "https://ddx.care" },
+        }),
+      )) as Response;
+      expect(res.headers.get("Vary")).toBe("Origin");
+    });
+
+    test("does not include Vary: Origin when using wildcard ALLOWED_ORIGINS", async () => {
+      const routes = makeRoutesWithTrustedOrigins("") as any;
+      const res = (await routes["/v1/agents"].GET(
+        new Request("http://x/v1/agents", {
+          headers: { Origin: "https://anything.com" },
+        }),
+      )) as Response;
+      expect(res.headers.get("Vary")).toBeNull();
     });
   });
 
@@ -677,7 +733,7 @@ describe("API Endpoints", () => {
     // Helper: reset rate limiter state before each test in this block so
     // prior test requests don't pollute the window.
     async function resetRateLimiter() {
-      const { rateLimiter } = await import("../src/backend/api/routes");
+      const { rateLimiter } = await import("../index");
       const savedReset = rateLimiter["hasLoggedReset"];
       rateLimiter["clients"].clear();
       rateLimiter["activeJobIds"].clear();
@@ -786,131 +842,202 @@ describe("API Endpoints", () => {
     });
   });
 
-  describe("REST endpoint token verification logic", () => {
-    const TEST_SECRET = "test-secret-key-for-rest-endpoints";
-
-    function generateToken(jobId: string, secret: string): string {
-      if (!secret) return "";
-      return createHmac("sha256", secret).update(jobId).digest("hex");
-    }
-
-    function isTokenValid(
-      secret: string,
-      jobId: string,
-      token: string | null,
-    ): boolean {
-      if (!secret) return true;
-      if (!token) return false;
-      const expected = generateToken(jobId, secret);
-      if (!expected || expected.length !== token.length) return false;
-      return timingSafeEqual(Buffer.from(expected), Buffer.from(token));
-    }
-
-    /**
-     * Mirrors the decision tree in routes.ts verifyJobToken + handler logic:
-     * 1. JOB_ID_RE format check → 400
-     * 2. Token verification → 403
-     * 3. Job existence → 404
-     * 4. Success → 200
-     */
-    function getResponseStatus(
-      jobIdValid: boolean,
-      secret: string,
-      jobId: string,
-      token: string | null,
-      jobExists: boolean,
-    ): number {
-      if (!jobIdValid) return 400;
-      if (!isTokenValid(secret, jobId, token)) return 403;
-      if (!jobExists) return 404;
-      return 200;
+  describe("REST endpoint token verification logic — production composition seam", () => {
+    // These tests exercise the production route handlers with an injected
+    // token service — no local HMAC implementation, no copied decision tree.
+    function makeRoutesWithSecret(secret: string) {
+      const { createComposedRoutes } = require("../src/backend/composition");
+      const { buildConfig } = require("../src/backend/app-config");
+      const { createTokenService } = require("../src/backend/token-service");
+      const { JobStore } = require("../src/backend/progress-store");
+      const { RateLimiter } = require("../src/backend/utils/rate-limiter");
+      const { agentList } = require("../src/backend/agents/index");
+      const cfg = buildConfig({
+        MOCK_LLM: "1",
+        PORT: "0",
+        WS_TOKEN_SECRET: secret,
+        TOOL_CACHE_TTL_MS: "0",
+        ORPHADATA_ENABLED: "0",
+        RATE_LIMIT_MAX_REQUESTS: "100",
+        MAX_CONCURRENT_WORKFLOWS: "20",
+      });
+      const jobStore = new JobStore(":memory:");
+      const rateLimiter = new RateLimiter({
+        maxRequests: cfg.rateLimitMaxRequests,
+        windowMs: cfg.rateLimitWindowMs,
+        maxConcurrent: cfg.maxConcurrentWorkflows,
+      });
+      const tokenService = createTokenService({
+        secret: cfg.wsTokenSecret,
+        jobTtlMs: cfg.jobTtlMs,
+      });
+      const deps = {
+        config: cfg,
+        jobStore,
+        abortStore: {
+          set() {},
+          get() {
+            return undefined;
+          },
+          remove() {},
+        },
+        rateLimiter,
+        tokenService,
+        workflowFactory: {
+          async createRun() {
+            return { start: () => new Promise(() => {}) };
+          },
+        },
+        cacheStatus: {
+          enabled: false,
+          getStats: () => ({ entries: 0, hits: 0, misses: 0 }),
+        },
+        logger: {
+          info() {},
+          warn() {},
+          error() {},
+          request() {},
+          workflowStart() {},
+          workflowComplete() {},
+          workflowFail() {},
+        },
+        clock: { now: () => Date.now() },
+        idSource: { newJobId: () => crypto.randomUUID() },
+        agentList: () => agentList,
+        appHtml: "<html></html>",
+      };
+      const routes = createComposedRoutes(deps, {
+        upgrade: () => true,
+        requestIP: () => ({ address: "127.0.0.1", family: "IPv4", port: 0 }),
+      });
+      return { routes, tokenService, jobStore };
     }
 
     const VALID_UUID = "00000000-0000-4000-a000-000000000000";
+    const TEST_SECRET = "test-secret-key-for-rest-endpoints";
+
+    function statusReq(jobId: string, token?: string): Request {
+      const req = new Request(`http://x/v1/status/${jobId}`);
+      (req as any).params = { jobId };
+      if (token) req.headers.set("Authorization", `Bearer ${token}`);
+      return req;
+    }
+
+    async function getStatusCode(
+      routes: any,
+      jobId: string,
+      token: string | undefined,
+    ): Promise<number> {
+      const res = (await routes["/v1/status/:jobId"].GET(
+        statusReq(jobId, token),
+      )) as Response;
+      return res.status;
+    }
 
     describe("GET /v1/status/:jobId token verification", () => {
-      test("valid token returns 200", () => {
-        const token = generateToken(VALID_UUID, TEST_SECRET);
-        expect(
-          getResponseStatus(true, TEST_SECRET, VALID_UUID, token, true),
-        ).toBe(200);
+      test("valid token returns 200", async () => {
+        const { routes, tokenService, jobStore } =
+          makeRoutesWithSecret(TEST_SECRET);
+        jobStore.createJob(VALID_UUID);
+        const token = tokenService.generateToken(VALID_UUID);
+        expect(await getStatusCode(routes, VALID_UUID, token)).toBe(200);
       });
 
-      test("missing token returns 403", () => {
-        expect(
-          getResponseStatus(true, TEST_SECRET, VALID_UUID, null, true),
-        ).toBe(403);
+      test("missing token returns 403", async () => {
+        const { routes } = makeRoutesWithSecret(TEST_SECRET);
+        expect(await getStatusCode(routes, VALID_UUID, undefined)).toBe(403);
       });
 
-      test("invalid token returns 403", () => {
-        expect(
-          getResponseStatus(true, TEST_SECRET, VALID_UUID, "invalid", true),
-        ).toBe(403);
+      test("invalid token returns 403", async () => {
+        const { routes } = makeRoutesWithSecret(TEST_SECRET);
+        expect(await getStatusCode(routes, VALID_UUID, "invalid")).toBe(403);
       });
 
-      test("token verified before existence — unknown job returns 403 not 404", () => {
-        expect(
-          getResponseStatus(true, TEST_SECRET, VALID_UUID, "invalid", false),
-        ).toBe(403);
+      test("token verified before existence — unknown job returns 403 not 404", async () => {
+        const { routes } = makeRoutesWithSecret(TEST_SECRET);
+        expect(await getStatusCode(routes, VALID_UUID, "invalid")).toBe(403);
       });
 
-      test("token from different jobId is rejected", () => {
-        const otherToken = generateToken(
+      test("token from different jobId is rejected", async () => {
+        const { routes, tokenService } = makeRoutesWithSecret(TEST_SECRET);
+        const otherToken = tokenService.generateToken(
           "11111111-1111-4111-a111-111111111111",
-          TEST_SECRET,
         );
-        expect(
-          getResponseStatus(true, TEST_SECRET, VALID_UUID, otherToken, true),
-        ).toBe(403);
+        expect(await getStatusCode(routes, VALID_UUID, otherToken)).toBe(403);
       });
     });
 
     describe("DELETE /v1/diagnose/:jobId token verification", () => {
-      test("valid token allows cancellation (proceeds to 200)", () => {
-        const token = generateToken(VALID_UUID, TEST_SECRET);
-        expect(
-          getResponseStatus(true, TEST_SECRET, VALID_UUID, token, true),
-        ).toBe(200);
+      test("valid token allows cancellation (proceeds to 200)", async () => {
+        const { routes, tokenService, jobStore } =
+          makeRoutesWithSecret(TEST_SECRET);
+        jobStore.createJob(VALID_UUID);
+        const token = tokenService.generateToken(VALID_UUID);
+        const req = new Request(`http://x/v1/diagnose/${VALID_UUID}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        (req as any).params = { jobId: VALID_UUID };
+        const res = (await routes["/v1/diagnose/:jobId"].DELETE(
+          req,
+        )) as Response;
+        expect(res.status).toBe(200);
       });
 
-      test("missing token returns 403", () => {
-        expect(
-          getResponseStatus(true, TEST_SECRET, VALID_UUID, null, true),
-        ).toBe(403);
+      test("missing token returns 403", async () => {
+        const { routes } = makeRoutesWithSecret(TEST_SECRET);
+        const req = new Request(`http://x/v1/diagnose/${VALID_UUID}`, {
+          method: "DELETE",
+        });
+        (req as any).params = { jobId: VALID_UUID };
+        const res = (await routes["/v1/diagnose/:jobId"].DELETE(
+          req,
+        )) as Response;
+        expect(res.status).toBe(403);
       });
 
-      test("invalid token returns 403", () => {
-        expect(
-          getResponseStatus(true, TEST_SECRET, VALID_UUID, "bad-token", true),
-        ).toBe(403);
+      test("invalid token returns 403", async () => {
+        const { routes } = makeRoutesWithSecret(TEST_SECRET);
+        const req = new Request(`http://x/v1/diagnose/${VALID_UUID}`, {
+          method: "DELETE",
+          headers: { Authorization: "Bearer bad-token" },
+        });
+        (req as any).params = { jobId: VALID_UUID };
+        const res = (await routes["/v1/diagnose/:jobId"].DELETE(
+          req,
+        )) as Response;
+        expect(res.status).toBe(403);
       });
     });
 
     describe("Dev mode (empty WS_TOKEN_SECRET)", () => {
-      test("allows access without token", () => {
-        expect(getResponseStatus(true, "", VALID_UUID, null, true)).toBe(200);
+      test("allows access without token", async () => {
+        const { routes, jobStore } = makeRoutesWithSecret("");
+        jobStore.createJob(VALID_UUID);
+        expect(await getStatusCode(routes, VALID_UUID, undefined)).toBe(200);
       });
 
-      test("allows access with any token", () => {
-        expect(getResponseStatus(true, "", VALID_UUID, "anything", true)).toBe(
-          200,
-        );
+      test("allows access with any token", async () => {
+        const { routes, jobStore } = makeRoutesWithSecret("");
+        jobStore.createJob(VALID_UUID);
+        expect(await getStatusCode(routes, VALID_UUID, "anything")).toBe(200);
       });
 
-      test("unknown job returns 404 not 403", () => {
-        expect(getResponseStatus(true, "", VALID_UUID, null, false)).toBe(404);
+      test("unknown job returns 404 not 403", async () => {
+        const { routes } = makeRoutesWithSecret("");
+        expect(await getStatusCode(routes, VALID_UUID, undefined)).toBe(404);
       });
     });
 
     describe("Format check takes precedence", () => {
-      test("malformed job ID returns 400 regardless of token or secret", () => {
-        expect(getResponseStatus(false, TEST_SECRET, "bad", null, false)).toBe(
-          400,
-        );
-        expect(
-          getResponseStatus(false, TEST_SECRET, "bad", "valid", false),
-        ).toBe(400);
-        expect(getResponseStatus(false, "", "bad", null, false)).toBe(400);
+      test("malformed job ID returns 400 regardless of token or secret", async () => {
+        const { routes } = makeRoutesWithSecret(TEST_SECRET);
+        const req = new Request("http://x/v1/status/bad", {
+          headers: { Authorization: "Bearer whatever" },
+        });
+        (req as any).params = { jobId: "bad" };
+        const res = (await routes["/v1/status/:jobId"].GET(req)) as Response;
+        expect(res.status).toBe(400);
       });
     });
   });

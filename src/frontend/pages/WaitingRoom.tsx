@@ -26,6 +26,22 @@ const CALLING_RE = /^Calling specialist (\w+)\.\.\.$/;
 const RECEIVED_RE =
   /^(?:Received analysis from|Failed to receive analysis from) (\w+)$/;
 
+/**
+ * Compute the CSS classes for a progress log entry based on its event type.
+ * Exported so tests exercise the production class decision rather than a
+ * copied implementation.
+ */
+export function getLogEntryClasses(eventType: string | undefined): {
+  indent: string;
+  color: string;
+} {
+  const isTool = eventType === "tool_call" || eventType === "tool_result";
+  return {
+    indent: isTool ? "ml-4" : "",
+    color: isTool ? "text-cyan-400/70" : "text-cyan-300",
+  };
+}
+
 export function deriveSpecialistStatuses(
   progress: ProgressEvent[] | undefined,
 ): Map<string, SpecialistStatus> {
@@ -251,9 +267,9 @@ export function WaitingRoom({
           {visibleProgress.map((p, i) => {
             const isToolCall = p.eventType === "tool_call";
             const isToolResult = p.eventType === "tool_result";
-            const isTool = isToolCall || isToolResult;
-            const indent = isTool ? "ml-4" : "";
-            const baseColor = isTool ? "text-cyan-400/70" : "text-cyan-300";
+            const { indent, color: baseColor } = getLogEntryClasses(
+              p.eventType,
+            );
 
             let statusIcon = "";
             let durationText = "";

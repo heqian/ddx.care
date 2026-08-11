@@ -147,24 +147,18 @@ describe("Config — validateConfig", () => {
   });
 
   test("throws when OLLAMA_API_KEY is missing and MOCK_LLM is not 1", () => {
-    const original = process.env.OLLAMA_API_KEY;
-    const originalMock = process.env.MOCK_LLM;
-    delete process.env.OLLAMA_API_KEY;
-    process.env.MOCK_LLM = "0";
-    try {
-      expect(() => validateConfig()).toThrow("Missing OLLAMA_API_KEY");
-    } finally {
-      if (original !== undefined) {
-        process.env.OLLAMA_API_KEY = original;
-      } else {
-        delete process.env.OLLAMA_API_KEY;
-      }
-      if (originalMock !== undefined) {
-        process.env.MOCK_LLM = originalMock;
-      } else {
-        delete process.env.MOCK_LLM;
-      }
-    }
+    // Use the authoritative buildConfig + validateBuiltConfig with an
+    // explicit env record so validation does not depend on import-time
+    // cached state or process.env mutation.
+    const {
+      buildConfig,
+      validateBuiltConfig,
+    } = require("../src/backend/app-config");
+    const cfg = buildConfig({
+      OLLAMA_API_KEY: "",
+      MOCK_LLM: "0",
+    });
+    expect(() => validateBuiltConfig(cfg)).toThrow("Missing OLLAMA_API_KEY");
   });
 });
 

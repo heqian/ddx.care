@@ -296,7 +296,9 @@ describe("Orphadata Cache — Full Suite", () => {
   describe("Error Handling", () => {
     test("getDiseaseGenes returns empty on fetch failure", async () => {
       const savedFetch = globalThis.fetch;
-      globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = vi
+        .fn()
+        .mockRejectedValue(new Error("Network error")) as any;
       const genes = await cache.getDiseaseGenes(12345);
       expect(genes).toEqual([]);
       globalThis.fetch = savedFetch;
@@ -304,7 +306,9 @@ describe("Orphadata Cache — Full Suite", () => {
 
     test("getDiseasePhenotypes returns empty on fetch failure", async () => {
       const savedFetch = globalThis.fetch;
-      globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+      globalThis.fetch = vi
+        .fn()
+        .mockRejectedValue(new Error("Network error")) as any;
       const phenotypes = await cache.getDiseasePhenotypes(12345);
       expect(phenotypes).toEqual([]);
       globalThis.fetch = savedFetch;
@@ -366,7 +370,9 @@ describe("Orphadata Cache — Init Failure Handling", () => {
       tmpDir,
       `fail-net-${Date.now()}.sqlite`,
     );
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(new Error("Network error")) as any;
 
     const cache = await import("../src/backend/orphadata-cache");
     await cache.initializeOrphadataCache();
@@ -385,7 +391,7 @@ describe("Orphadata Cache — Init Failure Handling", () => {
       ok: false,
       status: 500,
       statusText: "Internal Server Error",
-    });
+    }) as any;
 
     const cache = await import("../src/backend/orphadata-cache");
     await cache.initializeOrphadataCache();

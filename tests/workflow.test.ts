@@ -284,9 +284,9 @@ describe("formatReport", () => {
   };
 
   test("formats ranked diagnoses with correct rank numbers", async () => {
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: sampleOutcome,
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses).toHaveLength(2);
     expect(result.report.diagnoses[0].rank).toBe(1);
@@ -294,9 +294,9 @@ describe("formatReport", () => {
   });
 
   test("maps diagnosis fields correctly", async () => {
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: sampleOutcome,
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     const first = result.report.diagnoses[0];
     expect(first.name).toBe("Hypertensive Urgency");
@@ -306,9 +306,9 @@ describe("formatReport", () => {
   });
 
   test("splits evidence into arrays", async () => {
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: sampleOutcome,
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     const first = result.report.diagnoses[0];
     expect(first.supportingEvidence).toEqual([
@@ -323,9 +323,9 @@ describe("formatReport", () => {
   });
 
   test("preserves semicolons in evidence text", async () => {
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: sampleOutcome,
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     // Second diagnosis has semicolons in supportingEvidence — should NOT split
     const second = result.report.diagnoses[1];
@@ -335,18 +335,18 @@ describe("formatReport", () => {
   });
 
   test("normalizes urgency to lowercase", async () => {
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: sampleOutcome,
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses[0].urgency).toBe("emergent");
     expect(result.report.diagnoses[1].urgency).toBe("urgent");
   });
 
   test("includes disclaimer and timestamp", async () => {
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: sampleOutcome,
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.disclaimer).toContain("RESEARCH USE ONLY");
     expect(result.disclaimer).toContain("HIPAA-compliant");
@@ -356,9 +356,9 @@ describe("formatReport", () => {
   });
 
   test("preserves specialists and metadata", async () => {
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: sampleOutcome,
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.specialistsConsulted).toHaveLength(2);
     expect(result.report.specialistsConsulted[0].specialist).toBe(
@@ -379,9 +379,9 @@ describe("formatReport", () => {
       rankedDiagnoses: [],
     };
 
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: { status: "available", diagnosisReport: emptyReport },
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses).toEqual([]);
   });
@@ -406,9 +406,9 @@ describe("formatReport", () => {
       recommendedImmediateActions: "",
     };
 
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: { status: "available", diagnosisReport: sparseReport },
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses[0].name).toBe("Unknown");
     expect(result.report.diagnoses[0].supportingEvidence).toEqual([]);
@@ -1024,10 +1024,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       }),
     };
 
-    const result = await runDiagnosis.execute({
-      context: {} as any,
-      stepId: "run-diagnosis",
-      workflowId: "test-wf",
+    const result: any = await runDiagnosis.execute({
       inputData: {
         medicalHistory: "",
         conversationTranscript: "",
@@ -1035,7 +1032,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       },
       mastra: mockMastra as any,
       runId: "mock-run-id",
-    });
+    } as any);
 
     expect(callCount).toBe(5);
     expect(result.status).toBe("available");
@@ -1059,10 +1056,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       }),
     };
 
-    const result = await runDiagnosis.execute({
-      context: {} as any,
-      stepId: "run-diagnosis",
-      workflowId: "test-wf",
+    const result: any = await runDiagnosis.execute({
       inputData: {
         medicalHistory: "",
         conversationTranscript: "",
@@ -1070,7 +1064,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       },
       mastra: mockMastra as any,
       runId: "mock-run-id",
-    });
+    } as any);
 
     expect(result).toMatchObject({
       status: "generation_failed",
@@ -1124,10 +1118,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       }),
     };
 
-    const result = await runDiagnosis.execute({
-      context: {} as any,
-      stepId: "run-diagnosis",
-      workflowId: "test-wf",
+    const result: any = await runDiagnosis.execute({
       inputData: {
         medicalHistory: "",
         conversationTranscript: "",
@@ -1135,7 +1126,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       },
       mastra: mockMastra as any,
       runId: "retry-test-id",
-    });
+    } as any);
 
     expect(callCount).toBe(3);
     expect(result.status).toBe("available");
@@ -1169,10 +1160,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       }),
     };
 
-    const result = await runDiagnosis.execute({
-      context: {} as any,
-      stepId: "run-diagnosis",
-      workflowId: "test-wf",
+    const result: any = await runDiagnosis.execute({
       inputData: {
         medicalHistory: "",
         conversationTranscript: "",
@@ -1180,7 +1168,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       },
       mastra: mockMastra as any,
       runId: "retry-fail-test-id",
-    });
+    } as any);
 
     expect(callCount).toBe(3);
     expect(result).toMatchObject({
@@ -1232,9 +1220,6 @@ describe("runDiagnosis - CMO parsing logic", () => {
     };
 
     await runDiagnosis.execute({
-      context: {} as any,
-      stepId: "run-diagnosis",
-      workflowId: "test-wf",
       inputData: {
         medicalHistory: "",
         conversationTranscript: "",
@@ -1242,7 +1227,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       },
       mastra: mockMastra as any,
       runId: "abort-signal-id",
-    });
+    } as any);
 
     expect(generateCallCount).toBeGreaterThanOrEqual(1);
   });
@@ -1303,10 +1288,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       },
     };
 
-    const result = await runDiagnosis.execute({
-      context: {} as any,
-      stepId: "run-diagnosis",
-      workflowId: "test-wf",
+    const result: any = await runDiagnosis.execute({
       inputData: {
         medicalHistory: "",
         conversationTranscript: "",
@@ -1314,7 +1296,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       },
       mastra: mockMastra as any,
       runId: "specialist-fail-id",
-    });
+    } as any);
 
     expect(result.status).toBe("available");
     if (result.status === "available") {
@@ -1347,10 +1329,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       },
     };
 
-    const result = await runDiagnosis.execute({
-      context: {} as any,
-      stepId: "run-diagnosis",
-      workflowId: "test-wf",
+    const result: any = await runDiagnosis.execute({
       inputData: {
         medicalHistory: "",
         conversationTranscript: "",
@@ -1358,7 +1337,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       },
       mastra: mockMastra as any,
       runId: "max-rounds-id",
-    });
+    } as any);
 
     expect(["available", "generation_failed"]).toContain(result.status);
     expect(round).toBeGreaterThanOrEqual(1);
@@ -1404,10 +1383,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       }),
     };
 
-    const result = await runDiagnosis.execute({
-      context: {} as any,
-      stepId: "run-diagnosis",
-      workflowId: "test-wf",
+    const result: any = await runDiagnosis.execute({
       inputData: {
         medicalHistory: "",
         conversationTranscript: "",
@@ -1415,7 +1391,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
       },
       mastra: mockMastra as any,
       runId: "empty-specialists-id",
-    });
+    } as any);
 
     expect(result.status).toBe("available");
     expect(callCount).toBe(2);
@@ -1489,10 +1465,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
             : { generate: mockSpecialistGenerate },
       };
 
-      const result = await runDiagnosis.execute({
-        context: {} as any,
-        stepId: "run-diagnosis",
-        workflowId: "test-wf",
+      const result: any = await runDiagnosis.execute({
         inputData: {
           medicalHistory: "Polypharmacy",
           conversationTranscript: "Medication safety question",
@@ -1500,7 +1473,7 @@ describe("runDiagnosis - CMO parsing logic", () => {
         },
         mastra: mockMastra as any,
         runId: `coverage-preservation-${cmoCallCount}-${scenario.name}`,
-      });
+      } as any);
 
       expect(synthesisPrompt).toContain(scenario.specialistText);
       expect(result.status).toBe("available");
@@ -1538,12 +1511,12 @@ describe("formatReport — malformed input handling", () => {
       recommendedImmediateActions: undefined,
     };
 
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: {
         status: "available",
         diagnosisReport: sparseReport as any,
       },
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.chiefComplaint).toBe("");
     expect(result.report.patientSummary).toBe("");
@@ -1578,9 +1551,9 @@ describe("formatReport — malformed input handling", () => {
       recommendedImmediateActions: "",
     };
 
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: { status: "available", diagnosisReport: report as any },
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses[0].urgency).toBe("routine");
   });
@@ -1605,9 +1578,9 @@ describe("formatReport — malformed input handling", () => {
       recommendedImmediateActions: "",
     };
 
-    const result = await formatReport.execute({
+    const result: any = await formatReport.execute({
       inputData: { status: "available", diagnosisReport: report },
-    } as Parameters<typeof formatReport.execute>[0]);
+    } as unknown as Parameters<typeof formatReport.execute>[0]);
 
     expect(result.report.diagnoses[0].supportingEvidence).toEqual([]);
     expect(result.report.diagnoses[0].contradictoryEvidence).toEqual([]);
@@ -1704,7 +1677,7 @@ describe("formatToolArgs", () => {
 // ---------------------------------------------------------------------------
 // mockDiagnosis
 // ---------------------------------------------------------------------------
-import { type ProgressEvent } from "../src/backend/progress-store";
+// ProgressEvent is already imported at the top of this file.
 
 describe("mockDiagnosis", () => {
   test("returns a valid diagnosis report", async () => {
@@ -2175,9 +2148,6 @@ describe("runDiagnosis - abort store integration", () => {
     };
 
     await runDiagnosis.execute({
-      context: {} as any,
-      stepId: "run-diagnosis",
-      workflowId: "test-wf",
       inputData: {
         medicalHistory: "",
         conversationTranscript: "",
@@ -2185,7 +2155,7 @@ describe("runDiagnosis - abort store integration", () => {
       },
       mastra: mockMastra as any,
       runId,
-    });
+    } as any);
 
     // The abort signal passed to CMO should be the SAME object from the store
     expect(capturedSignal).toBe(storeAc.signal);
@@ -2235,9 +2205,6 @@ describe("runDiagnosis - abort store integration", () => {
     const runId = "no-store-entry-" + crypto.randomUUID();
 
     await runDiagnosis.execute({
-      context: {} as any,
-      stepId: "run-diagnosis",
-      workflowId: "test-wf",
       inputData: {
         medicalHistory: "",
         conversationTranscript: "",
@@ -2245,7 +2212,7 @@ describe("runDiagnosis - abort store integration", () => {
       },
       mastra: mockMastra as any,
       runId,
-    });
+    } as any);
 
     // Should still get an abort signal (from a locally-created controller)
     expect(capturedSignal).toBeDefined();
@@ -2276,9 +2243,6 @@ describe("runDiagnosis - abort store integration", () => {
 
     await expect(
       runDiagnosis.execute({
-        context: {} as any,
-        stepId: "run-diagnosis",
-        workflowId: "test-wf",
         inputData: {
           medicalHistory: "",
           conversationTranscript: "",
@@ -2286,7 +2250,7 @@ describe("runDiagnosis - abort store integration", () => {
         },
         mastra: mockMastra as any,
         runId,
-      }),
+      } as any),
     ).rejects.toThrow();
 
     // Should have aborted after the first call

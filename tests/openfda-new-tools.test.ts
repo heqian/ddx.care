@@ -36,10 +36,13 @@ describe("drugShortagesTool", () => {
       }),
     }) as any;
 
-    const result = await drugShortagesTool.execute({
-      drugName: "furosemide",
-      limit: 5,
-    });
+    const result: any = await drugShortagesTool.execute!(
+      {
+        drugName: "furosemide",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
     expect(result.data.results[0].genericName).toBe("Furosemide Injection");
@@ -76,10 +79,13 @@ describe("drugShortagesTool", () => {
       }),
     }) as any;
 
-    const result = await drugShortagesTool.execute({
-      drugName: "lipitor",
-      limit: 5,
-    });
+    const result: any = await drugShortagesTool.execute!(
+      {
+        drugName: "lipitor",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results[0].brandName).toBe("LIPITOR");
     expect(result.data.results[0].genericName).toBe("ATORVASTATIN");
@@ -95,10 +101,13 @@ describe("drugShortagesTool", () => {
       statusText: "Not Found",
     }) as any;
 
-    const result = await drugShortagesTool.execute({
-      drugName: "unknown",
-      limit: 5,
-    });
+    const result: any = await drugShortagesTool.execute!(
+      {
+        drugName: "unknown",
+        limit: 5,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -115,10 +124,13 @@ describe("drugShortagesTool", () => {
       json: async () => ({ results: [] }),
     }) as any;
 
-    const result = await drugShortagesTool.execute({
-      drugName: "aspirin",
-      limit: 5,
-    });
+    const result: any = await drugShortagesTool.execute!(
+      {
+        drugName: "aspirin",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toEqual([]);
   });
@@ -153,10 +165,13 @@ describe("foodAdverseEventsTool", () => {
       }),
     }) as any;
 
-    const result = await foodAdverseEventsTool.execute({
-      productName: "centrum",
-      limit: 5,
-    });
+    const result: any = await foodAdverseEventsTool.execute!(
+      {
+        productName: "centrum",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
     expect(result.data.results[0].reportNumber).toBe("149779");
@@ -193,10 +208,13 @@ describe("foodAdverseEventsTool", () => {
       }),
     }) as any;
 
-    const result = await foodAdverseEventsTool.execute({
-      productName: "test",
-      limit: 5,
-    });
+    const result: any = await foodAdverseEventsTool.execute!(
+      {
+        productName: "test",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results[0].consumerAge).toBeUndefined();
     expect(result.data.results[0].consumerGender).toBeUndefined();
@@ -214,10 +232,13 @@ describe("foodAdverseEventsTool", () => {
       statusText: "Not Found",
     }) as any;
 
-    const result = await foodAdverseEventsTool.execute({
-      productName: "unknown",
-      limit: 5,
-    });
+    const result: any = await foodAdverseEventsTool.execute!(
+      {
+        productName: "unknown",
+        limit: 5,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -236,10 +257,13 @@ describe("foodAdverseEventsTool", () => {
       json: async () => ({ results: [] }),
     }) as any;
 
-    const result = await foodAdverseEventsTool.execute({
-      productName: "test",
-      limit: 5,
-    });
+    const result: any = await foodAdverseEventsTool.execute!(
+      {
+        productName: "test",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toEqual([]);
   });
@@ -264,10 +288,13 @@ describe("foodAdverseEventsTool", () => {
       }),
     }) as any;
 
-    const result = await foodAdverseEventsTool.execute({
-      productName: "test",
-      limit: 5,
-    });
+    const result: any = await foodAdverseEventsTool.execute!(
+      {
+        productName: "test",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results[0].consumerAge).toBe("45");
   });
@@ -308,10 +335,13 @@ describe("deviceAdverseEventsTool", () => {
       }),
     }) as any;
 
-    const result = await deviceAdverseEventsTool.execute({
-      deviceName: "pacemaker",
-      limit: 5,
-    });
+    const result: any = await deviceAdverseEventsTool.execute!(
+      {
+        deviceName: "pacemaker",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
     expect(result.data.results[0].reportNumber).toBe("10");
@@ -349,10 +379,13 @@ describe("deviceAdverseEventsTool", () => {
       }),
     }) as any;
 
-    const result = await deviceAdverseEventsTool.execute({
-      deviceName: "pacemaker",
-      limit: 5,
-    });
+    const result: any = await deviceAdverseEventsTool.execute!(
+      {
+        deviceName: "pacemaker",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results[0].deviceName).toBe("Medtronic Pace-O-Matic");
   });
@@ -376,10 +409,13 @@ describe("deviceAdverseEventsTool", () => {
       }),
     }) as any;
 
-    const result = await deviceAdverseEventsTool.execute({
-      deviceName: "test",
-      limit: 5,
-    });
+    const result: any = await deviceAdverseEventsTool.execute!(
+      {
+        deviceName: "test",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results[0].deviceName).toBeUndefined();
     expect(result.data.results[0].medicalSpecialty).toBeUndefined();
@@ -397,10 +433,13 @@ describe("deviceAdverseEventsTool", () => {
       statusText: "Not Found",
     }) as any;
 
-    const result = await deviceAdverseEventsTool.execute({
-      deviceName: "unknown",
-      limit: 5,
-    });
+    const result: any = await deviceAdverseEventsTool.execute!(
+      {
+        deviceName: "unknown",
+        limit: 5,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -419,10 +458,13 @@ describe("deviceAdverseEventsTool", () => {
       json: async () => ({ results: [] }),
     }) as any;
 
-    const result = await deviceAdverseEventsTool.execute({
-      deviceName: "test",
-      limit: 5,
-    });
+    const result: any = await deviceAdverseEventsTool.execute!(
+      {
+        deviceName: "test",
+        limit: 5,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toEqual([]);
   });

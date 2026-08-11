@@ -1,7 +1,70 @@
 import { test, expect, describe } from "bun:test";
+import { createLifecycle } from "../src/backend/composition";
+import { buildConfig } from "../src/backend/app-config";
+import { JobStore } from "../src/backend/progress-store";
 import { RateLimiter } from "../src/backend/utils/rate-limiter";
 
-describe("RateLimiter — activeWorkflows tracking", () => {
+/**
+ * Shutdown tests invoke the production lifecycle coordinator with injected
+ * stores, fake clock/sleep/server/timers/exit dependencies — never
+ * reproducing the wait loop locally.
+ */
+function makeLifecycle(opts: {
+  activeWorkflows: () => number;
+  sleep: (ms: number) => Promise<void>;
+  intervals?: Array<ReturnType<typeof setInterval>>;
+  shutdownTimeoutMs?: number;
+}) {
+  const cfg = buildConfig({
+    MOCK_LLM: "1",
+    PORT: "0",
+    TOOL_CACHE_TTL_MS: "0",
+    ORPHADATA_ENABLED: "0",
+  });
+  const jobStore = new JobStore(":memory:");
+  const rateLimiter = new RateLimiter({
+    maxRequests: 10,
+    windowMs: 60_000,
+    maxConcurrent: 3,
+  });
+  let serverStopped = false;
+  let exitCode: number | null = null;
+  const intervals = opts.intervals ?? [];
+  const lifecycle = createLifecycle({
+    config: cfg,
+    jobStore,
+    rateLimiter,
+    server: {
+      stop: () => {
+        serverStopped = true;
+      },
+    },
+    activeWorkflows: opts.activeWorkflows,
+    sleep: opts.sleep,
+    shutdownTimeoutMs: opts.shutdownTimeoutMs ?? 30_000,
+    exit: (code) => {
+      exitCode = code;
+    },
+    timers: {
+      setInterval,
+      setTimeout,
+      clearInterval,
+      clearTimeout,
+      intervals,
+    },
+    orphadataEnabled: false,
+    toolCacheEnabled: false,
+    jobTtlMs: cfg.jobTtlMs,
+    pendingJobTimeoutMs: cfg.pendingJobTimeoutMs,
+  });
+  return {
+    lifecycle,
+    isServerStopped: () => serverStopped,
+    getExitCode: () => exitCode,
+  };
+}
+
+describe("RateLimiter — activeWorkflows tracking (unchanged)", () => {
   test("activeWorkflows is 0 initially", () => {
     const limiter = new RateLimiter({
       maxRequests: 5,
@@ -48,7 +111,7 @@ describe("RateLimiter — activeWorkflows tracking", () => {
   });
 });
 
-describe("RateLimiter — tryStartWorkflow", () => {
+describe("RateLimiter — tryStartWorkflow (unchanged)", () => {
   test("allows workflows up to maxConcurrent", () => {
     const limiter = new RateLimiter({
       maxRequests: 5,
@@ -73,92 +136,67 @@ describe("RateLimiter — tryStartWorkflow", () => {
   });
 });
 
-describe("Shutdown wait-loop pattern", () => {
+describe("Production lifecycle shutdown — via createLifecycle", () => {
   test("resolves immediately when no active workflows", async () => {
-    const limiter = new RateLimiter({
-      maxRequests: 5,
-      windowMs: 60_000,
-      maxConcurrent: 3,
+    let sleepCalls = 0;
+    const { lifecycle, isServerStopped, getExitCode } = makeLifecycle({
+      activeWorkflows: () => 0,
+      sleep: async () => {
+        sleepCalls++;
+      },
     });
-    const timeout = 5_000;
-    const start = Date.now();
-
-    // Simulate the shutdown wait loop from index.ts
-    while (limiter.activeWorkflows > 0) {
-      if (Date.now() - start > timeout) break;
-      await new Promise((r) => setTimeout(r, 50));
-    }
-
-    expect(Date.now() - start).toBeLessThan(500);
-    expect(limiter.activeWorkflows).toBe(0);
+    await lifecycle.shutdown("SIGTERM");
+    expect(isServerStopped()).toBe(true);
+    expect(getExitCode()).toBe(0);
+    expect(sleepCalls).toBe(0);
   });
 
   test("waits for workflow to finish before proceeding", async () => {
-    const limiter = new RateLimiter({
-      maxRequests: 5,
-      windowMs: 60_000,
-      maxConcurrent: 3,
+    let active = 1;
+    let sleepCalls = 0;
+    const { lifecycle } = makeLifecycle({
+      activeWorkflows: () => active,
+      sleep: async () => {
+        sleepCalls++;
+        if (sleepCalls >= 2) active = 0;
+      },
     });
-    limiter.tryStartWorkflow("job-1");
-
-    const timeout = 5_000;
-    const start = Date.now();
-
-    // Simulate an async workflow finishing after 200ms
-    setTimeout(() => limiter.finishWorkflow("job-1"), 200);
-
-    while (limiter.activeWorkflows > 0) {
-      if (Date.now() - start > timeout) break;
-      await new Promise((r) => setTimeout(r, 50));
-    }
-
-    expect(limiter.activeWorkflows).toBe(0);
-    const elapsed = Date.now() - start;
-    expect(elapsed).toBeGreaterThanOrEqual(150);
-    expect(elapsed).toBeLessThan(timeout);
+    await lifecycle.shutdown("SIGTERM");
+    expect(sleepCalls).toBeGreaterThanOrEqual(2);
   });
 
   test("times out when workflows never finish", async () => {
-    const limiter = new RateLimiter({
-      maxRequests: 5,
-      windowMs: 60_000,
-      maxConcurrent: 3,
-    });
-    limiter.tryStartWorkflow("job-1");
-
-    const timeout = 500; // Short timeout for test speed
     const start = Date.now();
-
-    while (limiter.activeWorkflows > 0) {
-      if (Date.now() - start > timeout) break;
-      await new Promise((r) => setTimeout(r, 50));
-    }
-
-    // Should have broken out due to timeout, workflow still active
-    expect(limiter.activeWorkflows).toBe(1);
-    const elapsed = Date.now() - start;
-    expect(elapsed).toBeGreaterThanOrEqual(timeout - 50);
-  });
-
-  test("clearInterval prevents timer from firing after shutdown", () => {
-    let callCount = 0;
-    const timer = setInterval(() => {
-      callCount++;
-    }, 10);
-
-    // Clear immediately
-    clearInterval(timer);
-
-    // Wait a bit and verify it never fired
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        expect(callCount).toBe(0);
-        resolve();
-      }, 100);
+    const { lifecycle, getExitCode } = makeLifecycle({
+      activeWorkflows: () => 1,
+      sleep: async () => {},
+      shutdownTimeoutMs: 50,
     });
+    await lifecycle.shutdown("SIGTERM");
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(40);
+    expect(getExitCode()).toBe(0);
   });
 
-  test("multiple concurrent workflows tracked correctly", async () => {
+  test("clears registered intervals on shutdown", async () => {
+    let intervalCalls = 0;
+    const interval = setInterval(() => {
+      intervalCalls++;
+    }, 5);
+    const { lifecycle } = makeLifecycle({
+      activeWorkflows: () => 0,
+      sleep: async () => {},
+      intervals: [interval],
+    });
+    // Wait briefly so the interval could fire if not cleared.
+    await new Promise((r) => setTimeout(r, 20));
+    await lifecycle.shutdown("SIGTERM");
+    const callsBefore = intervalCalls;
+    await new Promise((r) => setTimeout(r, 20));
+    expect(intervalCalls).toBe(callsBefore);
+  });
+
+  test("multiple concurrent workflows tracked correctly via rate limiter", async () => {
     const limiter = new RateLimiter({
       maxRequests: 5,
       windowMs: 60_000,
@@ -167,22 +205,17 @@ describe("Shutdown wait-loop pattern", () => {
     limiter.tryStartWorkflow("job-1");
     limiter.tryStartWorkflow("job-2");
     limiter.tryStartWorkflow("job-3");
-
     expect(limiter.activeWorkflows).toBe(3);
 
-    // Finish one at a time
-    setTimeout(() => limiter.finishWorkflow("job-1"), 100);
-    setTimeout(() => limiter.finishWorkflow("job-2"), 200);
-    setTimeout(() => limiter.finishWorkflow("job-3"), 300);
-
-    const timeout = 5_000;
-    const start = Date.now();
-
-    while (limiter.activeWorkflows > 0) {
-      if (Date.now() - start > timeout) break;
-      await new Promise((r) => setTimeout(r, 50));
-    }
-
-    expect(limiter.activeWorkflows).toBe(0);
+    let active = 3;
+    const { lifecycle } = makeLifecycle({
+      activeWorkflows: () => active,
+      sleep: async () => {
+        // simulate one finishing per sleep
+        active = Math.max(0, active - 1);
+      },
+    });
+    await lifecycle.shutdown("SIGTERM");
+    expect(active).toBe(0);
   });
 });

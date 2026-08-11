@@ -1,6 +1,7 @@
 import { test, expect, describe, beforeEach } from "bun:test";
 import { JobStore, type ProgressEvent } from "../src/backend/progress-store";
 import * as abortStore from "../src/backend/utils/abort-controller-store";
+import { createLifecycle } from "../src/backend/composition";
 import {
   createGenerationFailedReportOutcome,
   type AvailableReportOutcome,
@@ -233,7 +234,7 @@ describe("JobStore — Progress Events", () => {
     });
 
     const progress = store.getJob("job-canonical-ids")!.progress;
-    expect(progress[0].specialistIds).toEqual(specialistIds);
+    expect(progress[0].specialistIds).toEqual(specialistIds as any);
     expect(progress[1].agentId).toBe("emergencyPhysician");
   });
 
@@ -648,9 +649,11 @@ describe("JobStore — timeoutPending", () => {
   });
 });
 
-describe("JobStore — Startup sequence", () => {
-  test("startup cleanup removes expired terminal jobs before serving", () => {
-    // Simulate jobs left from a previous run (before downtime)
+describe("JobStore — Startup sequence (production lifecycle)", () => {
+  test("startup lifecycle calls markStalePending then cleanupExpired before serving", async () => {
+    // Use an in-memory store with the production lifecycle coordinator
+    // instead of repeating index.ts ordering locally.
+    const store = new JobStore(":memory:");
     store.createJob("expired-completed");
     store.complete("expired-completed", availableOutcome);
     store.createJob("expired-failed");
@@ -663,9 +666,35 @@ describe("JobStore — Startup sequence", () => {
       `UPDATE jobs SET createdAt = 0 WHERE id IN ('expired-completed', 'expired-failed')`,
     );
 
-    // Mirror index.ts startup: markStalePending() then cleanupExpired(JOB_TTL_MS)
-    store.markStalePending();
-    store.cleanupExpired(60_000);
+    const lifecycle = createLifecycle({
+      config: {
+        jobTtlMs: 60_000,
+        pendingJobTimeoutMs: 120_000,
+        orphadataEnabled: false,
+        toolCacheEnabled: false,
+      } as any,
+      jobStore: store,
+      rateLimiter: {
+        activeWorkflows: 0,
+      } as any,
+      server: { stop: () => {} },
+      activeWorkflows: () => 0,
+      sleep: async () => {},
+      shutdownTimeoutMs: 1000,
+      exit: () => {},
+      timers: {
+        setInterval,
+        setTimeout,
+        clearInterval,
+        clearTimeout,
+        intervals: [],
+      },
+      orphadataEnabled: false,
+      toolCacheEnabled: false,
+      jobTtlMs: 60_000,
+      pendingJobTimeoutMs: 120_000,
+    });
+    await lifecycle.startup();
 
     expect(store.getJob("expired-completed")).toBeUndefined();
     expect(store.getJob("expired-failed")).toBeUndefined();

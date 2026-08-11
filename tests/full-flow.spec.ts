@@ -672,11 +672,11 @@ test.describe("Token-protected flows (WS_TOKEN_SECRET set)", () => {
     });
 
     // The credential should be removed from sessionStorage.
-    const credential = await page.evaluate((id) => {
+    const credential = await page.evaluate((id: string) => {
       const raw = sessionStorage.getItem("ddx_job_credentials");
       if (!raw) return null;
       return JSON.parse(raw).jobs?.[id] ?? null;
-    }, jobId);
+    }, jobId as string);
     expect(credential).toBeNull();
 
     // The job should now be failed (cancelled). Use the credential we

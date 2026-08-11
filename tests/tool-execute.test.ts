@@ -33,7 +33,10 @@ describe("drug-interaction tool execute", () => {
       }),
     }) as any;
 
-    const result = await drugLookupTool.execute({ drugName: "aspirin" });
+    const result: any = await drugLookupTool.execute!(
+      { drugName: "aspirin" },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.rxcui).toBe("12345");
@@ -51,7 +54,10 @@ describe("drug-interaction tool execute", () => {
       json: async () => ({ drugGroup: { name: null, conceptGroup: [] } }),
     }) as any;
 
-    const result = await drugLookupTool.execute({ drugName: "unknown" });
+    const result: any = await drugLookupTool.execute!(
+      { drugName: "unknown" },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.rxcui).toBeUndefined();
@@ -94,7 +100,10 @@ describe("drug-interaction tool execute", () => {
       }),
     }) as any;
 
-    const result = await drugLookupTool.execute({ drugName: "aspirin" });
+    const result: any = await drugLookupTool.execute!(
+      { drugName: "aspirin" },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.rxcui).toBe("103863");
@@ -153,9 +162,12 @@ describe("drug-interaction tool execute", () => {
       return { ok: true, status: 200, json: async () => ({}) };
     }) as any;
 
-    const result = await drugInteractionTool.execute({
-      drugNames: ["aspirin", "warfarin"],
-    });
+    const result: any = await drugInteractionTool.execute!(
+      {
+        drugNames: ["aspirin", "warfarin"],
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.interactions.length).toBeGreaterThanOrEqual(1);
@@ -228,9 +240,12 @@ describe("drug-interaction tool execute", () => {
       return { ok: true, status: 200, json: async () => ({}) };
     }) as any;
 
-    const result = await drugInteractionTool.execute({
-      drugNames: ["warfarin", "aspirin"],
-    });
+    const result: any = await drugInteractionTool.execute!(
+      {
+        drugNames: ["warfarin", "aspirin"],
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.coverage).toBe("complete");
@@ -247,9 +262,12 @@ describe("drug-interaction tool execute", () => {
       .fn()
       .mockRejectedValue(new Error("Network error")) as any;
 
-    const result = await drugInteractionTool.execute({
-      drugNames: ["aspirin", "warfarin"],
-    });
+    const result: any = await drugInteractionTool.execute!(
+      {
+        drugNames: ["aspirin", "warfarin"],
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Unexpected error: ${result.error}`);
     expect(result.data.interactions).toEqual([]);
@@ -281,17 +299,20 @@ describe("drug-interaction tool execute", () => {
       statusText: "Service Unavailable",
     }) as any;
 
-    const result = await drugInteractionTool.execute({
-      drugNames: ["aspirin", "warfarin"],
-    });
+    const result: any = await drugInteractionTool.execute!(
+      {
+        drugNames: ["aspirin", "warfarin"],
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Unexpected error: ${result.error}`);
     expect(result.data.interactions).toEqual([]);
     expect(result.data.interactionStatus).toBe("unknown");
     expect(result.data.coverage).toBe("unavailable");
-    expect(result.data.checks.every((check) => check.status === "failed")).toBe(
-      true,
-    );
+    expect(
+      result.data.checks.every((check: any) => check.status === "failed"),
+    ).toBe(true);
   });
 
   test("drugInteractionTool handles empty interaction list", async () => {
@@ -340,9 +361,12 @@ describe("drug-interaction tool execute", () => {
       return { ok: true, status: 200, json: async () => ({}) };
     }) as any;
 
-    const result = await drugInteractionTool.execute({
-      drugNames: ["aspirin", "ibuprofen"],
-    });
+    const result: any = await drugInteractionTool.execute!(
+      {
+        drugNames: ["aspirin", "ibuprofen"],
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.interactions).toEqual([]);
@@ -389,9 +413,12 @@ describe("drug-interaction tool execute", () => {
       };
     }) as any;
 
-    const result = await drugInteractionTool.execute({
-      drugNames: ["aspirin", "unknown-drug"],
-    });
+    const result: any = await drugInteractionTool.execute!(
+      {
+        drugNames: ["aspirin", "unknown-drug"],
+      },
+      {} as any,
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
@@ -460,16 +487,19 @@ describe("drug-interaction tool execute", () => {
       };
     }) as any;
 
-    const result = await drugInteractionTool.execute({
-      drugNames: ["aspirin", "warfarin", "unknown-drug"],
-    });
+    const result: any = await drugInteractionTool.execute!(
+      {
+        drugNames: ["aspirin", "warfarin", "unknown-drug"],
+      },
+      {} as any,
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.interactionStatus).toBe("found");
     expect(result.data.coverage).toBe("partial");
     expect(result.data.interactions).toHaveLength(1);
-    expect(result.data.checks.map((check) => check.status)).toEqual([
+    expect(result.data.checks.map((check: any) => check.status)).toEqual([
       "checked",
       "failed",
       "unresolved",
@@ -571,9 +601,12 @@ describe("drug-interaction tool execute", () => {
         };
       }) as any;
 
-      const result = await drugInteractionTool.execute({
-        drugNames: regressionCase.drugNames,
-      });
+      const result: any = await drugInteractionTool.execute!(
+        {
+          drugNames: regressionCase.drugNames,
+        },
+        {} as any,
+      );
 
       expect(result.ok).toBe(true);
       if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
@@ -621,9 +654,12 @@ describe("drug-interaction tool execute", () => {
 
     // 3 unique drugs. Without memoization the N×N loop makes 6 RxNorm calls
     // (3 outer + 3 inner). With memoization it makes exactly 3 (one per drug).
-    await drugInteractionTool.execute({
-      drugNames: ["aspirin", "warfarin", "ibuprofen"],
-    });
+    await drugInteractionTool.execute!(
+      {
+        drugNames: ["aspirin", "warfarin", "ibuprofen"],
+      },
+      {} as any,
+    );
     expect(rxnavLookupCount).toBe(3);
   });
 
@@ -666,9 +702,12 @@ describe("drug-interaction tool execute", () => {
 
     // "Aspirin" and "aspirin" share a cache key (lowercased) → a single RxNorm
     // lookup, not two.
-    await drugInteractionTool.execute({
-      drugNames: ["Aspirin", "aspirin"],
-    });
+    await drugInteractionTool.execute!(
+      {
+        drugNames: ["Aspirin", "aspirin"],
+      },
+      {} as any,
+    );
     expect(rxnavLookupCount).toBe(1);
   });
 
@@ -728,7 +767,10 @@ describe("drug-interaction tool execute", () => {
       }),
     }) as any;
 
-    const result = await drugSpellingTool.execute({ drugName: "asprin" });
+    const result: any = await drugSpellingTool.execute!(
+      { drugName: "asprin" },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.suggestions).toEqual(["aspirin", "asprin"]);
@@ -748,9 +790,12 @@ describe("medlineplus tool execute", () => {
         `<?xml version="1.0"?><nlmSearchResult><term>diabetes</term><count>1</count><list><document rank="0" url="https://medlineplus.gov/diabetes.html"><content name="title">Diabetes</content><content name="FullSummary">Diabetes overview</content></document></list></nlmSearchResult>`,
     }) as any;
 
-    const result = await medlinePlusSearchTool.execute({
-      condition: "diabetes",
-    });
+    const result: any = await medlinePlusSearchTool.execute!(
+      {
+        condition: "diabetes",
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
@@ -777,9 +822,12 @@ describe("medlineplus tool execute", () => {
       };
     }) as any;
 
-    const result = await medlinePlusSearchTool.execute({
-      condition: "hypertension",
-    });
+    const result: any = await medlinePlusSearchTool.execute!(
+      {
+        condition: "hypertension",
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
@@ -800,9 +848,12 @@ describe("medlineplus tool execute", () => {
         `<?xml version="1.0"?><nlmSearchResult><count>1</count><list><document url="https://medlineplus.gov/asthma.html"><content name="title">&lt;span class="qt0"&gt;Asthma&lt;/span&gt;</content><content name="FullSummary">What is &lt;span class="qt0"&gt;asthma&lt;/span&gt;?&lt;p&gt;It is a lung disease.&lt;/p&gt;</content></document></list></nlmSearchResult>`,
     }) as any;
 
-    const result = await medlinePlusSearchTool.execute({
-      condition: "asthma",
-    });
+    const result: any = await medlinePlusSearchTool.execute!(
+      {
+        condition: "asthma",
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results[0].title).toBe("Asthma");
@@ -823,9 +874,12 @@ describe("medlineplus tool execute", () => {
         `<?xml version="1.0"?><nlmSearchResult><term>xyz-unknown</term><count>0</count></nlmSearchResult>`,
     }) as any;
 
-    const result = await medlinePlusSearchTool.execute({
-      condition: "xyz-unknown",
-    });
+    const result: any = await medlinePlusSearchTool.execute!(
+      {
+        condition: "xyz-unknown",
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -846,9 +900,12 @@ describe("medlineplus tool execute", () => {
       text: async () => "<html><body>Upstream error</body></html>",
     }) as any;
 
-    const result = await medlinePlusSearchTool.execute({
-      condition: "malformed-response",
-    });
+    const result: any = await medlinePlusSearchTool.execute!(
+      {
+        condition: "malformed-response",
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected error result");
     expect(result.error).toBe(
@@ -869,9 +926,12 @@ describe("medlineplus tool execute", () => {
         `<?xml version="1.0"?><nlmSearchResult><term>schema-drift</term><count>1</count></nlmSearchResult>`,
     }) as any;
 
-    const result = await medlinePlusSearchTool.execute({
-      condition: "schema-drift",
-    });
+    const result: any = await medlinePlusSearchTool.execute!(
+      {
+        condition: "schema-drift",
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected error result");
     expect(result.error).toBe(
@@ -889,9 +949,12 @@ describe("medlineplus tool execute", () => {
     (abortError as any).name = "AbortError";
     globalThis.fetch = vi.fn().mockRejectedValue(abortError) as any;
 
-    const result = await medlinePlusSearchTool.execute({
-      condition: "diabetes",
-    });
+    const result: any = await medlinePlusSearchTool.execute!(
+      {
+        condition: "diabetes",
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected error result");
     expect(result.retriable).toBe(true);
@@ -909,9 +972,12 @@ describe("medlineplus tool execute", () => {
         `<?xml version="1.0"?><nlmSearchResult><count>1</count><list><document url="https://medlineplus.gov/x.html"><content name="title">Topic</content><content name="snippet">Brief snippet text</content></document></list></nlmSearchResult>`,
     }) as any;
 
-    const result = await medlinePlusSearchTool.execute({
-      condition: "topic",
-    });
+    const result: any = await medlinePlusSearchTool.execute!(
+      {
+        condition: "topic",
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results[0].summary).toBe("Brief snippet text");
@@ -948,11 +1014,14 @@ describe("clinical-trials tool execute", () => {
       }),
     }) as any;
 
-    const result = await clinicalTrialsSearchTool.execute({
-      query: "diabetes",
-      status: "RECRUITING",
-      pageSize: 5,
-    });
+    const result: any = await clinicalTrialsSearchTool.execute!(
+      {
+        query: "diabetes",
+        status: "RECRUITING",
+        pageSize: 5,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
@@ -971,11 +1040,14 @@ describe("clinical-trials tool execute", () => {
       json: async () => ({ studies: [], totalCount: 0 }),
     }) as any;
 
-    const result = await clinicalTrialsSearchTool.execute({
-      query: "xyz",
-      status: "ALL",
-      pageSize: 5,
-    });
+    const result: any = await clinicalTrialsSearchTool.execute!(
+      {
+        query: "xyz",
+        status: "ALL",
+        pageSize: 5,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toEqual([]);
@@ -1009,10 +1081,13 @@ describe("open-fda tool execute", () => {
       }),
     }) as any;
 
-    const result = await adverseEventsTool.execute({
-      drugName: "aspirin",
-      limit: 3,
-    });
+    const result: any = await adverseEventsTool.execute!(
+      {
+        drugName: "aspirin",
+        limit: 3,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
@@ -1030,10 +1105,13 @@ describe("open-fda tool execute", () => {
       statusText: "Not Found",
     }) as any;
 
-    const result = await adverseEventsTool.execute({
-      drugName: "unknown-drug",
-      limit: 3,
-    });
+    const result: any = await adverseEventsTool.execute!(
+      {
+        drugName: "unknown-drug",
+        limit: 3,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -1063,10 +1141,13 @@ describe("open-fda tool execute", () => {
       }),
     }) as any;
 
-    const result = await drugLabelingTool.execute({
-      drugName: "atorvastatin",
-      limit: 1,
-    });
+    const result: any = await drugLabelingTool.execute!(
+      {
+        drugName: "atorvastatin",
+        limit: 1,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
@@ -1094,10 +1175,13 @@ describe("open-fda tool execute", () => {
       }),
     }) as any;
 
-    const result = await drugRecallTool.execute({
-      drugName: "drug-a",
-      limit: 5,
-    });
+    const result: any = await drugRecallTool.execute!(
+      {
+        drugName: "drug-a",
+        limit: 5,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
@@ -1135,10 +1219,13 @@ describe("open-fda tool execute", () => {
       }),
     }) as any;
 
-    const result = await substanceToxicologyTool.execute({
-      substanceName: "ethylene glycol",
-      limit: 3,
-    });
+    const result: any = await substanceToxicologyTool.execute!(
+      {
+        substanceName: "ethylene glycol",
+        limit: 3,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
@@ -1168,10 +1255,13 @@ describe("open-fda tool execute", () => {
       }),
     }) as any;
 
-    const result = await substanceToxicologyTool.execute({
-      substanceName: "polyethylene",
-      limit: 1,
-    });
+    const result: any = await substanceToxicologyTool.execute!(
+      {
+        substanceName: "polyethylene",
+        limit: 1,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results[0].substanceName).toBe("Polyethylene glycol");

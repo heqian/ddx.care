@@ -29,10 +29,13 @@ describe("hpoTermSearchTool", () => {
       ],
     }) as any;
 
-    const result = await hpoTermSearchTool.execute({
-      query: "macrocephaly",
-      maxResults: 10,
-    });
+    const result: any = await hpoTermSearchTool.execute!(
+      {
+        query: "macrocephaly",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(3);
     expect(result.data.results[0].hpoId).toBe("HP:0000256");
@@ -51,10 +54,13 @@ describe("hpoTermSearchTool", () => {
       json: async () => [0, [], null, []],
     }) as any;
 
-    const result = await hpoTermSearchTool.execute({
-      query: "zzz-nonexistent",
-      maxResults: 10,
-    });
+    const result: any = await hpoTermSearchTool.execute!(
+      {
+        query: "zzz-nonexistent",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -73,10 +79,13 @@ describe("hpoTermSearchTool", () => {
       statusText: "Not Found",
     }) as any;
 
-    const result = await hpoTermSearchTool.execute({
-      query: "test",
-      maxResults: 10,
-    });
+    const result: any = await hpoTermSearchTool.execute!(
+      {
+        query: "test",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -89,12 +98,17 @@ describe("hpoTermSearchTool", () => {
       "../src/backend/tools/nlm-clinical-tables"
     );
 
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(new Error("Network error")) as any;
 
-    const result = await hpoTermSearchTool.execute({
-      query: "seizure",
-      maxResults: 10,
-    });
+    const result: any = await hpoTermSearchTool.execute!(
+      {
+        query: "seizure",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("Expected error result");
     expect(result.error).toContain("Network error");
@@ -112,10 +126,13 @@ describe("hpoTermSearchTool", () => {
       json: async () => null,
     }) as any;
 
-    const result = await hpoTermSearchTool.execute({
-      query: "test",
-      maxResults: 10,
-    });
+    const result: any = await hpoTermSearchTool.execute!(
+      {
+        query: "test",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -144,10 +161,13 @@ describe("loincTestLookupTool", () => {
       ],
     }) as any;
 
-    const result = await loincTestLookupTool.execute({
-      query: "hemoglobin",
-      maxResults: 10,
-    });
+    const result: any = await loincTestLookupTool.execute!(
+      {
+        query: "hemoglobin",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(2);
     expect(result.data.results[0].loincCode).toBe("43113-0");
@@ -167,10 +187,13 @@ describe("loincTestLookupTool", () => {
       json: async () => [1, ["723-7"], null, [["723-7", "Hemoglobin", "", ""]]],
     }) as any;
 
-    const result = await loincTestLookupTool.execute({
-      query: "hemoglobin",
-      maxResults: 10,
-    });
+    const result: any = await loincTestLookupTool.execute!(
+      {
+        query: "hemoglobin",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
     expect(result.data.results[0].loincCode).toBe("723-7");
@@ -190,10 +213,13 @@ describe("loincTestLookupTool", () => {
       json: async () => [0, [], null, []],
     }) as any;
 
-    const result = await loincTestLookupTool.execute({
-      query: "zzz-nonexistent",
-      maxResults: 10,
-    });
+    const result: any = await loincTestLookupTool.execute!(
+      {
+        query: "zzz-nonexistent",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -214,10 +240,13 @@ describe("loincTestLookupTool", () => {
       statusText: "Not Found",
     }) as any;
 
-    const result = await loincTestLookupTool.execute({
-      query: "test",
-      maxResults: 10,
-    });
+    const result: any = await loincTestLookupTool.execute!(
+      {
+        query: "test",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -232,12 +261,17 @@ describe("loincTestLookupTool", () => {
       "../src/backend/tools/nlm-clinical-tables"
     );
 
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(new Error("Network error")) as any;
 
-    const result = await loincTestLookupTool.execute({
-      query: "troponin",
-      maxResults: 10,
-    });
+    const result: any = await loincTestLookupTool.execute!(
+      {
+        query: "troponin",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(false);
     expect(result.error).toContain("Network error");
     expect(result.retriable).toBe(true);
@@ -259,10 +293,13 @@ describe("loincTestLookupTool", () => {
       ],
     }) as any;
 
-    const result = await loincTestLookupTool.execute({
-      query: "glucose",
-      maxResults: 10,
-    });
+    const result: any = await loincTestLookupTool.execute!(
+      {
+        query: "glucose",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results[0].system).toBe("Serum");
     expect(result.data.results[0].method).toBeUndefined();

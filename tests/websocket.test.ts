@@ -1,6 +1,7 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { progressStore } from "../src/backend/progress-store";
-import { websocketHandlers, type WsData } from "../src/backend/api/websocket";
+import { test, expect, describe } from "bun:test";
+import { createWebSocketHandlers } from "../src/backend/composition";
+import type { WsData } from "../src/backend/api/websocket";
+import { JobStore } from "../src/backend/progress-store";
 import {
   createGenerationFailedReportOutcome,
   type AvailableReportOutcome,
@@ -22,6 +23,23 @@ const availableOutcome: AvailableReportOutcome = {
 const generationFailedOutcome = createGenerationFailedReportOutcome(
   "REPORT_VALIDATION_FAILED",
 );
+
+/**
+ * Each test builds a fresh in-memory JobStore and constructs production
+ * WebSocket handlers via the composition-seam factory. No singleton imports,
+ * no `DELETE FROM jobs` cleanup — the store is garbage-collected per test.
+ */
+function makeHandlers() {
+  const jobStore = new JobStore(":memory:");
+  const timers = {
+    setInterval,
+    setTimeout,
+    clearInterval,
+    clearTimeout,
+  };
+  const handlers = createWebSocketHandlers({ jobStore, timers });
+  return { handlers, jobStore };
+}
 
 // Minimal mock of Bun's ServerWebSocket for unit testing
 class MockWebSocket {
@@ -55,26 +73,15 @@ class MockWebSocket {
   }
 }
 
-beforeEach(() => {
-  // Clear the singleton database before each test
-  const db = (progressStore as any).db;
-  db.exec("DELETE FROM jobs");
-});
-
-afterEach(() => {
-  // Clean up any remaining jobs
-  const db = (progressStore as any).db;
-  db.exec("DELETE FROM jobs");
-});
-
 describe("WebSocket handler — open", () => {
   test("replays history on connect", () => {
-    progressStore.createJob("job-1");
-    progressStore.emitMessage("job-1", "Step 1");
-    progressStore.emitMessage("job-1", "Step 2");
+    const { handlers, jobStore } = makeHandlers();
+    jobStore.createJob("job-1");
+    jobStore.emitMessage("job-1", "Step 1");
+    jobStore.emitMessage("job-1", "Step 2");
 
     const ws = new MockWebSocket({ jobId: "job-1" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
     expect(ws.messages).toHaveLength(2);
     const first = JSON.parse(ws.messages[0]);
@@ -85,8 +92,9 @@ describe("WebSocket handler — open", () => {
   });
 
   test("closes immediately if job not found", () => {
+    const { handlers } = makeHandlers();
     const ws = new MockWebSocket({ jobId: "missing" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
     expect(ws.closed).toBe(true);
     expect(ws.messages).toHaveLength(1);
@@ -99,12 +107,13 @@ describe("WebSocket handler — open", () => {
     ["available", availableOutcome],
     ["generation_failed", generationFailedOutcome],
   ] as const)("sends the exact %s payload for a completed job", (_, outcome) => {
+    const { handlers, jobStore } = makeHandlers();
     const jobId = `job-completed-${outcome.status}`;
-    progressStore.createJob(jobId);
-    progressStore.complete(jobId, outcome);
+    jobStore.createJob(jobId);
+    jobStore.complete(jobId, outcome);
 
     const ws = new MockWebSocket({ jobId });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
     expect(ws.closed).toBe(true);
     expect(ws.messages).toHaveLength(1);
@@ -116,11 +125,12 @@ describe("WebSocket handler — open", () => {
   });
 
   test("closes after sending error for failed job", () => {
-    progressStore.createJob("job-3");
-    progressStore.fail("job-3", "Something broke");
+    const { handlers, jobStore } = makeHandlers();
+    jobStore.createJob("job-3");
+    jobStore.fail("job-3", "Something broke");
 
     const ws = new MockWebSocket({ jobId: "job-3" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
     expect(ws.closed).toBe(true);
     expect(ws.messages).toHaveLength(1);
@@ -130,15 +140,16 @@ describe("WebSocket handler — open", () => {
   });
 
   test("subscribes to live events for pending job", () => {
-    progressStore.createJob("job-4");
+    const { handlers, jobStore } = makeHandlers();
+    jobStore.createJob("job-4");
 
     const ws = new MockWebSocket({ jobId: "job-4" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
     expect(ws.closed).toBe(false);
     expect(ws.messages).toHaveLength(0);
 
-    progressStore.emitMessage("job-4", "Live update");
+    jobStore.emitMessage("job-4", "Live update");
     expect(ws.messages).toHaveLength(1);
     const msg = JSON.parse(ws.messages[0]);
     expect(msg.type).toBe("progress");
@@ -146,12 +157,13 @@ describe("WebSocket handler — open", () => {
   });
 
   test("closes socket when completion event arrives", () => {
-    progressStore.createJob("job-5");
+    const { handlers, jobStore } = makeHandlers();
+    jobStore.createJob("job-5");
 
     const ws = new MockWebSocket({ jobId: "job-5" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
-    progressStore.complete("job-5", availableOutcome);
+    jobStore.complete("job-5", availableOutcome);
     expect(ws.closed).toBe(true);
     expect(JSON.parse(ws.messages[0])).toEqual({
       type: "completed",
@@ -161,78 +173,104 @@ describe("WebSocket handler — open", () => {
   });
 
   test("closes socket when failure event arrives", () => {
-    progressStore.createJob("job-6");
+    const { handlers, jobStore } = makeHandlers();
+    jobStore.createJob("job-6");
 
     const ws = new MockWebSocket({ jobId: "job-6" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
-    progressStore.fail("job-6", "timeout");
+    jobStore.fail("job-6", "timeout");
     expect(ws.closed).toBe(true);
   });
 });
 
 describe("WebSocket handler — close", () => {
   test("unsubscribes and clears timers on close", () => {
-    progressStore.createJob("job-7");
+    const { handlers, jobStore } = makeHandlers();
+    jobStore.createJob("job-7");
 
     const ws = new MockWebSocket({ jobId: "job-7" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
     // Emit while open
-    progressStore.emitMessage("job-7", "Before close");
+    jobStore.emitMessage("job-7", "Before close");
     expect(ws.messages).toHaveLength(1);
 
-    websocketHandlers.close(ws as any);
+    handlers.close(ws as any);
 
     // After close, events should not be received
-    progressStore.emitMessage("job-7", "After close");
+    jobStore.emitMessage("job-7", "After close");
     expect(ws.messages).toHaveLength(1);
   });
 });
 
 describe("WebSocket handler — heartbeat", () => {
   test("starts ping timer on open for pending jobs", () => {
-    progressStore.createJob("job-8");
+    const { handlers, jobStore } = makeHandlers();
+    jobStore.createJob("job-8");
 
     const ws = new MockWebSocket({ jobId: "job-8" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
     expect(ws.data.pingTimer).toBeDefined();
   });
 
   test("does not start ping timer when job is already completed", () => {
-    progressStore.createJob("job-9");
-    progressStore.complete("job-9", generationFailedOutcome);
+    const { handlers, jobStore } = makeHandlers();
+    jobStore.createJob("job-9");
+    jobStore.complete("job-9", generationFailedOutcome);
 
     const ws = new MockWebSocket({ jobId: "job-9" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
     expect(ws.data.pingTimer).toBeUndefined();
   });
 
   test("clears ping and pong timers on close", () => {
-    progressStore.createJob("job-10");
+    const { handlers, jobStore } = makeHandlers();
+    jobStore.createJob("job-10");
 
     const ws = new MockWebSocket({ jobId: "job-10" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
     expect(ws.data.pingTimer).toBeDefined();
-    websocketHandlers.close(ws as any);
+    handlers.close(ws as any);
     expect(ws.data.pingTimer).toBeUndefined();
     expect(ws.data.pongTimer).toBeUndefined();
   });
 
   test("pong clears the pong timeout", () => {
-    progressStore.createJob("job-11");
+    const { handlers, jobStore } = makeHandlers();
+    jobStore.createJob("job-11");
 
     const ws = new MockWebSocket({ jobId: "job-11" });
-    websocketHandlers.open(ws as any);
+    handlers.open(ws as any);
 
     // Manually set a pong timer to simulate an in-flight ping
     ws.data.pongTimer = setTimeout(() => {}, 10000);
     expect(ws.data.pongTimer).toBeDefined();
 
-    websocketHandlers.pong(ws as any);
+    handlers.pong(ws as any);
     expect(ws.data.pongTimer).toBeUndefined();
+  });
+});
+
+describe("WebSocket handler — injected store isolation", () => {
+  test("two handler instances use independent stores with no singleton mutation", () => {
+    const a = makeHandlers();
+    const b = makeHandlers();
+    a.jobStore.createJob("iso-a");
+    b.jobStore.createJob("iso-b");
+
+    const wsA = new MockWebSocket({ jobId: "iso-a" });
+    const wsB = new MockWebSocket({ jobId: "iso-b" });
+    a.handlers.open(wsA as any);
+    b.handlers.open(wsB as any);
+
+    // Cross-job access must fail — the stores are independent.
+    const wsAcross = new MockWebSocket({ jobId: "iso-a" });
+    b.handlers.open(wsAcross as any);
+    expect(wsAcross.closed).toBe(true);
+    expect(JSON.parse(wsAcross.messages[0]).error).toBe("Job not found");
   });
 });

@@ -99,10 +99,13 @@ describe("rareDiseaseSearchTool", () => {
     );
     await initializeOrphadataCache();
 
-    const result = await rareDiseaseSearchTool.execute({
-      query: "Alexander",
-      maxResults: 10,
-    });
+    const result: any = await rareDiseaseSearchTool.execute!(
+      {
+        query: "Alexander",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
     expect(result.data.results[0].orphacode).toBe(58);
@@ -119,10 +122,13 @@ describe("rareDiseaseSearchTool", () => {
     );
     await initializeOrphadataCache();
 
-    const result = await rareDiseaseSearchTool.execute({
-      query: "a",
-      maxResults: 10,
-    });
+    const result: any = await rareDiseaseSearchTool.execute!(
+      {
+        query: "a",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results.length).toBeGreaterThanOrEqual(2);
   });
@@ -137,10 +143,13 @@ describe("rareDiseaseSearchTool", () => {
     );
     await initializeOrphadataCache();
 
-    const result = await rareDiseaseSearchTool.execute({
-      query: "zzz-nonexistent",
-      maxResults: 10,
-    });
+    const result: any = await rareDiseaseSearchTool.execute!(
+      {
+        query: "zzz-nonexistent",
+        maxResults: 10,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -160,10 +169,13 @@ describe("rareDiseaseSearchTool", () => {
     );
     await initializeOrphadataCache();
 
-    const result = await rareDiseaseSearchTool.execute({
-      query: "a",
-      maxResults: 1,
-    });
+    const result: any = await rareDiseaseSearchTool.execute!(
+      {
+        query: "a",
+        maxResults: 1,
+      },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results.length).toBeLessThanOrEqual(1);
   });
@@ -180,7 +192,10 @@ describe("rareDiseaseGenesTool", () => {
     );
     await initializeOrphadataCache();
 
-    const result = await rareDiseaseGenesTool.execute({ orphacode: 58 });
+    const result: any = await rareDiseaseGenesTool.execute!(
+      { orphacode: 58 },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(1);
     expect(result.data.results[0].geneSymbol).toBe("GFAP");
@@ -203,7 +218,10 @@ describe("rareDiseaseGenesTool", () => {
     );
     await initializeOrphadataCache();
 
-    const result = await rareDiseaseGenesTool.execute({ orphacode: 99999 });
+    const result: any = await rareDiseaseGenesTool.execute!(
+      { orphacode: 99999 },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -221,9 +239,14 @@ describe("rareDiseaseGenesTool", () => {
     );
     await initializeOrphadataCache();
 
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(new Error("Network error")) as any;
 
-    const result = await rareDiseaseGenesTool.execute({ orphacode: 12345 });
+    const result: any = await rareDiseaseGenesTool.execute!(
+      { orphacode: 12345 },
+      {} as any,
+    );
     // The cache layer swallows fetch errors and returns [], so the tool
     // surfaces this as a noResults success rather than a failure.
     expect(result.ok).toBe(true);
@@ -245,7 +268,10 @@ describe("rareDiseasePhenotypesTool", () => {
     );
     await initializeOrphadataCache();
 
-    const result = await rareDiseasePhenotypesTool.execute({ orphacode: 58 });
+    const result: any = await rareDiseasePhenotypesTool.execute!(
+      { orphacode: 58 },
+      {} as any,
+    );
     if (!result.ok) throw new Error(`Tool failed: ${result.error}`);
     expect(result.data.results).toHaveLength(2);
     expect(result.data.results[0].hpoId).toBe("HP:0000256");
@@ -263,9 +289,12 @@ describe("rareDiseasePhenotypesTool", () => {
     );
     await initializeOrphadataCache();
 
-    const result = await rareDiseasePhenotypesTool.execute({
-      orphacode: 99999,
-    });
+    const result: any = await rareDiseasePhenotypesTool.execute!(
+      {
+        orphacode: 99999,
+      },
+      {} as any,
+    );
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("Expected success result");
     expect(result.data.results).toEqual([]);
@@ -283,11 +312,16 @@ describe("rareDiseasePhenotypesTool", () => {
     );
     await initializeOrphadataCache();
 
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(new Error("Network error")) as any;
 
-    const result = await rareDiseasePhenotypesTool.execute({
-      orphacode: 12345,
-    });
+    const result: any = await rareDiseasePhenotypesTool.execute!(
+      {
+        orphacode: 12345,
+      },
+      {} as any,
+    );
     // The cache layer swallows fetch errors and returns [], so the tool
     // surfaces this as a noResults success rather than a failure.
     expect(result.ok).toBe(true);

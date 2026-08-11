@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type APIResponse } from "@playwright/test";
 
 /**
  * Accept the consent gate if it is visible, then wait for it to close.
@@ -137,7 +137,7 @@ export async function authenticatedStatusUrl(
 export async function authenticatedStatusRequest(
   page: Page,
   jobId: string,
-): Promise<Response> {
+): Promise<APIResponse> {
   const { token } = await jobCredential(page, jobId);
   return page.request.get(`${baseUrl}/v1/status/${jobId}`, {
     headers: { Authorization: `Bearer ${token}` },

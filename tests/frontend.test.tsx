@@ -83,15 +83,16 @@ function getByText(container: Element, text: string | RegExp): Element {
 function _queryAllByText(container: Element, text: string | RegExp): Element[] {
   const results: Element[] = [];
   const walker = happyDocument.createTreeWalker(
-    container,
+    container as any,
     NodeFilter.SHOW_TEXT,
   );
   while (walker.nextNode()) {
-    const nodeText = walker.currentNode.textContent ?? "";
+    const current = walker.currentNode as any;
+    const nodeText = current.textContent ?? "";
     const matches =
       typeof text === "string" ? nodeText.includes(text) : text.test(nodeText);
-    if (matches && walker.currentNode.parentElement) {
-      results.push(walker.currentNode.parentElement);
+    if (matches && current.parentElement) {
+      results.push(current.parentElement as Element);
     }
   }
   return results;
@@ -382,7 +383,7 @@ describe("FileDropZone", () => {
     dataTransfer.items.add(file);
 
     await act(async () => {
-      input.files = dataTransfer.files;
+      input.files = dataTransfer.files as unknown as FileList;
       fireEvent.change(input);
     });
 
@@ -884,14 +885,16 @@ import { Badge } from "../src/frontend/components/ui/Badge";
 describe("Badge", () => {
   test("renders children text", () => {
     resetBody();
-    const { container } = render(createElement(Badge, {}, "Test Label"));
+    const { container } = render(
+      createElement(Badge, { children: "Test Label" }),
+    );
     expect(getByText(container, "Test Label")).toBeTruthy();
   });
 
   test("applies green color classes", () => {
     resetBody();
     const { container } = render(
-      createElement(Badge, { color: "green" }, "Green"),
+      createElement(Badge, { color: "green", children: "Green" }),
     );
     const badge = getByText(container, "Green");
     expect(badge.className).toContain("bg-green-100");
@@ -899,7 +902,9 @@ describe("Badge", () => {
 
   test("applies red color classes", () => {
     resetBody();
-    const { container } = render(createElement(Badge, { color: "red" }, "Red"));
+    const { container } = render(
+      createElement(Badge, { color: "red", children: "Red" }),
+    );
     const badge = getByText(container, "Red");
     expect(badge.className).toContain("bg-red-100");
   });
@@ -907,7 +912,7 @@ describe("Badge", () => {
   test("applies yellow color classes", () => {
     resetBody();
     const { container } = render(
-      createElement(Badge, { color: "yellow" }, "Yellow"),
+      createElement(Badge, { color: "yellow", children: "Yellow" }),
     );
     const badge = getByText(container, "Yellow");
     expect(badge.className).toContain("bg-yellow-100");
@@ -915,7 +920,7 @@ describe("Badge", () => {
 
   test("defaults to gray color (no color prop)", () => {
     resetBody();
-    const { container } = render(createElement(Badge, {}, "Default"));
+    const { container } = render(createElement(Badge, { children: "Default" }));
     const badge = getByText(container, "Default");
     expect(badge.className).toContain("bg-slate-100");
   });
@@ -923,7 +928,7 @@ describe("Badge", () => {
   test("applies custom className", () => {
     resetBody();
     const { container } = render(
-      createElement(Badge, { className: "extra-class" }, "Custom"),
+      createElement(Badge, { className: "extra-class", children: "Custom" }),
     );
     const badge = getByText(container, "Custom");
     expect(badge.className).toContain("extra-class");
@@ -939,11 +944,12 @@ describe("Modal", () => {
   test("renders when open is true", () => {
     resetBody();
     const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose: () => {}, title: "Test Modal" },
-        createElement("p", {}, "Modal content"),
-      ),
+      createElement(Modal, {
+        open: true,
+        onClose: () => {},
+        title: "Test Modal",
+        children: createElement("p", {}, "Modal content"),
+      }),
     );
     expect(getByText(container, "Test Modal")).toBeTruthy();
     expect(getByText(container, "Modal content")).toBeTruthy();
@@ -952,11 +958,12 @@ describe("Modal", () => {
   test("does not render when open is false", () => {
     resetBody();
     const { container } = render(
-      createElement(
-        Modal,
-        { open: false, onClose: () => {}, title: "Hidden" },
-        createElement("p", {}, "Should not show"),
-      ),
+      createElement(Modal, {
+        open: false,
+        onClose: () => {},
+        title: "Hidden",
+        children: createElement("p", {}, "Should not show"),
+      }),
     );
     expect(queryByText(container, "Hidden")).toBeNull();
     expect(queryByText(container, "Should not show")).toBeNull();
@@ -965,11 +972,12 @@ describe("Modal", () => {
   test("renders title correctly", () => {
     resetBody();
     const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose: () => {}, title: "Important Dialog" },
-        createElement("p", {}, "Content"),
-      ),
+      createElement(Modal, {
+        open: true,
+        onClose: () => {},
+        title: "Important Dialog",
+        children: createElement("p", {}, "Content"),
+      }),
     );
     expect(getByText(container, "Important Dialog")).toBeTruthy();
   });
@@ -978,11 +986,12 @@ describe("Modal", () => {
     resetBody();
     const onClose = vi.fn();
     const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose, title: "Closable" },
-        createElement("p", {}, "Content"),
-      ),
+      createElement(Modal, {
+        open: true,
+        onClose,
+        title: "Closable",
+        children: createElement("p", {}, "Content"),
+      }),
     );
     // Find all buttons and click the one that's not the main title area
     const buttons = Array.from(container.getElementsByTagName("button"));
@@ -998,11 +1007,12 @@ describe("Modal", () => {
     resetBody();
     const onClose = vi.fn();
     const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose, title: "Backdrop Test" },
-        createElement("p", {}, "Content"),
-      ),
+      createElement(Modal, {
+        open: true,
+        onClose,
+        title: "Backdrop Test",
+        children: createElement("p", {}, "Content"),
+      }),
     );
     // The backdrop is the second div inside the fixed container
     // It has an onClick handler
@@ -1665,7 +1675,7 @@ describe("useJobStream", () => {
     globalThis.fetch = vi.fn((_url, init) => {
       requestSignal = init?.signal ?? undefined;
       return new Promise<Response>(() => {});
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     const { unmount } = renderHook(() => useJobStream("job-abort", "token"));
     await hookAct(async () => vi.advanceTimersByTime(10));
@@ -1716,11 +1726,12 @@ describe("Accessibility — Modal", () => {
   test("renders with role=dialog and aria-modal=true", () => {
     resetBody();
     const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose: () => {}, title: "Dialog" },
-        createElement("p", {}, "Content"),
-      ),
+      createElement(Modal, {
+        open: true,
+        onClose: () => {},
+        title: "Dialog",
+        children: createElement("p", {}, "Content"),
+      }),
     );
     const dialog = container.querySelector('[role="dialog"]');
     expect(dialog).toBeTruthy();
@@ -1730,11 +1741,12 @@ describe("Accessibility — Modal", () => {
   test("close button has aria-label", () => {
     resetBody();
     const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose: () => {}, title: "Dialog" },
-        createElement("p", {}, "Content"),
-      ),
+      createElement(Modal, {
+        open: true,
+        onClose: () => {},
+        title: "Dialog",
+        children: createElement("p", {}, "Content"),
+      }),
     );
     const closeBtn = container.querySelector('button[aria-label="Close"]');
     expect(closeBtn).toBeTruthy();
@@ -1743,11 +1755,12 @@ describe("Accessibility — Modal", () => {
   test("backdrop has aria-hidden=true", () => {
     resetBody();
     const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose: () => {}, title: "Dialog" },
-        createElement("p", {}, "Content"),
-      ),
+      createElement(Modal, {
+        open: true,
+        onClose: () => {},
+        title: "Dialog",
+        children: createElement("p", {}, "Content"),
+      }),
     );
     const backdrop = container.querySelector('[aria-hidden="true"]');
     expect(backdrop).toBeTruthy();
@@ -1804,7 +1817,9 @@ describe("Accessibility — FileDropZone", () => {
       }),
     );
     const zone = container.querySelector('[role="button"]');
-    const input = container.querySelector('input[type="file"]');
+    const input = container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement | null;
 
     // spyOn the click method
     const clickSpy = vi.fn();
@@ -1826,7 +1841,9 @@ describe("Accessibility — FileDropZone", () => {
       }),
     );
     const zone = container.querySelector('[role="button"]');
-    const input = container.querySelector('input[type="file"]');
+    const input = container.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement | null;
 
     const clickSpy = vi.fn();
     input!.click = clickSpy;
@@ -2477,6 +2494,7 @@ describe("deriveSpecialistStatuses", () => {
 import {
   deriveToolHistory,
   deriveVisibleProgress,
+  getLogEntryClasses,
 } from "../src/frontend/pages/WaitingRoom";
 
 describe("deriveToolHistory", () => {
@@ -2966,18 +2984,7 @@ describe("derivePhase", () => {
 // Tests the CSS class derivation logic used in the progress log's rendering.
 // This covers the critical visual differentiation between tool-call entries
 // (indented, muted) and regular entries (brighter, full width).
-describe("WaitingRoom — progress log class logic", () => {
-  function getLogEntryClasses(eventType: string | undefined): {
-    indent: string;
-    color: string;
-  } {
-    const isTool = eventType === "tool_call" || eventType === "tool_result";
-    return {
-      indent: isTool ? "ml-4" : "",
-      color: isTool ? "text-cyan-400/70" : "text-cyan-300",
-    };
-  }
-
+describe("WaitingRoom — progress log class logic (production getLogEntryClasses)", () => {
   test("tool_call entries get indentation and muted color", () => {
     const classes = getLogEntryClasses("tool_call");
     expect(classes.indent).toBe("ml-4");
