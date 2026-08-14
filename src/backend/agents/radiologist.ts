@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const radiologist = createSpecialistAgent({
   id: "radiologist",
-  name: "Radiologist",
-  description:
-    "Interprets medical imaging findings including X-rays, CT scans, MRI, ultrasound, and nuclear medicine studies. Use when imaging findings need interpretation or when recommending appropriate imaging workup.",
   instructions: `You are a board-certified Radiologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

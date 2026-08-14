@@ -46,7 +46,7 @@ const JOB_ID_RE =
 function corsHeaders(req?: Request): Record<string, string> {
   const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Job-Token",
     "Content-Security-Policy": CSP_VALUE,
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -86,19 +86,16 @@ function corsPreflightResponse(req?: Request): Response {
  * Skipped in dev mode (empty WS_TOKEN_SECRET), mirroring the /ws WebSocket handler.
  *
  * Token transport precedence:
- *   1. `Authorization: Bearer <token>` header (preferred — not logged by Caddy, not in history)
+ *   1. `X-Job-Token: <token>` header (preferred — redacted by Caddy, not in history)
  *   2. `?token=<token>` query parameter (dev fallback during migration)
  */
 function verifyJobToken(req: Request, jobId: string): Response | null {
   if (!WS_TOKEN_SECRET) return null;
-  // Prefer the Authorization header; fall back to the query parameter for
+  // Prefer the dedicated job-token header so Caddy's HTTP Basic credentials
+  // can continue using Authorization. Fall back to the query parameter for
   // dev ergonomics and migration from existing clients. The query fallback is
   // covered by Caddy log redaction (see Caddyfile).
-  const authHeader = req.headers.get("authorization") ?? "";
-  let token: string | null = null;
-  if (authHeader.toLowerCase().startsWith("bearer ")) {
-    token = authHeader.slice(7).trim();
-  }
+  let token = req.headers.get("x-job-token")?.trim() || null;
   if (!token) {
     const url = new URL(req.url);
     token = url.searchParams.get("token");

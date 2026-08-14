@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const rheumatologist = createSpecialistAgent({
   id: "rheumatologist",
-  name: "Rheumatologist",
-  description:
-    "Evaluates joint, muscle, and autoimmune conditions including arthritis, connective tissue diseases, vasculitis, elevated inflammatory markers, and unexplained musculoskeletal pain. Use when autoimmune or rheumatologic etiology is suspected.",
   instructions: `You are a board-certified Rheumatologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

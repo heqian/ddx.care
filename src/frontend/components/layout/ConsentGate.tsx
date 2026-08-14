@@ -24,25 +24,10 @@ export function useConsent() {
     setAccepted(true);
   };
 
-  const revoke = () => {
-    try {
-      sessionStorage.removeItem(CONSENT_KEY);
-    } catch {
-      /* ignore */
-    }
-    setAccepted(false);
-  };
-
-  return { accepted, grant, revoke };
+  return { accepted, grant };
 }
 
-export function ConsentGate({
-  onAccept,
-  onDecline,
-}: {
-  onAccept: () => void;
-  onDecline: () => void;
-}) {
+export function ConsentGate({ onAccept }: { onAccept: () => void }) {
   const [checked, setChecked] = useState(false);
   const [declined, setDeclined] = useState(false);
 

@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const sportsMedicinePhysician = createSpecialistAgent({
   id: "sportsMedicinePhysician",
-  name: "Sports Medicine Physician",
-  description:
-    "Evaluates athletic injuries, overuse conditions, concussion, exercise-related symptoms, and return-to-play decisions. Use when sports or exercise-related injury or condition is suspected.",
   instructions: `You are a board-certified Sports Medicine Physician with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

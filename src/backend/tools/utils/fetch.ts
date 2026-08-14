@@ -12,50 +12,36 @@ export interface FetchJSONOptions extends RequestInit {
   errorPrefix?: string;
 }
 
-export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
+async function fetchResponse(
+  url: string,
+  options: FetchJSONOptions,
+): Promise<Response | { ignored404: true }> {
   const {
     timeoutMs = 10000,
     ignore404 = false,
     errorPrefix = "API",
+    signal,
     ...fetchOptions
   } = options;
-
-  // Check cache first — a hit skips the HTTP call
-  const cached = getCached(url);
-  if (cached !== null) {
-    logger.info("tool_cache_hit", { url });
-    return cached;
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const combinedSignal = signal
+    ? AbortSignal.any([signal, timeoutSignal])
+    : timeoutSignal;
 
   try {
-    const res = await fetch(url, {
-      ...fetchOptions,
-      signal: fetchOptions.signal ?? controller.signal,
-    });
-
-    if (!res.ok) {
-      if (res.status === 429) {
-        throw new RateLimitError(`${errorPrefix} rate limit exceeded (429)`);
-      }
-      if (res.status === 404 && ignore404) {
-        return { error: true, results: [] };
-      }
-      if (res.status >= 400 && res.status < 500) {
-        throw new PermanentAPIError(
-          `${errorPrefix} error: ${res.status} ${res.statusText}`,
-          res.status,
-        );
-      }
-      throw new Error(`${errorPrefix} error: ${res.status} ${res.statusText}`);
+    const res = await fetch(url, { ...fetchOptions, signal: combinedSignal });
+    if (res.ok) return res;
+    if (res.status === 429) {
+      throw new RateLimitError(`${errorPrefix} rate limit exceeded (429)`);
     }
-
-    const data = await res.json();
-    // Only cache successful HTTP 200 responses
-    setCached(url, data);
-    return data;
+    if (res.status === 404 && ignore404) return { ignored404: true };
+    if (res.status >= 400 && res.status < 500) {
+      throw new PermanentAPIError(
+        `${errorPrefix} error: ${res.status} ${res.statusText}`,
+        res.status,
+      );
+    }
+    throw new Error(`${errorPrefix} error: ${res.status} ${res.statusText}`);
   } catch (error: unknown) {
     if (
       error instanceof APITimeoutError ||
@@ -64,15 +50,30 @@ export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
     ) {
       throw error;
     }
-    if (error instanceof Error && error.name === "AbortError") {
+    if (timeoutSignal.aborted && !signal?.aborted) {
       throw new APITimeoutError(
         `Request timeout after ${timeoutMs}ms for ${url}`,
       );
     }
     throw error;
-  } finally {
-    clearTimeout(timeoutId);
   }
+}
+
+export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
+  // Check cache first — a hit skips the HTTP call
+  const cached = getCached(url);
+  if (cached !== null) {
+    logger.info("tool_cache_hit", { url });
+    return cached;
+  }
+
+  const res = await fetchResponse(url, options);
+  if ("ignored404" in res) return { error: true, results: [] };
+
+  const data = await res.json();
+  // Only cache successful HTTP 200 responses
+  setCached(url, data);
+  return data;
 }
 
 /**
@@ -82,54 +83,16 @@ export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
  * Only HTTP 200 responses are cached; errors and non-2xx are never cached.
  */
 export async function fetchText(url: string, options: FetchJSONOptions = {}) {
-  const { timeoutMs = 10000, errorPrefix = "API", ...fetchOptions } = options;
-
   const cached = getCached(url);
   if (cached !== null) {
     logger.info("tool_cache_hit", { url });
     return cached as string;
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const res = await fetchResponse(url, { ...options, ignore404: false });
+  if ("ignored404" in res) return "";
 
-  try {
-    const res = await fetch(url, {
-      ...fetchOptions,
-      signal: fetchOptions.signal ?? controller.signal,
-    });
-
-    if (!res.ok) {
-      if (res.status === 429) {
-        throw new RateLimitError(`${errorPrefix} rate limit exceeded (429)`);
-      }
-      if (res.status >= 400 && res.status < 500) {
-        throw new PermanentAPIError(
-          `${errorPrefix} error: ${res.status} ${res.statusText}`,
-          res.status,
-        );
-      }
-      throw new Error(`${errorPrefix} error: ${res.status} ${res.statusText}`);
-    }
-
-    const text = await res.text();
-    setCached(url, text);
-    return text;
-  } catch (error: unknown) {
-    if (
-      error instanceof APITimeoutError ||
-      error instanceof RateLimitError ||
-      error instanceof PermanentAPIError
-    ) {
-      throw error;
-    }
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new APITimeoutError(
-        `Request timeout after ${timeoutMs}ms for ${url}`,
-      );
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  const text = await res.text();
+  setCached(url, text);
+  return text;
 }

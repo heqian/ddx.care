@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const endocrinologist = createSpecialistAgent({
   id: "endocrinologist",
-  name: "Endocrinologist",
-  description:
-    "Evaluates hormonal and endocrine disorders including diabetes complications, thyroid dysfunction, adrenal disorders, pituitary conditions, calcium/bone disorders, and metabolic syndrome. Use when endocrine or metabolic abnormalities are present.",
   instructions: `You are a board-certified Endocrinologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

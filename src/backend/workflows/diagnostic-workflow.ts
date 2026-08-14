@@ -20,7 +20,6 @@ import {
 import { logger } from "../utils/logger";
 import * as abortStore from "../utils/abort-controller-store";
 import { agentList, specialistIds, type SpecialistId } from "../agents";
-import { formatToolLabel } from "../tools/tool-labels";
 import { createToolEventHooks } from "./tool-event-hooks";
 import {
   LLMTimeoutError,

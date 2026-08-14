@@ -1,25 +1,13 @@
 interface SpinnerProps {
-  size?: "sm" | "md" | "lg";
   className?: string;
-  label?: string;
 }
 
-const sizeClasses = {
-  sm: "h-4 w-4",
-  md: "h-6 w-6",
-  lg: "h-10 w-10",
-};
-
-export function Spinner({
-  size = "md",
-  className = "",
-  label = "Loading",
-}: SpinnerProps) {
+export function Spinner({ className = "" }: SpinnerProps) {
   return (
     <svg
       role="status"
-      aria-label={label}
-      className={`animate-spin text-primary ${sizeClasses[size]} ${className}`}
+      aria-label="Loading"
+      className={`h-10 w-10 animate-spin text-primary ${className}`}
       fill="none"
       viewBox="0 0 24 24"
     >

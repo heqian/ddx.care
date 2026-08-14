@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const generalSurgeon = createSpecialistAgent({
   id: "generalSurgeon",
-  name: "General Surgeon",
-  description:
-    "Evaluates surgical conditions of the abdomen and soft tissue including acute abdomen, appendicitis, cholecystitis, bowel obstruction, hernias, and soft tissue infections. Use when surgical intervention may be needed or acute abdominal pathology is suspected.",
   instructions: `You are a board-certified General Surgeon with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

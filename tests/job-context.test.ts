@@ -9,7 +9,6 @@ import {
   getJobCredential,
   JOB_CREDENTIALS_STORAGE_KEY,
   JOB_CREDENTIAL_TTL_MS,
-  removeExpiredJobCredentials,
   removeJobCredential,
   storeJobCredential,
 } from "../src/frontend/job-credentials";
@@ -131,14 +130,10 @@ describe("job credential store", () => {
     expect(raw).not.toContain("result");
   });
 
-  test("removes cancelled, reset, expired, and malformed credentials", () => {
+  test("removes cancelled, reset, and malformed credentials", () => {
     storeJobCredential("cancelled", "cancel-token", "ticket", 1_000);
     removeJobCredential("cancelled");
     expect(getJobCredential("cancelled", 1_001).status).toBe("missing");
-
-    storeJobCredential("expired", "expired-token", "ticket", 1_000);
-    removeExpiredJobCredentials(1_000 + JOB_CREDENTIAL_TTL_MS);
-    expect(getJobCredential("expired").status).toBe("missing");
 
     storeJobCredential("reset", "reset-token", "ticket", Date.now());
     clearJobCredentials();

@@ -114,14 +114,3 @@ export function resetToolCache(): void {
     // ignore if DB not initialized
   }
 }
-
-export function healthCheck(): boolean {
-  if (!TOOL_CACHE_ENABLED || !db) return false;
-
-  try {
-    db.query("SELECT 1").run();
-    return true;
-  } catch {
-    return false;
-  }
-}

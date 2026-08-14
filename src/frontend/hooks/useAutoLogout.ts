@@ -11,8 +11,6 @@ export interface UseAutoLogoutOptions {
   timeoutMs?: number;
   /** Extended inactivity timeout for waiting/results screens (default 15 min). */
   waitingTimeoutMs?: number;
-  /** When true, the timer is paused (no warning, no timeout). */
-  paused?: boolean;
   /** Current screen — determines which timeout applies. Defaults to "input". */
   screen?: AutoLogoutScreen;
 }
@@ -24,7 +22,6 @@ export function useAutoLogout(
   const {
     timeoutMs = DEFAULT_TIMEOUT_MS,
     waitingTimeoutMs = DEFAULT_WAITING_TIMEOUT_MS,
-    paused = false,
     screen = "input",
   } = options;
 
@@ -61,13 +58,6 @@ export function useAutoLogout(
   }, []);
 
   useEffect(() => {
-    if (paused) {
-      setShowWarning(false);
-      clearTimeout(timerRef.current);
-      clearTimeout(warningRef.current);
-      return;
-    }
-
     reset();
 
     const events: { name: string; options?: AddEventListenerOptions }[] = [
@@ -88,7 +78,7 @@ export function useAutoLogout(
         window.removeEventListener(name, reset, options);
       }
     };
-  }, [reset, paused, effectiveTimeout]);
+  }, [reset, effectiveTimeout]);
 
   return { showWarning, extendSession: reset };
 }

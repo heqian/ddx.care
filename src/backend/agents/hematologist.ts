@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const hematologist = createSpecialistAgent({
   id: "hematologist",
-  name: "Hematologist",
-  description:
-    "Evaluates blood disorders including anemia, abnormal CBC findings, bleeding/clotting disorders, coagulopathies, thrombocytopenia, leukocyte abnormalities, and hematologic malignancies. Use when hematologic abnormalities are identified.",
   instructions: `You are a board-certified Hematologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

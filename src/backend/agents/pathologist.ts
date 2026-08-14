@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const pathologist = createSpecialistAgent({
   id: "pathologist",
-  name: "Pathologist",
-  description:
-    "Interprets laboratory findings, tissue pathology, cytology, and molecular diagnostics. Use for help interpreting biopsy results, abnormal lab patterns, microbiology findings, and molecular/genetic test results.",
   instructions: `You are a board-certified Pathologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

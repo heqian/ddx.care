@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const pulmonologist = createSpecialistAgent({
   id: "pulmonologist",
-  name: "Pulmonologist",
-  description:
-    "Evaluates lung and respiratory conditions including dyspnea, cough, wheezing, abnormal chest imaging, hypoxia, pulmonary embolism, COPD, asthma, interstitial lung disease, and pleural effusions. Use when respiratory symptoms or abnormal lung findings are present.",
   instructions: `You are a board-certified Pulmonologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

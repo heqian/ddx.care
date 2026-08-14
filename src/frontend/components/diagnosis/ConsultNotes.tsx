@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   ChatBubbleLeftRightIcon,
   UserIcon,
@@ -7,8 +6,6 @@ import {
   ExclamationTriangleIcon,
   ClipboardDocumentListIcon,
   ChartBarIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
   CheckCircleIcon,
   XCircleIcon,
   ArrowRightIcon,
@@ -22,21 +19,12 @@ interface ConsultNotesProps {
 }
 
 function CollapsibleDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
-  const [open, setOpen] = useState(diagnosis.rank === 1);
-
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-700 shadow-sm overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-      >
-        <span className="text-slate-400 dark:text-slate-500 shrink-0">
-          {open ? (
-            <ChevronDownIcon className="h-4 w-4" />
-          ) : (
-            <ChevronRightIcon className="h-4 w-4" />
-          )}
-        </span>
+    <details
+      open={diagnosis.rank === 1}
+      className="group bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-700 shadow-sm overflow-hidden"
+    >
+      <summary className="w-full flex items-center gap-3 p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
           <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-slate-200 dark:bg-slate-600 text-xs font-bold text-slate-700 dark:text-slate-200 shrink-0">
             {diagnosis.rank}
@@ -47,78 +35,76 @@ function CollapsibleDiagnosis({ diagnosis }: { diagnosis: Diagnosis }) {
           <UrgencyBadge urgency={diagnosis.urgency} />
           <ConfidenceBadge confidence={diagnosis.confidence} />
         </div>
-      </button>
+      </summary>
 
-      {open && (
-        <div className="px-4 pb-4 pt-0 border-t dark:border-slate-700 space-y-4 ml-7">
-          <div className="pt-3">
-            <h5 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
-              Rationale
-            </h5>
-            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-              {diagnosis.rationale}
-            </p>
-          </div>
-
-          {diagnosis.supportingEvidence.length > 0 && (
-            <div>
-              <h5 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                Supporting Evidence
-              </h5>
-              <ul className="space-y-1.5">
-                {diagnosis.supportingEvidence.map((ev, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300"
-                  >
-                    <CheckCircleIcon className="h-4 w-4 text-green-500 dark:text-green-400 mt-0.5 shrink-0" />
-                    <span>{ev}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {diagnosis.contradictoryEvidence.length > 0 && (
-            <div>
-              <h5 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                Contradictory Evidence
-              </h5>
-              <ul className="space-y-1.5">
-                {diagnosis.contradictoryEvidence.map((ev, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start gap-2 text-sm text-orange-700 dark:text-orange-300"
-                  >
-                    <XCircleIcon className="h-4 w-4 text-orange-500 dark:text-orange-400 mt-0.5 shrink-0" />
-                    <span>{ev}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {diagnosis.nextSteps.length > 0 && (
-            <div>
-              <h5 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                Next Steps
-              </h5>
-              <ul className="space-y-1.5">
-                {diagnosis.nextSteps.map((step, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300"
-                  >
-                    <ArrowRightIcon className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                    <span>{step}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+      <div className="px-4 pb-4 pt-0 border-t dark:border-slate-700 space-y-4 ml-7">
+        <div className="pt-3">
+          <h5 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+            Rationale
+          </h5>
+          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+            {diagnosis.rationale}
+          </p>
         </div>
-      )}
-    </div>
+
+        {diagnosis.supportingEvidence.length > 0 && (
+          <div>
+            <h5 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+              Supporting Evidence
+            </h5>
+            <ul className="space-y-1.5">
+              {diagnosis.supportingEvidence.map((ev, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300"
+                >
+                  <CheckCircleIcon className="h-4 w-4 text-green-500 dark:text-green-400 mt-0.5 shrink-0" />
+                  <span>{ev}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {diagnosis.contradictoryEvidence.length > 0 && (
+          <div>
+            <h5 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+              Contradictory Evidence
+            </h5>
+            <ul className="space-y-1.5">
+              {diagnosis.contradictoryEvidence.map((ev, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-orange-700 dark:text-orange-300"
+                >
+                  <XCircleIcon className="h-4 w-4 text-orange-500 dark:text-orange-400 mt-0.5 shrink-0" />
+                  <span>{ev}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {diagnosis.nextSteps.length > 0 && (
+          <div>
+            <h5 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+              Next Steps
+            </h5>
+            <ul className="space-y-1.5">
+              {diagnosis.nextSteps.map((step, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300"
+                >
+                  <ArrowRightIcon className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </details>
   );
 }
 

@@ -120,18 +120,8 @@ export async function jobCredential(
   return credential;
 }
 
-export async function authenticatedStatusUrl(
-  page: Page,
-  jobId: string,
-): Promise<string> {
-  // Tokens are no longer placed in the URL (capability-transport-hardening).
-  // Return a bare status URL; callers that need authentication should use
-  // `authenticatedStatusRequest` to send the token via the Authorization header.
-  return `${baseUrl}/v1/status/${jobId}`;
-}
-
 /**
- * Fetch a job status with the Authorization: Bearer header populated from the
+ * Fetch a job status with the X-Job-Token header populated from the
  * in-browser credential store. Replaces the legacy `?token=` query transport.
  */
 export async function authenticatedStatusRequest(
@@ -140,7 +130,7 @@ export async function authenticatedStatusRequest(
 ): Promise<Response> {
   const { token } = await jobCredential(page, jobId);
   return page.request.get(`${baseUrl}/v1/status/${jobId}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { "X-Job-Token": token },
   });
 }
 

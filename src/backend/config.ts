@@ -89,8 +89,6 @@ export const TOOL_CACHE_TTL_MS = parseInt(
   10,
 );
 export const TOOL_CACHE_ENABLED = TOOL_CACHE_TTL_MS > 0;
-export const TOOL_CACHE_DB_PATH =
-  process.env.TOOL_CACHE_DB_PATH || "tool-cache.sqlite";
 export const TOOL_CACHE_CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
 
 export const AUDIT_LOG_PATH = process.env.AUDIT_LOG_PATH ?? "";

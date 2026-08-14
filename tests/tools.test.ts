@@ -94,60 +94,6 @@ describe("Agent Registry", () => {
 });
 
 describe("Tool Assignments", () => {
-  test("getAllTools returns all 17 tools for backward compatibility", async () => {
-    const { getAllTools } = await import("../src/backend/tools/index");
-
-    const tools = getAllTools();
-    const keys = Object.keys(tools);
-    expect(keys.length).toBe(17);
-  });
-
-  test("getAllTools includes all tool categories", async () => {
-    const { getAllTools } = await import("../src/backend/tools/index");
-
-    const tools = getAllTools();
-    expect(tools).toHaveProperty("drug-lookup");
-    expect(tools).toHaveProperty("drug-interaction");
-    expect(tools).toHaveProperty("drug-labeling");
-    expect(tools).toHaveProperty("adverse-events");
-    expect(tools).toHaveProperty("rare-disease-search");
-    expect(tools).toHaveProperty("rare-disease-genes");
-    expect(tools).toHaveProperty("rare-disease-phenotypes");
-    expect(tools).toHaveProperty("hpo-term-search");
-    expect(tools).toHaveProperty("loinc-test-lookup");
-    expect(tools).toHaveProperty("drug-shortages");
-    expect(tools).toHaveProperty("food-adverse-events");
-    expect(tools).toHaveProperty("device-adverse-events");
-  });
-
-  test("no duplicate tool IDs in getAllTools", async () => {
-    const { getAllTools } = await import("../src/backend/tools/index");
-
-    const tools = getAllTools();
-    const keys = Object.keys(tools);
-    const unique = new Set(keys);
-    expect(unique.size).toBe(keys.length);
-  });
-
-  test("all new tools are present in getAllTools", async () => {
-    const { getAllTools } = await import("../src/backend/tools/index");
-    const tools = getAllTools();
-
-    const newTools = [
-      "rare-disease-search",
-      "rare-disease-genes",
-      "rare-disease-phenotypes",
-      "hpo-term-search",
-      "loinc-test-lookup",
-      "drug-shortages",
-      "food-adverse-events",
-      "device-adverse-events",
-    ];
-    for (const id of newTools) {
-      expect(tools).toHaveProperty(id);
-    }
-  });
-
   test("getToolsForSpecialist returns universal tools for any specialist", async () => {
     const { getToolsForSpecialist } = await import(
       "../src/backend/tools/index"
@@ -323,47 +269,6 @@ describe("Specialist identity validation", () => {
   });
 });
 
-describe("Config", () => {
-  test("model constants are strings", async () => {
-    const { SPECIALIST_MODEL, ORCHESTRATOR_MODEL } = await import(
-      "../src/backend/config"
-    );
-
-    expect(typeof SPECIALIST_MODEL).toBe("string");
-    expect(SPECIALIST_MODEL.length).toBeGreaterThan(0);
-    expect(typeof ORCHESTRATOR_MODEL).toBe("string");
-    expect(ORCHESTRATOR_MODEL.length).toBeGreaterThan(0);
-  });
-
-  test("timeout constant is reasonable", async () => {
-    const { DIAGNOSIS_TIMEOUT_MS } = await import("../src/backend/config");
-
-    expect(DIAGNOSIS_TIMEOUT_MS).toBeGreaterThan(0);
-    // Default is 900000 (15 min); value is operator-configurable, so we only
-    // assert the default here and leave the upper bound to validateConfig.
-    expect(DIAGNOSIS_TIMEOUT_MS).toBe(900_000);
-  });
-
-  test("CMO context max chars is positive", async () => {
-    const { CMO_CONTEXT_MAX_CHARS } = await import("../src/backend/config");
-
-    expect(CMO_CONTEXT_MAX_CHARS).toBeGreaterThan(0);
-  });
-
-  test("MAX_SPECIALIST_CONCURRENCY is positive", async () => {
-    const { MAX_SPECIALIST_CONCURRENCY } = await import(
-      "../src/backend/config"
-    );
-
-    expect(MAX_SPECIALIST_CONCURRENCY).toBeGreaterThan(0);
-  });
-
-  test("ORPHADATA_ENABLED defaults to true", async () => {
-    const { ORPHADATA_ENABLED } = await import("../src/backend/config");
-    expect(typeof ORPHADATA_ENABLED).toBe("boolean");
-  });
-});
-
 describe("Agent factory", () => {
   test("createSpecialistAgent succeeds for canonical camelCase ID", async () => {
     const { createSpecialistAgent } = await import(
@@ -372,8 +277,6 @@ describe("Agent factory", () => {
 
     const agent = createSpecialistAgent({
       id: "generalSurgeon",
-      name: "General Surgeon",
-      description: "Test",
       instructions: "Test",
     });
 
@@ -388,8 +291,6 @@ describe("Agent factory", () => {
 
     const agent = createSpecialistAgent({
       id: "cardiologist",
-      name: "Cardiologist",
-      description: "Test",
       instructions: "Test",
     });
 

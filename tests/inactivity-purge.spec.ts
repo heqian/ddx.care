@@ -114,9 +114,7 @@ test.describe("Inactivity session purge", () => {
 
     // Keep both stream transports pending so clock acceleration cannot advance
     // the completed mock job to Results and reset the waiting-screen timer.
-    await page.route("**/ws**", (route) =>
-      route.fulfill({ status: 200, body: "" }),
-    );
+    await page.routeWebSocket("**/ws**", () => {});
     await page.route("**/v1/status/**", (route) => {
       const jobId = new URL(route.request().url()).pathname.split("/").at(-1);
       return route.fulfill({

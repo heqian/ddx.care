@@ -1,7 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { fetchJSON as baseFetchJSON } from "./utils/fetch";
-import type { ToolResult } from "./utils/types";
 import {
   APITimeoutError,
   RateLimitError,
@@ -204,26 +203,7 @@ export const adverseEventsTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    drugName,
-    limit,
-  }): Promise<
-    ToolResult<{
-      results: Array<{
-        reportId?: string;
-        serious?: boolean;
-        seriousnessDescription?: string;
-        reactions?: string[];
-        outcomes?: string[];
-        patientAge?: string;
-        patientSex?: string;
-        receiveDate?: string;
-      }>;
-      meta?: { totalResults?: number; disclaimer?: string };
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ drugName, limit }) => {
     try {
       const url = `${FDA_BASE}/drug/event.json?search=patient.drug.medicinalproduct:"${encodeURIComponent(drugName)}"&limit=${limit}`;
       const result = await fetchJSON(url);
@@ -340,29 +320,7 @@ export const drugLabelingTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    drugName,
-    limit,
-  }): Promise<
-    ToolResult<{
-      results: Array<{
-        id?: string;
-        brandName?: string;
-        genericName?: string;
-        indications?: string;
-        contraindications?: string;
-        warnings?: string;
-        adverseReactions?: string;
-        dosage?: string;
-        mechanismOfAction?: string;
-        pregnancyCategory?: string;
-        drugInteractions?: string;
-        boxedWarning?: string;
-      }>;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ drugName, limit }) => {
     try {
       // Search by generic_name (token match). OpenFDA's relevance ranking
       // sometimes returns multi-ingredient combo drugs (e.g.
@@ -478,24 +436,7 @@ export const drugRecallTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    drugName,
-    limit,
-  }): Promise<
-    ToolResult<{
-      results: Array<{
-        recallNumber?: string;
-        productDescription?: string;
-        reason?: string;
-        classification?: string;
-        status?: string;
-        initiatingFirm?: string;
-        recallDate?: string;
-      }>;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ drugName, limit }) => {
     try {
       const url = `${FDA_BASE}/drug/enforcement.json?search=product_description:${encodeURIComponent(drugName)}&limit=${limit}`;
       const result = await fetchJSON(url);
@@ -571,22 +512,7 @@ export const substanceToxicologyTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    substanceName,
-    limit,
-  }): Promise<
-    ToolResult<{
-      results: Array<{
-        unii?: string;
-        substanceName?: string;
-        substanceClass?: string;
-        code?: string;
-        codeSystem?: string;
-      }>;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ substanceName, limit }) => {
     try {
       const url = `${FDA_BASE}/other/substance.json?search=substance_name:${encodeURIComponent(substanceName)}&limit=${limit}`;
       const result = await fetchJSON(url);
@@ -676,26 +602,7 @@ export const drugShortagesTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    drugName,
-    limit,
-  }): Promise<
-    ToolResult<{
-      results: Array<{
-        genericName?: string;
-        brandName?: string;
-        availability?: string;
-        reason?: string;
-        status?: string;
-        company?: string;
-        presentation?: string;
-        therapeuticCategory?: string[];
-        updateDate?: string;
-      }>;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ drugName, limit }) => {
     try {
       const url = `${FDA_BASE}/drug/shortages.json?search=generic_name:${encodeURIComponent(drugName)}+openfda.brand_name:${encodeURIComponent(drugName)}&limit=${limit}`;
       const result = await fetchJSON(url);
@@ -791,24 +698,7 @@ export const foodAdverseEventsTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    productName,
-    limit,
-  }): Promise<
-    ToolResult<{
-      results: Array<{
-        reportNumber?: string;
-        reactions?: string[];
-        outcomes?: string[];
-        products?: Array<{ name?: string; industry?: string }>;
-        consumerAge?: string;
-        consumerGender?: string;
-        dateStarted?: string;
-      }>;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ productName, limit }) => {
     try {
       const url = `${FDA_BASE}/food/event.json?search=products.name_brand:${encodeURIComponent(productName)}&limit=${limit}`;
       const result = await fetchJSON(url);
@@ -895,25 +785,7 @@ export const deviceAdverseEventsTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    deviceName,
-    limit,
-  }): Promise<
-    ToolResult<{
-      results: Array<{
-        reportNumber?: string;
-        eventType?: string;
-        deviceName?: string;
-        medicalSpecialty?: string;
-        patientProblems?: string[];
-        eventLocation?: string;
-        dateOfEvent?: string;
-        dateReceived?: string;
-      }>;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ deviceName, limit }) => {
     try {
       // OpenFDA device adverse event records do not populate the `openfda`
       // object for device names (it is typically undefined or empty). The

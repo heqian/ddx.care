@@ -26,11 +26,6 @@ export interface DiagnoseResponse {
   wsTicket: string;
 }
 
-export interface SpecialistConsulted {
-  specialist: string;
-  keyFindings: string;
-}
-
 export type Diagnosis = DiagnosisReport["diagnoses"][number];
 
 export type ToolStatus = "running" | "success" | "partial" | "error";

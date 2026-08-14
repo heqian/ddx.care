@@ -138,12 +138,12 @@ test.describe("Error states & edge paths", () => {
 
     // The job is marked failed with the cancellation message. Poll because
     // the DELETE from the browser may still be in flight when we check.
-    // Use the Authorization header (capability-transport-hardening).
+    // Use the dedicated capability header.
     await expect
       .poll(
         async () => {
           const res = await page.request.get(statusUrl, {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { "X-Job-Token": token },
           });
           return (await res.json()).status;
         },
@@ -152,7 +152,7 @@ test.describe("Error states & edge paths", () => {
       .toBe("failed");
 
     const finalRes = await page.request.get(statusUrl, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { "X-Job-Token": token },
     });
     const finalData = await finalRes.json();
     expect(finalData.error).toContain("Cancelled");
@@ -291,12 +291,12 @@ test.describe("Error states & edge paths", () => {
     });
 
     // Wait for the cancel to land on the server before deep-linking.
-    // Use the Authorization header (capability-transport-hardening).
+    // Use the dedicated capability header.
     await expect
       .poll(
         async () => {
           const res = await page.request.get(statusUrl, {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { "X-Job-Token": token },
           });
           return (await res.json()).status;
         },

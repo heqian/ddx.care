@@ -124,11 +124,11 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
     });
   });
 
-  describe("GET /v1/status/:jobId — Authorization header", () => {
-    test("valid token via Authorization header returns 200", async () => {
+  describe("GET /v1/status/:jobId — X-Job-Token header", () => {
+    test("valid token via X-Job-Token header returns 200", async () => {
       const { jobId, token } = await createJob("header valid token test");
       const res = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { "X-Job-Token": token },
       });
       expect(res.status).toBe(200);
     });
@@ -139,16 +139,16 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
       expect(res.status).toBe(200);
     });
 
-    test("Authorization header takes precedence over query param", async () => {
+    test("X-Job-Token header takes precedence over query param", async () => {
       const { jobId, token } = await createJob("precedence test");
       // Valid header + invalid query — header must win
       const res = await fetch(`${BASE}/v1/status/${jobId}?token=invalid`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { "X-Job-Token": token },
       });
       expect(res.status).toBe(200);
     });
 
-    test("missing Authorization header and missing query param returns 403", async () => {
+    test("missing X-Job-Token header and query param returns 403", async () => {
       const { jobId } = await createJob("missing header test");
       const res = await fetch(`${BASE}/v1/status/${jobId}`);
       expect(res.status).toBe(403);
@@ -156,16 +156,16 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
       expect(body.error).toContain("token");
     });
 
-    test("invalid Authorization header returns 403", async () => {
+    test("invalid X-Job-Token header returns 403", async () => {
       const { jobId } = await createJob("invalid header test");
       const res = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: "Bearer invalid-hex" },
+        headers: { "X-Job-Token": "invalid-hex" },
       });
       expect(res.status).toBe(403);
     });
 
-    test("malformed Authorization header (not Bearer) returns 403", async () => {
-      const { jobId, token } = await createJob("malformed auth header test");
+    test("Authorization credentials are not treated as a job token", async () => {
+      const { jobId, token } = await createJob("unrelated auth header test");
       const res = await fetch(`${BASE}/v1/status/${jobId}`, {
         headers: { Authorization: `Basic ${token}` },
       });
@@ -174,7 +174,7 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
 
     test("token verified before existence — unknown job with bad header returns 403 not 404", async () => {
       const res = await fetch(`${BASE}/v1/status/${UNKNOWN_UUID}`, {
-        headers: { Authorization: "Bearer bad" },
+        headers: { "X-Job-Token": "bad" },
       });
       expect(res.status).toBe(403);
     });
@@ -182,7 +182,7 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
     test("valid token on unknown job returns 404 (not 403)", async () => {
       const token = makeToken(UNKNOWN_UUID);
       const res = await fetch(`${BASE}/v1/status/${UNKNOWN_UUID}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { "X-Job-Token": token },
       });
       expect(res.status).toBe(404);
     });
@@ -191,7 +191,7 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
       const { jobId } = await createJob("cross-job header test");
       const crossToken = makeToken(UNKNOWN_UUID);
       const res = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: `Bearer ${crossToken}` },
+        headers: { "X-Job-Token": crossToken },
       });
       expect(res.status).toBe(403);
     });
@@ -200,14 +200,14 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
       const { jobId } = await createJob("expired token test");
       const expired = makeExpiredToken(jobId);
       const res = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: `Bearer ${expired}` },
+        headers: { "X-Job-Token": expired },
       });
       expect(res.status).toBe(403);
     });
 
     test("malformed job ID returns 400 regardless of token", async () => {
       const res = await fetch(`${BASE}/v1/status/bad-id`, {
-        headers: { Authorization: "Bearer whatever" },
+        headers: { "X-Job-Token": "whatever" },
       });
       expect(res.status).toBe(400);
     });
@@ -217,7 +217,7 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
     test("status response includes Cache-Control: no-store, private", async () => {
       const { jobId, token } = await createJob("cache-control test");
       const res = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { "X-Job-Token": token },
       });
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe("no-store, private");
@@ -232,12 +232,12 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
     });
   });
 
-  describe("DELETE /v1/diagnose/:jobId — Authorization header", () => {
-    test("valid token via Authorization header cancels the job", async () => {
+  describe("DELETE /v1/diagnose/:jobId — X-Job-Token header", () => {
+    test("valid token via X-Job-Token header cancels the job", async () => {
       const { jobId, token } = await createJob("delete header valid token");
       const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { "X-Job-Token": token },
       });
       expect(delRes.status).toBe(200);
       const body = (await delRes.json()) as { status: string };
@@ -253,28 +253,28 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
 
       // Verify the job was NOT cancelled — it should still be accessible
       const statusRes = await fetch(`${BASE}/v1/status/${jobId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { "X-Job-Token": token },
       });
       expect(statusRes.status).toBe(200);
       const statusBody = (await statusRes.json()) as { status: string };
       expect(statusBody.status).not.toBe("failed");
     });
 
-    test("invalid token via Authorization header returns 403", async () => {
+    test("invalid token via X-Job-Token header returns 403", async () => {
       const { jobId } = await createJob("delete invalid header test");
       const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}`, {
         method: "DELETE",
-        headers: { Authorization: "Bearer invalid" },
+        headers: { "X-Job-Token": "invalid" },
       });
       expect(delRes.status).toBe(403);
     });
 
-    test("expired token via Authorization header returns 403", async () => {
+    test("expired token via X-Job-Token header returns 403", async () => {
       const { jobId } = await createJob("delete expired token test");
       const expired = makeExpiredToken(jobId);
       const delRes = await fetch(`${BASE}/v1/diagnose/${jobId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${expired}` },
+        headers: { "X-Job-Token": expired },
       });
       expect(delRes.status).toBe(403);
     });
@@ -286,10 +286,9 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
       // A token containing non-ASCII multibyte characters used to throw a
       // RangeError inside timingSafeEqual because the Buffer byte length
       // differed from the expected hex length. The fix requires exactly 64
-      // ASCII hex chars before any Buffer comparison. Browsers do not allow
-      // multibyte Unicode in Authorization header values (fetch throws before
-      // the request is sent), so the attack vector is the query-param
-      // fallback — exercise that path here.
+      // ASCII hex chars before any Buffer comparison. Fetch rejects multibyte
+      // values in request headers before sending, so exercise the query-param
+      // fallback here.
       const res = await fetch(
         `${BASE}/v1/status/${jobId}?token=${encodeURIComponent("\u{1F512}".repeat(20))}`,
       );

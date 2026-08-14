@@ -3,6 +3,38 @@ import { WS_TOKEN_SECRET, JOB_TTL_MS } from "../config";
 
 const HEX_RE = /^[0-9a-f]+$/;
 
+function generateCredential(jobId: string, ttlMs: number, now: number): string {
+  if (!WS_TOKEN_SECRET) return "";
+  const expiry = now + ttlMs;
+  const payload = `${jobId}.${expiry}`;
+  const hmac = createHmac("sha256", WS_TOKEN_SECRET)
+    .update(payload)
+    .digest("hex");
+  return `${expiry}.${hmac}`;
+}
+
+function verifyCredential(
+  jobId: string,
+  credential: string,
+  now: number,
+): boolean {
+  if (!WS_TOKEN_SECRET) return true;
+  if (!credential) return false;
+  const sep = credential.indexOf(".");
+  if (sep <= 0 || sep !== credential.lastIndexOf(".")) return false;
+  const expiryStr = credential.slice(0, sep);
+  const hmacHex = credential.slice(sep + 1);
+  // Validate length and ASCII hex before Buffer conversion so malformed Unicode cannot throw.
+  if (!/^[0-9]+$/.test(expiryStr)) return false;
+  if (hmacHex.length !== 64 || !HEX_RE.test(hmacHex)) return false;
+  const expiry = Number(expiryStr);
+  if (!Number.isFinite(expiry) || expiry <= now) return false;
+  const expected = createHmac("sha256", WS_TOKEN_SECRET)
+    .update(`${jobId}.${expiryStr}`)
+    .digest("hex");
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(hmacHex));
+}
+
 /**
  * Durable job capability token. Authenticates REST endpoints
  * (GET /v1/status, DELETE /v1/diagnose) and the /ws upgrade during migration.
@@ -19,13 +51,7 @@ export function generateToken(
   ttlMs: number = JOB_TTL_MS,
   now: number = Date.now(),
 ): string {
-  if (!WS_TOKEN_SECRET) return "";
-  const expiry = now + ttlMs;
-  const payload = `${jobId}.${expiry}`;
-  const hmac = createHmac("sha256", WS_TOKEN_SECRET)
-    .update(payload)
-    .digest("hex");
-  return `${expiry}.${hmac}`;
+  return generateCredential(jobId, ttlMs, now);
 }
 
 /**
@@ -46,25 +72,7 @@ export function verifyToken(
   token: string,
   now: number = Date.now(),
 ): boolean {
-  if (!WS_TOKEN_SECRET) return true;
-  if (!token) return false;
-  const sep = token.indexOf(".");
-  if (sep <= 0 || sep !== token.lastIndexOf(".")) return false;
-  const expiryStr = token.slice(0, sep);
-  const hmacHex = token.slice(sep + 1);
-  // Strict integer + length + ASCII-hex validation before any Buffer work
-  // prevents the malformed-Unicode RangeError that timingSafeEqual throws
-  // when given multibyte input whose Buffer length differs from expected.
-  if (!/^[0-9]+$/.test(expiryStr)) return false;
-  if (hmacHex.length !== 64 || !HEX_RE.test(hmacHex)) return false;
-  const expiry = Number(expiryStr);
-  if (!Number.isFinite(expiry) || expiry <= now) return false;
-  const expectedPayload = `${jobId}.${expiryStr}`;
-  const expected = createHmac("sha256", WS_TOKEN_SECRET)
-    .update(expectedPayload)
-    .digest("hex");
-  // Both buffers are 64 ASCII-hex bytes by construction; safe to compare.
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(hmacHex));
+  return verifyCredential(jobId, token, now);
 }
 
 /**
@@ -84,13 +92,7 @@ export function generateWsTicket(
   ttlSec: number = 120,
   now: number = Date.now(),
 ): string {
-  if (!WS_TOKEN_SECRET) return "";
-  const expiry = now + ttlSec * 1000;
-  const payload = `${jobId}.${expiry}`;
-  const hmac = createHmac("sha256", WS_TOKEN_SECRET)
-    .update(payload)
-    .digest("hex");
-  return `${expiry}.${hmac}`;
+  return generateCredential(jobId, ttlSec * 1000, now);
 }
 
 /**
@@ -110,19 +112,5 @@ export function verifyWsTicket(
   ticket: string,
   now: number = Date.now(),
 ): boolean {
-  if (!WS_TOKEN_SECRET) return true;
-  if (!ticket) return false;
-  const sep = ticket.indexOf(".");
-  if (sep <= 0 || sep !== ticket.lastIndexOf(".")) return false;
-  const expiryStr = ticket.slice(0, sep);
-  const hmacHex = ticket.slice(sep + 1);
-  if (!/^[0-9]+$/.test(expiryStr)) return false;
-  if (hmacHex.length !== 64 || !HEX_RE.test(hmacHex)) return false;
-  const expiry = Number(expiryStr);
-  if (!Number.isFinite(expiry) || expiry <= now) return false;
-  const expectedPayload = `${jobId}.${expiryStr}`;
-  const expected = createHmac("sha256", WS_TOKEN_SECRET)
-    .update(expectedPayload)
-    .digest("hex");
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(hmacHex));
+  return verifyCredential(jobId, ticket, now);
 }

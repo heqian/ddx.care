@@ -1,7 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { fetchJSON } from "./utils/fetch";
-import type { ToolResult } from "./utils/types";
 import {
   APITimeoutError,
   RateLimitError,
@@ -66,17 +65,7 @@ export const hpoTermSearchTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    query,
-    maxResults,
-  }): Promise<
-    ToolResult<{
-      results: Array<{ hpoId: string; name: string }>;
-      totalAvailable?: number;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ query, maxResults }) => {
     try {
       const url = `${NLM_BASE}/hpo/v3/search?terms=${encodeURIComponent(query)}&maxList=${maxResults}`;
       const data = (await fetchJSON(url, {
@@ -152,22 +141,7 @@ export const loincTestLookupTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    query,
-    maxResults,
-  }): Promise<
-    ToolResult<{
-      results: Array<{
-        loincCode: string;
-        componentName: string;
-        system?: string;
-        method?: string;
-      }>;
-      totalAvailable?: number;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ query, maxResults }) => {
     try {
       const url = `${NLM_BASE}/loinc_items/v3/search?terms=${encodeURIComponent(query)}&maxList=${maxResults}&df=LOINC_NUM,COMPONENT,SYSTEM,METHOD_TYP`;
       const data = (await fetchJSON(url, {

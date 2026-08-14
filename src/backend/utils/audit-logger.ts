@@ -9,7 +9,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 
 export class AuditLogger {
   private path: string;
@@ -135,14 +135,10 @@ export class AuditLogger {
 
   private getBaseName(): string {
     const ext = this.getExtension();
-    const fullPath = this.path;
-    const fileName = fullPath.split("/").pop() ?? fullPath;
-    return fileName.slice(0, fileName.length - ext.length);
+    return basename(this.path, ext);
   }
 
   private getExtension(): string {
-    const fileName = this.path.split("/").pop() ?? this.path;
-    const dotIdx = fileName.lastIndexOf(".");
-    return dotIdx > 0 ? fileName.slice(dotIdx) : "";
+    return extname(this.path);
   }
 }

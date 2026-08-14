@@ -87,7 +87,6 @@ function ToolHistoryItem({ entry }: { entry: ToolHistoryEntry }) {
 interface AgentStatusCardProps {
   name: string;
   agentId: string;
-  description: string;
   status?: SpecialistStatus;
   toolHistory?: ToolHistoryEntry[];
 }
@@ -119,7 +118,6 @@ const statusStyles: Record<
 export function AgentStatusCard({
   name,
   agentId,
-  description,
   status = "idle",
   toolHistory,
 }: AgentStatusCardProps) {

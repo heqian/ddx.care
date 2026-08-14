@@ -1,10 +1,8 @@
 interface ConfidenceBadgeProps {
-  confidence: number | null;
+  confidence: number;
 }
 
 export function ConfidenceBadge({ confidence }: ConfidenceBadgeProps) {
-  if (confidence === null) return null;
-
   let color: "green" | "yellow" | "red";
   if (confidence >= 70) color = "green";
   else if (confidence >= 40) color = "yellow";

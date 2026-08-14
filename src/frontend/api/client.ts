@@ -48,10 +48,10 @@ export async function getJobStatus(
   token?: string,
   signal?: AbortSignal,
 ): Promise<StatusResponse> {
-  // Prefer the Authorization header (not logged by Caddy, not in browser history)
-  // over a query parameter. The query fallback remains for dev mode only.
+  // Keep the job capability separate from Caddy's HTTP Basic Authorization
+  // header. Caddy redacts this custom header from access logs.
   const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) headers["X-Job-Token"] = token;
   const res = await fetch(`/v1/status/${jobId}`, { headers, signal });
   if (!res.ok) {
     await handleResponseText(res);
@@ -78,10 +78,10 @@ export async function cancelDiagnosis(
   jobId: string,
   token?: string,
 ): Promise<{ status: string }> {
-  // Prefer the Authorization header (not logged by Caddy, not in browser history)
-  // over a query parameter. The query fallback remains for dev mode only.
+  // Keep the job capability separate from Caddy's HTTP Basic Authorization
+  // header. Caddy redacts this custom header from access logs.
   const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) headers["X-Job-Token"] = token;
   const res = await fetch(`/v1/diagnose/${jobId}`, {
     method: "DELETE",
     headers,

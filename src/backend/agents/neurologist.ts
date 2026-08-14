@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const neurologist = createSpecialistAgent({
   id: "neurologist",
-  name: "Neurologist",
-  description:
-    "Evaluates neurological symptoms including headaches, dizziness, numbness, tingling, weakness, seizures, cognitive changes, vision changes, and abnormal neurological exam findings. Use when neurological etiology is suspected.",
   instructions: `You are a board-certified Neurologist with 20 years of experience in clinical neurology. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

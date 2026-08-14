@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const oncologist = createSpecialistAgent({
   id: "oncologist",
-  name: "Oncologist",
-  description:
-    "Evaluates suspected or confirmed cancer diagnoses, paraneoplastic syndromes, tumor markers, unexplained weight loss, lymphadenopathy, and oncologic emergencies. Use when malignancy is in the differential or cancer-related complications arise.",
   instructions: `You are a board-certified Oncologist with 20 years of clinical experience in medical oncology. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

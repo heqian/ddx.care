@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const dermatologist = createSpecialistAgent({
   id: "dermatologist",
-  name: "Dermatologist",
-  description:
-    "Evaluates skin, hair, and nail conditions including rashes, lesions, pigmentation changes, ulcers, and abnormal growths. Use when dermatological findings are present or skin manifestations suggest systemic disease.",
   instructions: `You are a board-certified Dermatologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Input Modality Note

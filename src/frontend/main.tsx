@@ -1,6 +1,5 @@
 import { createRoot } from "react-dom/client";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { ThemeProvider } from "./context/ThemeContext";
 import { AppShell } from "./components/layout/AppShell";
 import { ConsentGate, useConsent } from "./components/layout/ConsentGate";
 import {
@@ -58,7 +57,7 @@ function UnavailableJob({
 
 function App() {
   const { route, navigate } = useRouter();
-  const { accepted, grant, revoke } = useConsent();
+  const { accepted, grant } = useConsent();
   const [jobs, dispatch] = useReducer(jobContextReducer, {});
   const jobsRef = useRef(jobs);
   const routeRef = useRef(route);
@@ -104,10 +103,6 @@ function App() {
 
   const { showWarning, extendSession } = useAutoLogout(purgeSensitiveSession, {
     screen: route.screen,
-    // The timer is never paused — it runs on input (10 min) and on
-    // waiting/results (15 min) so an unattended terminal screen still
-    // triggers the purge.
-    paused: false,
   });
 
   useEffect(() => {
@@ -321,7 +316,7 @@ function App() {
   }, [leaveJob, navigate]);
 
   if (!accepted) {
-    return <ConsentGate onAccept={grant} onDecline={revoke} />;
+    return <ConsentGate onAccept={grant} />;
   }
 
   if (locked) {
@@ -424,7 +419,7 @@ function App() {
         routeStatus?.status !== "failed" &&
         !availableContext.streamError && (
           <div className="flex flex-col items-center justify-center py-24 space-y-4">
-            <Spinner size="lg" />
+            <Spinner />
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Loading results...
             </p>
@@ -458,8 +453,4 @@ function App() {
 }
 
 const root = createRoot(document.getElementById("root")!);
-root.render(
-  <ThemeProvider>
-    <App />
-  </ThemeProvider>,
-);
+root.render(<App />);

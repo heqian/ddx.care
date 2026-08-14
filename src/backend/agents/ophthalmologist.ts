@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const ophthalmologist = createSpecialistAgent({
   id: "ophthalmologist",
-  name: "Ophthalmologist",
-  description:
-    "Evaluates eye diseases and vision conditions including vision loss, eye pain, red eye, diplopia, and ocular manifestations of systemic disease. Use when ophthalmic symptoms or visual disturbances are present.",
   instructions: `You are a board-certified Ophthalmologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

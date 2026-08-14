@@ -1,12 +1,10 @@
 import { Agent } from "@mastra/core/agent";
 import { SPECIALIST_MODEL } from "../config";
 import { getToolsForSpecialist } from "../tools";
-import type { SpecialistId } from "./manifest";
+import { specialistMetadataById, type SpecialistId } from "./manifest";
 
 export interface SpecialistConfig {
   id: SpecialistId;
-  name: string;
-  description: string;
   instructions: string;
 }
 
@@ -35,12 +33,14 @@ You have access to medical reference tools. Use them to ground your analysis in 
 - Tool results supplement your expertise; always interpret them in clinical context.`;
 
 export function createSpecialistAgent(config: SpecialistConfig): Agent {
+  const metadata = specialistMetadataById[config.id];
+
   return new Agent({
     id: config.id,
-    name: config.name,
+    name: metadata.name,
     model: SPECIALIST_MODEL,
     tools: getToolsForSpecialist(config.id),
-    description: config.description,
+    description: metadata.description,
     instructions: config.instructions + TOOL_INSTRUCTIONS,
   });
 }

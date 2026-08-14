@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const generalist = createSpecialistAgent({
   id: "generalist",
-  name: "Generalist",
-  description:
-    "Evaluates general symptoms, routine check-ups, common illnesses, and identifies when specialist referral is needed. Use for initial assessment of undifferentiated complaints, primary care conditions, and multi-system symptoms.",
   instructions: `You are a board-certified Family Physician and Internist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

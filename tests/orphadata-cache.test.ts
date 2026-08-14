@@ -156,14 +156,7 @@ describe("Orphadata Cache — Full Suite", () => {
 
   describe("Initialization", () => {
     test("populates disease table on init", () => {
-      const stats = cache.getCacheStats();
-      expect(stats.diseases).toBe(4);
-    });
-
-    test("genes and phenotypes tables start empty (lazy loading)", () => {
-      const stats = cache.getCacheStats();
-      expect(stats.genesForCode(58)).toBe(0);
-      expect(stats.phenotypesForCode(58)).toBe(0);
+      expect(cache.searchDiseases("Alexander", 10)).toHaveLength(1);
     });
   });
 
@@ -248,13 +241,6 @@ describe("Orphadata Cache — Full Suite", () => {
       const genes = await cache.getDiseaseGenes(99999);
       expect(genes).toEqual([]);
     });
-
-    test("getCacheStats reports genes after caching", async () => {
-      const stats = cache.getCacheStats();
-      expect(stats.genesForCode(58)).toBe(1);
-      expect(stats.genesForCode(586)).toBe(2);
-      expect(stats.genesForCode(99999)).toBe(0);
-    });
   });
 
   describe("Phenotype Lazy Loading", () => {
@@ -284,12 +270,6 @@ describe("Orphadata Cache — Full Suite", () => {
     test("returns empty array for disease with no phenotypes", async () => {
       const phenotypes = await cache.getDiseasePhenotypes(99999);
       expect(phenotypes).toEqual([]);
-    });
-
-    test("getCacheStats reports phenotypes after caching", async () => {
-      const stats = cache.getCacheStats();
-      expect(stats.phenotypesForCode(58)).toBe(3);
-      expect(stats.phenotypesForCode(99999)).toBe(0);
     });
   });
 
@@ -342,14 +322,6 @@ describe("Orphadata Cache — Full Suite", () => {
         );
       }
     });
-
-    test("getCacheStats returns valid numbers", () => {
-      const stats = cache.getCacheStats();
-      expect(typeof stats.diseases).toBe("number");
-      expect(stats.diseases).toBeGreaterThan(0);
-      expect(typeof stats.genesForCode(58)).toBe("number");
-      expect(typeof stats.phenotypesForCode(58)).toBe("number");
-    });
   });
 });
 
@@ -371,8 +343,7 @@ describe("Orphadata Cache — Init Failure Handling", () => {
     const cache = await import("../src/backend/orphadata-cache");
     await cache.initializeOrphadataCache();
 
-    const stats = cache.getCacheStats();
-    expect(stats.diseases).toBe(0);
+    expect(cache.searchDiseases("Alexander", 10)).toEqual([]);
   });
 
   test("initializeOrphadataCache handles non-200 response", async () => {
@@ -390,7 +361,6 @@ describe("Orphadata Cache — Init Failure Handling", () => {
     const cache = await import("../src/backend/orphadata-cache");
     await cache.initializeOrphadataCache();
 
-    const stats = cache.getCacheStats();
-    expect(stats.diseases).toBe(0);
+    expect(cache.searchDiseases("Alexander", 10)).toEqual([]);
   });
 });

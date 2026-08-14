@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowPathIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { Spinner } from "../components/ui/Spinner";
 import { AgentGrid } from "../components/agents/AgentGrid";
@@ -203,14 +203,10 @@ export function WaitingRoom({
 
   const hasProgress = visibleProgress.length > 0;
 
-  const handleCancelClick = useCallback(() => {
-    onCancel();
-  }, [onCancel]);
-
   return (
     <div className="space-y-8">
       <div className="text-center">
-        {!isTerminal && <Spinner size="lg" className="mx-auto mb-4" />}
+        {!isTerminal && <Spinner className="mx-auto mb-4" />}
         <h1 className="text-2xl font-display">
           {showRetry ? "Diagnosis Failed" : "Analyzing Case..."}
         </h1>
@@ -347,7 +343,7 @@ export function WaitingRoom({
       <div className="flex justify-center gap-3">
         {!isTerminal && (
           <button
-            onClick={handleCancelClick}
+            onClick={onCancel}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
           >
             <XMarkIcon className="h-4 w-4" />

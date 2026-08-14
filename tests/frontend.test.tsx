@@ -46,9 +46,6 @@ Object.assign(globalThis, {
 // Fix happy-dom bug: HTMLLabelElement.dispatchEvent uses this.window.SyntaxError
 // which is undefined by default. Polyfill it.
 happyWindow.SyntaxError = SyntaxError;
-function resetBody() {
-  happyDocument.body.innerHTML = "";
-}
 
 // Helper: query rendered output for text content
 // Uses recursive descent to match against element textContent (handles split React text nodes)
@@ -78,23 +75,6 @@ function getByText(container: Element, text: string | RegExp): Element {
   const el = queryByText(container, text);
   if (!el) throw new Error(`Unable to find element with text: ${text}`);
   return el;
-}
-
-function _queryAllByText(container: Element, text: string | RegExp): Element[] {
-  const results: Element[] = [];
-  const walker = happyDocument.createTreeWalker(
-    container,
-    NodeFilter.SHOW_TEXT,
-  );
-  while (walker.nextNode()) {
-    const nodeText = walker.currentNode.textContent ?? "";
-    const matches =
-      typeof text === "string" ? nodeText.includes(text) : text.test(nodeText);
-    if (matches && walker.currentNode.parentElement) {
-      results.push(walker.currentNode.parentElement);
-    }
-  }
-  return results;
 }
 
 import {
@@ -130,7 +110,6 @@ function makeDiagnosis(overrides: Partial<Diagnosis> = {}): Diagnosis {
 
 describe("DiagnosisCard", () => {
   test("renders diagnosis name and rank", () => {
-    resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
         diagnosis: makeDiagnosis({ name: "Migraine" }),
@@ -141,7 +120,6 @@ describe("DiagnosisCard", () => {
   });
 
   test("renders confidence badge text", () => {
-    resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
         diagnosis: makeDiagnosis({ confidence: 85 }),
@@ -151,7 +129,6 @@ describe("DiagnosisCard", () => {
   });
 
   test("renders urgency badge text", () => {
-    resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
         diagnosis: makeDiagnosis({ urgency: "emergent" }),
@@ -161,7 +138,6 @@ describe("DiagnosisCard", () => {
   });
 
   test("renders supporting evidence items", () => {
-    resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
         diagnosis: makeDiagnosis({
@@ -174,7 +150,6 @@ describe("DiagnosisCard", () => {
   });
 
   test("renders contradictory evidence items", () => {
-    resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
         diagnosis: makeDiagnosis({
@@ -186,7 +161,6 @@ describe("DiagnosisCard", () => {
   });
 
   test("renders next steps", () => {
-    resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
         diagnosis: makeDiagnosis({
@@ -199,7 +173,6 @@ describe("DiagnosisCard", () => {
   });
 
   test("hides sections when arrays are empty", () => {
-    resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
         diagnosis: makeDiagnosis({
@@ -215,7 +188,6 @@ describe("DiagnosisCard", () => {
   });
 
   test("renders rank 2 with correct badge", () => {
-    resetBody();
     const { container } = render(
       createElement(DiagnosisCard, { diagnosis: makeDiagnosis({ rank: 2 }) }),
     );
@@ -223,7 +195,6 @@ describe("DiagnosisCard", () => {
   });
 
   test("renders rank 3 with correct badge", () => {
-    resetBody();
     const { container } = render(
       createElement(DiagnosisCard, { diagnosis: makeDiagnosis({ rank: 3 }) }),
     );
@@ -231,7 +202,6 @@ describe("DiagnosisCard", () => {
   });
 
   test("renders rationale text", () => {
-    resetBody();
     const { container } = render(
       createElement(DiagnosisCard, {
         diagnosis: makeDiagnosis({
@@ -250,23 +220,13 @@ import { ConfidenceBadge } from "../src/frontend/components/diagnosis/Confidence
 
 describe("ConfidenceBadge", () => {
   test("renders confidence percentage", () => {
-    resetBody();
     const { container } = render(
       createElement(ConfidenceBadge, { confidence: 75 }),
     );
     expect(getByText(container, "75% confidence")).toBeTruthy();
   });
 
-  test("returns null for null confidence", () => {
-    resetBody();
-    const { container } = render(
-      createElement(ConfidenceBadge, { confidence: null }),
-    );
-    expect(container.innerHTML).toBe("");
-  });
-
   test("high confidence gets green styling", () => {
-    resetBody();
     const { container } = render(
       createElement(ConfidenceBadge, { confidence: 90 }),
     );
@@ -275,7 +235,6 @@ describe("ConfidenceBadge", () => {
   });
 
   test("medium confidence gets yellow styling", () => {
-    resetBody();
     const { container } = render(
       createElement(ConfidenceBadge, { confidence: 50 }),
     );
@@ -284,7 +243,6 @@ describe("ConfidenceBadge", () => {
   });
 
   test("low confidence gets red styling", () => {
-    resetBody();
     const { container } = render(
       createElement(ConfidenceBadge, { confidence: 20 }),
     );
@@ -300,7 +258,6 @@ import { UrgencyBadge } from "../src/frontend/components/diagnosis/UrgencyBadge"
 
 describe("UrgencyBadge", () => {
   test("renders emergent label", () => {
-    resetBody();
     const { container } = render(
       createElement(UrgencyBadge, { urgency: "emergent" }),
     );
@@ -308,7 +265,6 @@ describe("UrgencyBadge", () => {
   });
 
   test("renders urgent label", () => {
-    resetBody();
     const { container } = render(
       createElement(UrgencyBadge, { urgency: "urgent" }),
     );
@@ -316,19 +272,10 @@ describe("UrgencyBadge", () => {
   });
 
   test("renders routine label", () => {
-    resetBody();
     const { container } = render(
       createElement(UrgencyBadge, { urgency: "routine" }),
     );
     expect(getByText(container, "Routine")).toBeTruthy();
-  });
-
-  test("returns null for null urgency", () => {
-    resetBody();
-    const { container } = render(
-      createElement(UrgencyBadge, { urgency: null }),
-    );
-    expect(container.innerHTML).toBe("");
   });
 });
 
@@ -338,31 +285,7 @@ describe("UrgencyBadge", () => {
 import { FileDropZone } from "../src/frontend/components/ui/FileDropZone";
 
 describe("FileDropZone", () => {
-  test("renders label text", () => {
-    resetBody();
-    const { container } = render(
-      createElement(FileDropZone, {
-        onFileContent: () => {},
-        label: "Upload lab results",
-      }),
-    );
-    expect(getByText(container, "Upload lab results")).toBeTruthy();
-  });
-
-  test("renders accept hint", () => {
-    resetBody();
-    const { container } = render(
-      createElement(FileDropZone, {
-        onFileContent: () => {},
-        label: "Upload",
-        accept: ".txt,.csv",
-      }),
-    );
-    expect(getByText(container, /\.txt,\.csv/)).toBeTruthy();
-  });
-
   test("calls onFileContent when file is selected", async () => {
-    resetBody();
     const onFileContent = vi.fn();
     const { container } = render(
       createElement(FileDropZone, { onFileContent, label: "Upload" }),
@@ -481,50 +404,6 @@ describe("useAutoLogout", () => {
     expect(onTimeout).not.toHaveBeenCalled();
   });
 
-  test("paused=true prevents timer from firing", () => {
-    const onTimeout = vi.fn();
-    renderHook(() => useAutoLogout(onTimeout, { paused: true }));
-
-    hookAct(() => {
-      vi.advanceTimersByTime(15 * 60 * 1000);
-    });
-
-    expect(onTimeout).not.toHaveBeenCalled();
-  });
-
-  test("paused=true prevents warning from showing", () => {
-    const onTimeout = vi.fn();
-    const { result } = renderHook(() =>
-      useAutoLogout(onTimeout, { paused: true }),
-    );
-
-    hookAct(() => {
-      vi.advanceTimersByTime(8 * 60 * 1000);
-    });
-
-    expect(result.current.showWarning).toBe(false);
-  });
-
-  test("timer starts when paused transitions from true to false", () => {
-    const onTimeout = vi.fn();
-    const { rerender } = renderHook(
-      ({ paused }: { paused: boolean }) => useAutoLogout(onTimeout, { paused }),
-      { initialProps: { paused: true } },
-    );
-
-    hookAct(() => {
-      vi.advanceTimersByTime(5 * 60 * 1000);
-    });
-    expect(onTimeout).not.toHaveBeenCalled();
-
-    rerender({ paused: false });
-
-    hookAct(() => {
-      vi.advanceTimersByTime(10 * 60 * 1000);
-    });
-    expect(onTimeout).toHaveBeenCalledTimes(1);
-  });
-
   test("uses the extended waitingTimeoutMs on the waiting screen", () => {
     const onTimeout = vi.fn();
     renderHook(() =>
@@ -584,22 +463,6 @@ describe("useAutoLogout", () => {
     });
     expect(onTimeout).toHaveBeenCalledTimes(1);
   });
-
-  test("timer is NOT paused on the waiting screen (fires after extended timeout)", () => {
-    const onTimeout = vi.fn();
-    renderHook(() =>
-      useAutoLogout(onTimeout, {
-        screen: "waiting",
-        waitingTimeoutMs: 15 * 60 * 1000,
-      }),
-    );
-
-    hookAct(() => {
-      vi.advanceTimersByTime(15 * 60 * 1000);
-    });
-
-    expect(onTimeout).toHaveBeenCalledTimes(1);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -609,7 +472,6 @@ import { AgentStatusCard } from "../src/frontend/components/agents/AgentStatusCa
 
 describe("AgentStatusCard", () => {
   test("renders agent name and description", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Cardiologist",
@@ -621,7 +483,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows 'Waiting...' for idle status", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Neurologist",
@@ -634,7 +495,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows 'Consulting...' for active status", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Cardiologist",
@@ -647,7 +507,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows 'Analysis complete' for completed status", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Oncologist",
@@ -660,7 +519,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("defaults to idle when status is not provided", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Generalist",
@@ -672,7 +530,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows tool history when active with running tool", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Cardiologist",
@@ -692,7 +549,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows tool history with args for latest running entry", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Cardiologist",
@@ -712,7 +568,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows MedlinePlus no-results as a compact successful summary", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Generalist",
@@ -743,7 +598,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows 'Consulting...' when active but no toolHistory", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Cardiologist",
@@ -756,7 +610,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows summary line when completed with tool history", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Cardiologist",
@@ -784,7 +637,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows failure count when completed with errors", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Cardiologist",
@@ -812,7 +664,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows partial count when completed with incomplete tool coverage", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Cardiologist",
@@ -833,7 +684,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows fallback label for unknown tool", () => {
-    resetBody();
     const { container } = render(
       createElement(AgentStatusCard, {
         name: "Cardiologist",
@@ -853,7 +703,6 @@ describe("AgentStatusCard", () => {
   });
 
   test("shows all tool history entries without truncation when many tools used", () => {
-    resetBody();
     const toolHistory = Array.from({ length: 12 }, (_, i) => ({
       toolName: "drug-interaction",
       toolArgs: `query ${i + 1}`,
@@ -877,149 +726,6 @@ describe("AgentStatusCard", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Badge
-// ---------------------------------------------------------------------------
-import { Badge } from "../src/frontend/components/ui/Badge";
-
-describe("Badge", () => {
-  test("renders children text", () => {
-    resetBody();
-    const { container } = render(createElement(Badge, {}, "Test Label"));
-    expect(getByText(container, "Test Label")).toBeTruthy();
-  });
-
-  test("applies green color classes", () => {
-    resetBody();
-    const { container } = render(
-      createElement(Badge, { color: "green" }, "Green"),
-    );
-    const badge = getByText(container, "Green");
-    expect(badge.className).toContain("bg-green-100");
-  });
-
-  test("applies red color classes", () => {
-    resetBody();
-    const { container } = render(createElement(Badge, { color: "red" }, "Red"));
-    const badge = getByText(container, "Red");
-    expect(badge.className).toContain("bg-red-100");
-  });
-
-  test("applies yellow color classes", () => {
-    resetBody();
-    const { container } = render(
-      createElement(Badge, { color: "yellow" }, "Yellow"),
-    );
-    const badge = getByText(container, "Yellow");
-    expect(badge.className).toContain("bg-yellow-100");
-  });
-
-  test("defaults to gray color (no color prop)", () => {
-    resetBody();
-    const { container } = render(createElement(Badge, {}, "Default"));
-    const badge = getByText(container, "Default");
-    expect(badge.className).toContain("bg-slate-100");
-  });
-
-  test("applies custom className", () => {
-    resetBody();
-    const { container } = render(
-      createElement(Badge, { className: "extra-class" }, "Custom"),
-    );
-    const badge = getByText(container, "Custom");
-    expect(badge.className).toContain("extra-class");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Modal
-// ---------------------------------------------------------------------------
-import { Modal } from "../src/frontend/components/ui/Modal";
-
-describe("Modal", () => {
-  test("renders when open is true", () => {
-    resetBody();
-    const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose: () => {}, title: "Test Modal" },
-        createElement("p", {}, "Modal content"),
-      ),
-    );
-    expect(getByText(container, "Test Modal")).toBeTruthy();
-    expect(getByText(container, "Modal content")).toBeTruthy();
-  });
-
-  test("does not render when open is false", () => {
-    resetBody();
-    const { container } = render(
-      createElement(
-        Modal,
-        { open: false, onClose: () => {}, title: "Hidden" },
-        createElement("p", {}, "Should not show"),
-      ),
-    );
-    expect(queryByText(container, "Hidden")).toBeNull();
-    expect(queryByText(container, "Should not show")).toBeNull();
-  });
-
-  test("renders title correctly", () => {
-    resetBody();
-    const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose: () => {}, title: "Important Dialog" },
-        createElement("p", {}, "Content"),
-      ),
-    );
-    expect(getByText(container, "Important Dialog")).toBeTruthy();
-  });
-
-  test("calls onClose when close button is clicked", () => {
-    resetBody();
-    const onClose = vi.fn();
-    const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose, title: "Closable" },
-        createElement("p", {}, "Content"),
-      ),
-    );
-    // Find all buttons and click the one that's not the main title area
-    const buttons = Array.from(container.getElementsByTagName("button"));
-    // The close button is the last button (with the X icon)
-    const closeBtn = buttons[buttons.length - 1];
-    if (closeBtn) {
-      fireEvent.click(closeBtn);
-      expect(onClose).toHaveBeenCalledTimes(1);
-    }
-  });
-
-  test("calls onClose on backdrop click", () => {
-    resetBody();
-    const onClose = vi.fn();
-    const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose, title: "Backdrop Test" },
-        createElement("p", {}, "Content"),
-      ),
-    );
-    // The backdrop is the second div inside the fixed container
-    // It has an onClick handler
-    const fixedDivs = Array.from(container.getElementsByTagName("div"));
-    // Find the backdrop div — it will be a div with the onClick handler
-    // The first fixed div is the wrapper, the backdrop is its first child div
-    const backdrop = fixedDivs.find(
-      (d) => d.className.includes("fixed") && d.className.includes("bg-black"),
-    );
-    if (backdrop) {
-      fireEvent.click(backdrop);
-      expect(onClose).toHaveBeenCalledTimes(1);
-    }
-  });
-});
-
-// ---------------------------------------------------------------------------
 // useConsent hook
 // ---------------------------------------------------------------------------
 import { useConsent } from "../src/frontend/components/layout/ConsentGate";
@@ -1034,13 +740,11 @@ describe("useConsent", () => {
   });
 
   test("starts with accepted=false when no session storage", () => {
-    resetBody();
     const { result } = renderHook(() => useConsent());
     expect(result.current.accepted).toBe(false);
   });
 
   test("grant() sets accepted to true and writes sessionStorage", () => {
-    resetBody();
     const { result } = renderHook(() => useConsent());
     hookAct(() => {
       result.current.grant();
@@ -1049,22 +753,6 @@ describe("useConsent", () => {
     expect(happyWindow.sessionStorage.getItem("ddx_consent_accepted")).toBe(
       "true",
     );
-  });
-
-  test("revoke() sets accepted to false and clears sessionStorage", () => {
-    resetBody();
-    const { result } = renderHook(() => useConsent());
-    hookAct(() => {
-      result.current.grant();
-    });
-    expect(result.current.accepted).toBe(true);
-    hookAct(() => {
-      result.current.revoke();
-    });
-    expect(result.current.accepted).toBe(false);
-    expect(
-      happyWindow.sessionStorage.getItem("ddx_consent_accepted"),
-    ).toBeNull();
   });
 });
 
@@ -1075,33 +763,27 @@ import { ConsentGate } from "../src/frontend/components/layout/ConsentGate";
 
 describe("ConsentGate", () => {
   test("renders legal disclaimer heading", () => {
-    resetBody();
     const { container } = render(
       createElement(ConsentGate, {
         onAccept: () => {},
-        onDecline: () => {},
       }),
     );
     expect(getByText(container, "Legal Disclaimer")).toBeTruthy();
   });
 
   test("renders warning about research demo", () => {
-    resetBody();
     const { container } = render(
       createElement(ConsentGate, {
         onAccept: () => {},
-        onDecline: () => {},
       }),
     );
     expect(getByText(container, /NOT A MEDICAL DEVICE/)).toBeTruthy();
   });
 
   test("renders all 8 terms sections", () => {
-    resetBody();
     const { container } = render(
       createElement(ConsentGate, {
         onAccept: () => {},
-        onDecline: () => {},
       }),
     );
     expect(getByText(container, "1. Nature of This Tool")).toBeTruthy();
@@ -1119,11 +801,9 @@ describe("ConsentGate", () => {
   });
 
   test("accept button is disabled without checkbox", () => {
-    resetBody();
     const { container } = render(
       createElement(ConsentGate, {
         onAccept: () => {},
-        onDecline: () => {},
       }),
     );
     const buttons = Array.from(container.getElementsByTagName("button"));
@@ -1133,11 +813,9 @@ describe("ConsentGate", () => {
   });
 
   test("checking the checkbox enables accept button", async () => {
-    resetBody();
     const { container } = render(
       createElement(ConsentGate, {
         onAccept: () => {},
-        onDecline: () => {},
       }),
     );
     const checkbox = container.getElementsByTagName("input")[0];
@@ -1158,11 +836,8 @@ describe("ConsentGate", () => {
   });
 
   test("clicking accept calls onAccept", async () => {
-    resetBody();
     const onAccept = vi.fn();
-    const { container } = render(
-      createElement(ConsentGate, { onAccept, onDecline: () => {} }),
-    );
+    const { container } = render(createElement(ConsentGate, { onAccept }));
 
     const checkbox = container.getElementsByTagName("input")[0];
     await act(async () => {
@@ -1183,62 +858,10 @@ describe("ConsentGate", () => {
     expect(onAccept).toHaveBeenCalledTimes(1);
   });
 
-  test("clicking decline shows Access Declined screen", () => {
-    resetBody();
-    const { container } = render(
-      createElement(ConsentGate, {
-        onAccept: () => {},
-        onDecline: () => {},
-      }),
-    );
-
-    // Click decline button
-    const buttons = Array.from(container.getElementsByTagName("button"));
-    const declineBtn = buttons.find((b) =>
-      b.textContent?.includes("Do Not Accept"),
-    );
-    expect(declineBtn).toBeTruthy();
-    fireEvent.click(declineBtn!);
-
-    // Should show declined state
-    expect(getByText(container, "Access Declined")).toBeTruthy();
-    expect(getByText(container, "Review terms again")).toBeTruthy();
-  });
-
-  test("clicking Review terms again returns to consent form", () => {
-    resetBody();
-    const { container } = render(
-      createElement(ConsentGate, {
-        onAccept: () => {},
-        onDecline: () => {},
-      }),
-    );
-
-    // Click decline
-    const buttons = Array.from(container.getElementsByTagName("button"));
-    const declineBtn = buttons.find((b) =>
-      b.textContent?.includes("Do Not Accept"),
-    );
-    fireEvent.click(declineBtn!);
-
-    // Re-query buttons after state change
-    const updatedButtons = Array.from(container.getElementsByTagName("button"));
-    const reviewBtn = updatedButtons.find((b) =>
-      b.textContent?.includes("Review terms again"),
-    );
-    expect(reviewBtn).toBeTruthy();
-    fireEvent.click(reviewBtn!);
-
-    // Should be back on consent form
-    expect(getByText(container, "Legal Disclaimer")).toBeTruthy();
-  });
-
   test("buttons have type=button to prevent form submission", () => {
-    resetBody();
     const { container } = render(
       createElement(ConsentGate, {
         onAccept: () => {},
-        onDecline: () => {},
       }),
     );
     const buttons = Array.from(container.getElementsByTagName("button"));
@@ -1255,25 +878,21 @@ import { Footer } from "../src/frontend/components/layout/Footer";
 
 describe("Footer", () => {
   test("renders research use disclaimer", () => {
-    resetBody();
     const { container } = render(createElement(Footer));
     expect(getByText(container, /Research use only/)).toBeTruthy();
   });
 
   test("renders HIPAA non-compliance notice", () => {
-    resetBody();
     const { container } = render(createElement(Footer));
     expect(getByText(container, /Not HIPAA compliant/)).toBeTruthy();
   });
 
   test("renders risk acceptance notice", () => {
-    resetBody();
     const { container } = render(createElement(Footer));
     expect(getByText(container, /You bear all risk/)).toBeTruthy();
   });
 
   test("renders as a footer element", () => {
-    resetBody();
     const { container } = render(createElement(Footer));
     const footer = container.getElementsByTagName("footer")[0];
     expect(footer).toBeTruthy();
@@ -1338,7 +957,6 @@ describe("useJobStream", () => {
   let originalWebSocket: typeof WebSocket;
 
   beforeEach(() => {
-    resetBody();
     originalWebSocket = (globalThis as any).WebSocket;
     (globalThis as any).WebSocket = MockWebSocket;
     MockWebSocket.reset();
@@ -1689,74 +1307,14 @@ import { Spinner } from "../src/frontend/components/ui/Spinner";
 
 describe("Accessibility — Spinner", () => {
   test("renders with role=status", () => {
-    resetBody();
     const { container } = render(createElement(Spinner));
     const svg = container.querySelector("svg");
     expect(svg?.getAttribute("role")).toBe("status");
-  });
-
-  test("renders with default aria-label", () => {
-    resetBody();
-    const { container } = render(createElement(Spinner));
-    const svg = container.querySelector("svg");
-    expect(svg?.getAttribute("aria-label")).toBe("Loading");
-  });
-
-  test("renders with custom label prop", () => {
-    resetBody();
-    const { container } = render(
-      createElement(Spinner, { label: "Analyzing case" }),
-    );
-    const svg = container.querySelector("svg");
-    expect(svg?.getAttribute("aria-label")).toBe("Analyzing case");
-  });
-});
-
-describe("Accessibility — Modal", () => {
-  test("renders with role=dialog and aria-modal=true", () => {
-    resetBody();
-    const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose: () => {}, title: "Dialog" },
-        createElement("p", {}, "Content"),
-      ),
-    );
-    const dialog = container.querySelector('[role="dialog"]');
-    expect(dialog).toBeTruthy();
-    expect(dialog?.getAttribute("aria-modal")).toBe("true");
-  });
-
-  test("close button has aria-label", () => {
-    resetBody();
-    const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose: () => {}, title: "Dialog" },
-        createElement("p", {}, "Content"),
-      ),
-    );
-    const closeBtn = container.querySelector('button[aria-label="Close"]');
-    expect(closeBtn).toBeTruthy();
-  });
-
-  test("backdrop has aria-hidden=true", () => {
-    resetBody();
-    const { container } = render(
-      createElement(
-        Modal,
-        { open: true, onClose: () => {}, title: "Dialog" },
-        createElement("p", {}, "Content"),
-      ),
-    );
-    const backdrop = container.querySelector('[aria-hidden="true"]');
-    expect(backdrop).toBeTruthy();
   });
 });
 
 describe("Accessibility — FileDropZone", () => {
   test("renders with role=button and tabIndex=0", () => {
-    resetBody();
     const { container } = render(
       createElement(FileDropZone, {
         onFileContent: () => {},
@@ -1769,7 +1327,6 @@ describe("Accessibility — FileDropZone", () => {
   });
 
   test("has aria-label matching label prop", () => {
-    resetBody();
     const { container } = render(
       createElement(FileDropZone, {
         onFileContent: () => {},
@@ -1781,7 +1338,6 @@ describe("Accessibility — FileDropZone", () => {
   });
 
   test("help text has id and zone references it via aria-describedby", () => {
-    resetBody();
     const { container } = render(
       createElement(FileDropZone, {
         onFileContent: () => {},
@@ -1796,7 +1352,6 @@ describe("Accessibility — FileDropZone", () => {
   });
 
   test("activates file input on Enter key", async () => {
-    resetBody();
     const { container } = render(
       createElement(FileDropZone, {
         onFileContent: () => {},
@@ -1818,7 +1373,6 @@ describe("Accessibility — FileDropZone", () => {
   });
 
   test("activates file input on Space key", async () => {
-    resetBody();
     const { container } = render(
       createElement(FileDropZone, {
         onFileContent: () => {},
@@ -1849,7 +1403,6 @@ import {
 
 describe("Accessibility — InputDashboard", () => {
   test("age input has no aria-invalid when valid", () => {
-    resetBody();
     const { container } = render(
       createElement(InputDashboard, { onSubmit: () => {} }),
     );
@@ -1863,7 +1416,6 @@ describe("Accessibility — InputDashboard", () => {
   // verified implicitly by the first test and by the source review.
 
   test("error and validation banners use role=alert", () => {
-    resetBody();
     // Render InputDashboard with a pre-populated draft that exceeds char limit
     // to trigger the validation warning banner
     try {
@@ -1934,7 +1486,6 @@ describe("Inactivity purge", () => {
   });
 
   test("InputDashboardHandle.clearAll clears form fields and the sessionStorage draft", () => {
-    resetBody();
     // Seed a draft so the form starts populated.
     happyWindow.sessionStorage.setItem(
       "ddx_draft",
@@ -2003,7 +1554,6 @@ describe("Inactivity purge", () => {
 
 describe("Autosave disclosure", () => {
   test("InputDashboard renders the autosave disclosure note text", () => {
-    resetBody();
     const { container } = render(
       createElement(InputDashboard, { onSubmit: () => {} }),
     );
@@ -2013,7 +1563,6 @@ describe("Autosave disclosure", () => {
   });
 
   test("autosave disclosure uses role=note", () => {
-    resetBody();
     const { container } = render(
       createElement(InputDashboard, { onSubmit: () => {} }),
     );
@@ -2092,7 +1641,6 @@ function makeGenerationFailedResults(retryable: boolean): StatusResponse {
 
 describe("ResultsView generation_failed outcomes", () => {
   test("shows the unavailable state and only safe failure actions", async () => {
-    resetBody();
     const onRetry = vi.fn();
     const { container } = render(
       createElement(ResultsView, {
@@ -2137,7 +1685,6 @@ describe("ResultsView generation_failed outcomes", () => {
   });
 
   test("does not offer retry when report generation is not retryable", () => {
-    resetBody();
     const { container } = render(
       createElement(ResultsView, {
         result: makeGenerationFailedResults(false),
@@ -2156,7 +1703,6 @@ describe("ResultsView generation_failed outcomes", () => {
 
 describe("Accessibility — ResultsView tabs", () => {
   test("tablist has role=tablist", () => {
-    resetBody();
     const { container } = render(
       createElement(ResultsView, {
         result: makeResults(),
@@ -2168,7 +1714,6 @@ describe("Accessibility — ResultsView tabs", () => {
   });
 
   test("tab buttons have role=tab and aria-selected", () => {
-    resetBody();
     const { container } = render(
       createElement(ResultsView, {
         result: makeResults(),
@@ -2188,7 +1733,6 @@ describe("Accessibility — ResultsView tabs", () => {
   });
 
   test("tab panels have role=tabpanel and aria-labelledby", () => {
-    resetBody();
     const { container } = render(
       createElement(ResultsView, {
         result: makeResults(),
@@ -2206,7 +1750,6 @@ describe("Accessibility — ResultsView tabs", () => {
   });
 
   test("clicking tab switches aria-selected and hidden", async () => {
-    resetBody();
     const { container } = render(
       createElement(ResultsView, {
         result: makeResults(),
@@ -2234,7 +1777,6 @@ describe("Accessibility — ResultsView tabs", () => {
   });
 
   test("ArrowRight switches to next tab and focuses it", async () => {
-    resetBody();
     const { container } = render(
       createElement(ResultsView, {
         result: makeResults(),
@@ -2255,7 +1797,6 @@ describe("Accessibility — ResultsView tabs", () => {
   });
 
   test("ArrowLeft on second tab wraps to first tab", async () => {
-    resetBody();
     const { container } = render(
       createElement(ResultsView, {
         result: makeResults(),

@@ -28,7 +28,7 @@ interface RxNavDrugGroup {
 const RXNAV_BASE = "https://rxnav.nlm.nih.gov/REST";
 const FDA_BASE = "https://api.fda.gov";
 export const FDA_LABEL_LIMITATION =
-  "FDA label-text matching is supporting evidence only. Absence of a literal drug mention is not proof that no interaction exists and is not comprehensive clinical clearance.";
+  "FDA label-text matching is supporting evidence only. Absence of a literal drug mention is not proof that no interaction exists and is not comprehensive clinical clearance." as const;
 
 async function fetchJSON(
   url: string,
@@ -340,27 +340,7 @@ export const drugLookupTool = createTool({
     }),
     errorResultSchema,
   ]),
-  execute: async ({
-    drugName,
-  }): Promise<
-    ToolResult<{
-      rxcui?: string;
-      name?: string;
-      synonym?: string;
-      drugGroup?: {
-        name: string | null;
-        conceptGroup?: Array<{
-          tty: string;
-          conceptProperties?: Array<{
-            rxcui: string;
-            name: string;
-            synonym?: string;
-            tty: string;
-          }>;
-        }>;
-      };
-    }>
-  > => {
+  execute: async ({ drugName }) => {
     try {
       const url = `${RXNAV_BASE}/drugs.json?name=${encodeURIComponent(drugName)}`;
       const result = await fetchJSON(url);
@@ -420,7 +400,7 @@ export const drugInteractionTool = createTool({
     }),
     errorResultSchema,
   ]),
-  execute: async ({ drugNames }): Promise<ToolResult<DrugInteractionData>> => {
+  execute: async ({ drugNames }) => {
     try {
       const interactions: DrugInteractionData["interactions"] = [];
       const identityCache = new Map<string, Promise<DrugIdentityOutcome>>();
@@ -603,7 +583,7 @@ export const drugInteractionTool = createTool({
           checks,
           interactions: deduped,
           source: {
-            name: "OpenFDA Drug Labels",
+            name: "OpenFDA Drug Labels" as const,
             limitation: FDA_LABEL_LIMITATION,
           },
         },
@@ -649,9 +629,7 @@ export const drugSpellingTool = createTool({
     }),
     errorResultSchema,
   ]),
-  execute: async ({
-    drugName,
-  }): Promise<ToolResult<{ suggestions: string[] }>> => {
+  execute: async ({ drugName }) => {
     try {
       const url = `${RXNAV_BASE}/spellingsuggestions.json?name=${encodeURIComponent(drugName)}`;
       const result = await fetchJSON(url);

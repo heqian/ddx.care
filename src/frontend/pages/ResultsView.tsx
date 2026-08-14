@@ -21,10 +21,7 @@ interface ResultsViewProps {
 
 type Tab = "diagnoses" | "consult";
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: "diagnoses", label: "Diagnoses" },
-  { key: "consult", label: "Full Report" },
-];
+const TABS: Tab[] = ["diagnoses", "consult"];
 
 export function ResultsView({
   result,
@@ -187,7 +184,7 @@ function AvailableResultsView({
       }
       if (nextIndex !== null) {
         e.preventDefault();
-        selectTab(TABS[nextIndex].key);
+        selectTab(TABS[nextIndex]);
       }
     },
     [selectTab],

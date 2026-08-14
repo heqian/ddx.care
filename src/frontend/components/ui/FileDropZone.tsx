@@ -3,29 +3,18 @@ import { DocumentArrowUpIcon } from "@heroicons/react/24/outline";
 
 interface FileDropZoneProps {
   onFileContent: (content: string) => void;
-  accept?: string;
   label: string;
-  className?: string;
 }
 
-export function FileDropZone({
-  onFileContent,
-  accept = ".txt,.csv",
-  label,
-  className = "",
-}: FileDropZoneProps) {
+export function FileDropZone({ onFileContent, label }: FileDropZoneProps) {
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const helpId = `fdz-help-${label.replace(/\s+/g, "-").toLowerCase()}`;
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
     setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => {
-      onFileContent(reader.result as string);
-    };
-    reader.readAsText(file);
+    onFileContent(await file.text());
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -65,12 +54,12 @@ export function FileDropZone({
         dragging
           ? "border-primary bg-blue-50 dark:bg-blue-900/20"
           : "border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500"
-      } ${className}`}
+      }`}
     >
       <input
         ref={inputRef}
         type="file"
-        accept={accept}
+        accept=".txt,.csv"
         onChange={handleChange}
         className="hidden"
         tabIndex={-1}
@@ -86,7 +75,7 @@ export function FileDropZone({
         <div>
           <p className="text-sm text-slate-600 dark:text-slate-300">{label}</p>
           <p id={helpId} className="text-xs text-slate-400 mt-1">
-            Drop a file or click to browse ({accept})
+            Drop a file or click to browse (.txt,.csv)
           </p>
         </div>
       )}

@@ -167,25 +167,3 @@ export function getToolsForSpecialist(specialistId: SpecialistId): ToolsInput {
   }
   return tools;
 }
-
-export function getAllTools(): ToolsInput {
-  return {
-    "drug-lookup": drugLookupTool,
-    "drug-interaction": drugInteractionTool,
-    "drug-labeling": drugLabelingTool,
-    "adverse-events": adverseEventsTool,
-    "drug-recall": drugRecallTool,
-    "substance-toxicology": substanceToxicologyTool,
-    "drug-shortages": drugShortagesTool,
-    "food-adverse-events": foodAdverseEventsTool,
-    "device-adverse-events": deviceAdverseEventsTool,
-    "clinical-trials-search": clinicalTrialsSearchTool,
-    "medlineplus-search": medlinePlusSearchTool,
-    "drug-spelling-suggestion": drugSpellingTool,
-    "rare-disease-search": rareDiseaseSearchTool,
-    "rare-disease-genes": rareDiseaseGenesTool,
-    "rare-disease-phenotypes": rareDiseasePhenotypesTool,
-    "hpo-term-search": hpoTermSearchTool,
-    "loinc-test-lookup": loincTestLookupTool,
-  };
-}

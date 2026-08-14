@@ -14,7 +14,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
-import { Modal } from "../components/ui/Modal";
 import { FileDropZone } from "../components/ui/FileDropZone";
 import { submitDiagnosis } from "../api/client";
 import type { DiagnoseRequest } from "../api/types";

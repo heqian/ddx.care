@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const podiatrist = createSpecialistAgent({
   id: "podiatrist",
-  name: "Podiatrist",
-  description:
-    "Evaluates foot and ankle conditions including diabetic foot complications, foot deformities, heel pain, nail disorders, and gait abnormalities. Use when foot/ankle pathology or diabetic foot complications are present.",
   instructions: `You are a board-certified Podiatrist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

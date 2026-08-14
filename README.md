@@ -19,7 +19,7 @@ AI-powered differential diagnosis system that simulates a panel of medical speci
 ### Frontend (`src/frontend/`)
 - **React 19** with Tailwind CSS v4
 - **Real-time Updates** — WebSocket progress streaming with fallback to HTTP polling
-- **Context** — `ThemeContext` for light/dark mode support
+- **Theme** — persistent light/dark mode support in the application header
 - Built by Bun's bundler via HTML imports — no Vite.
 
 ### Server (`index.ts`)
@@ -41,7 +41,7 @@ The app runs on `http://localhost:3000` by default.
 | Command | Description |
 |---------|-------------|
 | `bun run dev` | Start dev server with HMR |
-| `bun run build` | Bundle frontend to `./dist` |
+| `bun run build` | Bundle frontend to `./dist` via `Bun.build` with the Tailwind plugin |
 | `bun run typecheck` | TypeScript type checking (`tsc --noEmit`) |
 | `bun run lint` | Run Biome linter on all files |
 | `bun run test` | Run backend unit tests |
@@ -50,7 +50,6 @@ The app runs on `http://localhost:3000` by default.
 | `bun run test:all` | Run all tests (unit, frontend, and e2e) |
 | `bun run test:rest-token` | Run REST token integration tests (requires `WS_TOKEN_SECRET`) |
 | `bun run test:ws-ticket` | Run WebSocket ticket integration tests (requires `WS_TOKEN_SECRET`) |
-| `bun run test:integration` | Run integration tests against live APIs |
 
 ## Environment Variables
 
@@ -80,15 +79,15 @@ See [`.env.example`](.env.example) for a template.
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/v1/diagnose` | Submit a diagnostic case (validates input size up to 1MB max payload). Returns `202` with `jobId`, `token`, and `wsTicket`. |
-| `GET` | `/v1/status/:jobId` | Poll job status. Send the token via `Authorization: Bearer <token>` (query `?token=` accepted as a dev fallback). Response includes `Cache-Control: no-store, private`. |
-| `DELETE` | `/v1/diagnose/:jobId` | Cancel a running job. Send the token via `Authorization: Bearer <token>`. |
+| `GET` | `/v1/status/:jobId` | Poll job status. Send the token via `X-Job-Token: <token>` (query `?token=` accepted as a dev fallback). Response includes `Cache-Control: no-store, private`. |
+| `DELETE` | `/v1/diagnose/:jobId` | Cancel a running job. Send the token via `X-Job-Token: <token>`. |
 | `GET` | `/v1/health` | Health check (uptime, active workflows, DB connectivity) |
 | `GET` | `/v1/agents` | List available specialist agents |
 | `GET` | `/ws?jobId=...&ticket=...` | WebSocket for real-time progress streaming. Prefers a short-lived `ticket` (120s TTL) over the long-lived `token` for a bounded migration period. |
 
 ### Capability Transport
 
-Job credentials (HMAC tokens) travel via `Authorization: Bearer <token>` headers for REST endpoints and short-lived `wsTicket` query parameters (120s TTL) for WebSocket upgrades — never in URL path segments. The token format is `<expiryMs>.<hmacHex>` where `expiry = now + JOB_TTL_MS`, so tokens do not outlive the data they protect. The frontend uses `history.replaceState` for capability-bearing routes so credential URLs are not retained in browser history. The Caddyfile redacts `token` and `ticket` query parameters from access logs.
+Job credentials (HMAC tokens) travel via `X-Job-Token` headers for REST endpoints and short-lived `wsTicket` query parameters (120s TTL) for WebSocket upgrades — never in URL path segments. Keeping the job token out of `Authorization` allows Caddy's HTTP Basic credentials to coexist with application authentication. The token format is `<expiryMs>.<hmacHex>` where `expiry = now + JOB_TTL_MS`, so tokens do not outlive the data they protect. The frontend uses `history.replaceState` for capability-bearing routes so credential URLs are not retained in browser history. The Caddyfile removes `X-Job-Token` and redacts `token` and `ticket` query parameters from access logs.
 
 ### Report Outcome Contract
 

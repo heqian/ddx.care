@@ -16,76 +16,51 @@ import {
 import { withRetry } from "../src/backend/workflows/diagnostic-workflow";
 
 describe("Error class hierarchy", () => {
-  test("AppError is base of hierarchy", () => {
-    const err = new AppError("test");
-    expect(err instanceof AppError).toBe(true);
-    expect(err instanceof Error).toBe(true);
-    expect(err.message).toBe("test");
+  const hierarchy = [
+    [new RetriableError("retry me"), RetriableError, AppError],
+    [new LLMTimeoutError("timeout"), LLMTimeoutError, RetriableError],
+    [new APITimeoutError("api timeout"), APITimeoutError, RetriableError],
+    [new RateLimitError("rate limited"), RateLimitError, RetriableError],
+    [new NonRetriableError("don't retry"), NonRetriableError, AppError],
+    [
+      new SchemaValidationError("validation failed"),
+      SchemaValidationError,
+      NonRetriableError,
+    ],
+    [
+      new PermanentAPIError("not found", 404),
+      PermanentAPIError,
+      NonRetriableError,
+    ],
+    [new ToolError("drug-interaction", "tool failed"), ToolError, AppError],
+  ] as const;
+
+  test.each(
+    hierarchy,
+  )("%p has the expected hierarchy", (error, type, parent) => {
+    expect(error).toBeInstanceOf(type);
+    expect(error).toBeInstanceOf(parent);
+    expect(error).toBeInstanceOf(AppError);
+    expect(error.name).toBe(type.name);
+  });
+
+  test("AppError preserves message and cause", () => {
+    const cause = new Error("original");
+    const err = new AppError("wrapped", cause);
+    expect(err).toBeInstanceOf(Error);
     expect(err.name).toBe("AppError");
+    expect(err.message).toBe("wrapped");
+    expect(err.cause).toBe(cause);
   });
 
-  test("RetriableError extends AppError", () => {
-    const err = new RetriableError("retry me");
-    expect(err instanceof RetriableError).toBe(true);
-    expect(err instanceof AppError).toBe(true);
-    expect(err instanceof Error).toBe(true);
-    expect(err.name).toBe("RetriableError");
+  test("PermanentAPIError preserves statusCode", () => {
+    expect(new PermanentAPIError("not found", 404).statusCode).toBe(404);
   });
 
-  test("LLMTimeoutError extends RetriableError", () => {
-    const err = new LLMTimeoutError("timeout");
-    expect(err instanceof LLMTimeoutError).toBe(true);
-    expect(err instanceof RetriableError).toBe(true);
-    expect(err instanceof AppError).toBe(true);
-    expect(err.name).toBe("LLMTimeoutError");
-  });
-
-  test("APITimeoutError extends RetriableError", () => {
-    const err = new APITimeoutError("api timeout");
-    expect(err instanceof APITimeoutError).toBe(true);
-    expect(err instanceof RetriableError).toBe(true);
-    expect(err instanceof AppError).toBe(true);
-    expect(err.name).toBe("APITimeoutError");
-  });
-
-  test("RateLimitError extends RetriableError", () => {
-    const err = new RateLimitError("rate limited");
-    expect(err instanceof RateLimitError).toBe(true);
-    expect(err instanceof RetriableError).toBe(true);
-    expect(err instanceof AppError).toBe(true);
-    expect(err.name).toBe("RateLimitError");
-  });
-
-  test("NonRetriableError extends AppError", () => {
-    const err = new NonRetriableError("don't retry");
-    expect(err instanceof NonRetriableError).toBe(true);
-    expect(err instanceof AppError).toBe(true);
-    expect(err.name).toBe("NonRetriableError");
-  });
-
-  test("SchemaValidationError extends NonRetriableError", () => {
-    const err = new SchemaValidationError("validation failed");
-    expect(err instanceof SchemaValidationError).toBe(true);
-    expect(err instanceof NonRetriableError).toBe(true);
-    expect(err instanceof AppError).toBe(true);
-    expect(err.name).toBe("SchemaValidationError");
-  });
-
-  test("PermanentAPIError extends NonRetriableError", () => {
-    const err = new PermanentAPIError("not found", 404);
-    expect(err instanceof PermanentAPIError).toBe(true);
-    expect(err instanceof NonRetriableError).toBe(true);
-    expect(err instanceof AppError).toBe(true);
-    expect(err.name).toBe("PermanentAPIError");
-    expect(err.statusCode).toBe(404);
-  });
-
-  test("ToolError extends AppError", () => {
+  test("ToolError preserves fields and cause", () => {
     const cause = new Error("underlying");
     const err = new ToolError("drug-interaction", "tool failed", cause);
-    expect(err instanceof ToolError).toBe(true);
-    expect(err instanceof AppError).toBe(true);
-    expect(err.name).toBe("ToolError");
+    expect(err.message).toBe("tool failed");
     expect(err.toolName).toBe("drug-interaction");
     expect(err.cause).toBe(cause);
   });
@@ -95,12 +70,6 @@ describe("Error class hierarchy", () => {
     const nonRetriable = new NonRetriableError("nr");
     expect(retriable instanceof NonRetriableError).toBe(false);
     expect(nonRetriable instanceof RetriableError).toBe(false);
-  });
-
-  test("cause is preserved", () => {
-    const cause = new Error("original");
-    const err = new AppError("wrapped", cause);
-    expect(err.cause).toBe(cause);
   });
 });
 

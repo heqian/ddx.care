@@ -112,18 +112,6 @@ export function removeJobCredential(jobId: string): void {
   saveStore(store);
 }
 
-export function removeExpiredJobCredentials(now = Date.now()): void {
-  const store = loadStore();
-  let changed = false;
-  for (const [jobId, credential] of Object.entries(store.jobs)) {
-    if (credential.expiresAt <= now) {
-      delete store.jobs[jobId];
-      changed = true;
-    }
-  }
-  if (changed) saveStore(store);
-}
-
 export function clearJobCredentials(): void {
   try {
     sessionStorage.removeItem(JOB_CREDENTIALS_STORAGE_KEY);

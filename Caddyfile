@@ -1,54 +1,31 @@
-# Caddyfile — ddx.care production configuration
-#
-# Caddy automatically obtains and renews TLS certificates via ACME/Let's Encrypt.
-#
-# Usage:
-#   caddy run --config Caddyfile
-#
-# Prerequisites:
-#   - Port 80 and 443 open and routable to this host
-#   - DNS A record pointing your domain to this host's public IP
-#   - The ddx.care app running on localhost:3000 (set PORT=3000 in .env)
-
 ddx.care {
-  # Basic authentication — password hash loaded from environment variable.
-  # Generate a hash:  caddy hash-password --plaintext 'your-password'
-  # Set it:          export BASIC_AUTH_HASH='$2b$10$...'
-  basic_auth {
-    admin {$BASIC_AUTH_HASH}
-  }
+	@protected not method OPTIONS
+	basic_auth @protected {
+		admin {$BASIC_AUTH_HASH}
+	}
 
-  # HTTP Strict Transport Security — 2-year max-age with preload
-  header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+	header Strict-Transport-Security "max-age=63072000"
 
-  # Security headers applied to all responses (including HTML pages served by Bun's
-  # HTML bundle routes, which bypass the app's corsHeaders() function).
-  header {
-    Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
-    X-Content-Type-Options "nosniff"
-    X-Frame-Options "DENY"
-  }
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' wss://ddx.care; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
 
-  reverse_proxy localhost:3000 {
-    # Forward the client's real IP to the backend app
-    header_up X-Real-IP {remote_host}
-  }
+	reverse_proxy localhost:3000 {
+		header_up X-Real-IP {remote_host}
+	}
 
-  # Compress responses
-  encode gzip
+	encode gzip
 
-  # Structured JSON logging for production log aggregation, with query
-  # parameter redaction so job capabilities (token, ticket) never appear in
-  # access logs. The frontend sends credentials via the Authorization header
-  # and short-lived wsTicket; this redaction is defense-in-depth for the
-  # query-param fallback during migration and for any non-browser clients.
-  log {
-    format filter {
-      wrap json
-      request>uri query {
-        replace token REDACTED
-        replace ticket REDACTED
-      }
-    }
-  }
+	log {
+		format filter {
+			wrap json
+			request>headers>X-Job-Token delete
+			request>uri query {
+				replace token REDACTED
+				replace ticket REDACTED
+			}
+		}
+	}
 }

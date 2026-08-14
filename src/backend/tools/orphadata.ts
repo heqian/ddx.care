@@ -5,7 +5,6 @@ import {
   getDiseaseGenes,
   getDiseasePhenotypes,
 } from "../orphadata-cache";
-import type { ToolResult } from "./utils/types";
 
 export const rareDiseaseSearchTool = createTool({
   id: "rare-disease-search",
@@ -44,16 +43,7 @@ export const rareDiseaseSearchTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    query,
-    maxResults,
-  }): Promise<
-    ToolResult<{
-      results: Array<{ orphacode: number; name: string }>;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ query, maxResults }) => {
     try {
       const diseases = searchDiseases(query, maxResults ?? 10);
       if (diseases.length === 0) {
@@ -111,20 +101,7 @@ export const rareDiseaseGenesTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    orphacode,
-  }): Promise<
-    ToolResult<{
-      results: Array<{
-        geneSymbol: string;
-        geneName: string;
-        associationType: string;
-        source?: string | null;
-      }>;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ orphacode }) => {
     try {
       const genes = await getDiseaseGenes(orphacode);
       if (genes.length === 0) {
@@ -181,19 +158,7 @@ export const rareDiseasePhenotypesTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    orphacode,
-  }): Promise<
-    ToolResult<{
-      results: Array<{
-        hpoId: string;
-        phenotypeName: string;
-        frequency?: string | null;
-      }>;
-      noResults?: true;
-      message?: string;
-    }>
-  > => {
+  execute: async ({ orphacode }) => {
     try {
       const phenotypes = await getDiseasePhenotypes(orphacode);
       if (phenotypes.length === 0) {

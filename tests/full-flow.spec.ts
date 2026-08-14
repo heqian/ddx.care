@@ -580,7 +580,7 @@ test.describe("Token-protected flows (WS_TOKEN_SECRET set)", () => {
     await acceptConsent(page);
   });
 
-  test("waiting page refresh keeps the job accessible via Authorization header", async ({
+  test("waiting page refresh keeps the job accessible via X-Job-Token", async ({
     page,
   }) => {
     // Submit a case and land in the waiting room.
@@ -594,7 +594,7 @@ test.describe("Token-protected flows (WS_TOKEN_SECRET set)", () => {
     expect(jobId).toBeTruthy();
 
     // Refresh the waiting page. The credential is in sessionStorage, so the
-    // app should recover the job via the Authorization header (not the URL).
+    // app should recover the job via the X-Job-Token header (not the URL).
     await page.reload();
 
     // The waiting room (or results, if the mock completed during reload)
@@ -689,7 +689,7 @@ test.describe("Token-protected flows (WS_TOKEN_SECRET set)", () => {
     expect(page.url()).not.toMatch(/[?&]token=/);
   });
 
-  test("status endpoint requires Authorization header — bare URL returns 403", async ({
+  test("status endpoint requires X-Job-Token — bare URL returns 403", async ({
     request,
   }) => {
     // Create a job via the API. The response includes the token directly.
@@ -707,16 +707,16 @@ test.describe("Token-protected flows (WS_TOKEN_SECRET set)", () => {
       token: string;
     };
 
-    // Bare URL without Authorization header → 403 (token-protected server).
+    // Bare URL without X-Job-Token → 403 (token-protected server).
     const bareRes = await request.get(
       `${baseUrl}/v1/status/${createBody.jobId}`,
     );
     expect(bareRes.status()).toBe(403);
 
-    // With Authorization header → 200.
+    // With X-Job-Token → 200.
     const authedRes = await request.get(
       `${baseUrl}/v1/status/${createBody.jobId}`,
-      { headers: { Authorization: `Bearer ${createBody.token}` } },
+      { headers: { "X-Job-Token": createBody.token } },
     );
     expect(authedRes.status()).toBe(200);
   });
@@ -737,7 +737,7 @@ test.describe("Token-protected flows (WS_TOKEN_SECRET set)", () => {
       token: string;
     };
     const statusRes = await request.get(`${baseUrl}/v1/status/${jobId}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { "X-Job-Token": token },
     });
     expect(statusRes.status()).toBe(200);
     expect(statusRes.headers()["cache-control"]).toBe("no-store, private");

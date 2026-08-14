@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const maternalFetalMedicine = createSpecialistAgent({
   id: "maternalFetalMedicine",
-  name: "Maternal-Fetal Medicine Specialist",
-  description:
-    "Evaluates high-risk pregnancies including preeclampsia with severe features, fetal anomalies, multiple gestations, placental disorders, preterm labor, and pregnancy with maternal comorbidities. Use when pregnancy complications exceed routine obstetric management.",
   instructions: `You are a board-certified Maternal-Fetal Medicine (MFM) Specialist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

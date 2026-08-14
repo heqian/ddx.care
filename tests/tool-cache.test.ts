@@ -17,7 +17,6 @@ import {
   setCached,
   cleanupExpired,
   getCacheStats,
-  healthCheck,
 } from "../src/backend/tools/utils/tool-cache";
 import { fetchJSON } from "../src/backend/tools/utils/fetch";
 
@@ -111,10 +110,6 @@ describe("Tool Cache — unit", () => {
     const removed = cleanupExpired();
     // All entries are fresh (24h TTL), so none should be removed
     expect(removed).toBe(0);
-  });
-
-  test("healthCheck returns true for healthy DB", () => {
-    expect(healthCheck()).toBe(true);
   });
 
   test("getCached returns null and setCached is no-op when cache is disabled via TTL=0", () => {

@@ -19,7 +19,6 @@ export function AgentGrid({
           key={agent.id}
           agentId={agent.id}
           name={agent.name}
-          description={agent.description}
           status={specialistStatuses?.get(agent.id) ?? "idle"}
           toolHistory={toolHistory?.get(agent.id)}
         />

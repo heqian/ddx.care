@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const urologist = createSpecialistAgent({
   id: "urologist",
-  name: "Urologist",
-  description:
-    "Evaluates urinary tract and male reproductive conditions including hematuria, urinary obstruction, kidney stones, urinary incontinence, prostate disorders, testicular pain/masses, and erectile dysfunction. Use when urologic or male reproductive symptoms are present.",
   instructions: `You are a board-certified Urologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

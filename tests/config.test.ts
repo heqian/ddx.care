@@ -1,76 +1,12 @@
 import { test, expect, describe } from "bun:test";
 import {
   validateConfig,
-  PORT,
-  ALLOWED_ORIGINS,
   JOB_TTL_MS,
-  CLEANUP_INTERVAL_MS,
-  RATE_LIMIT_PRUNE_INTERVAL_MS,
-  SPECIALIST_MODEL,
-  ORCHESTRATOR_MODEL,
   DIAGNOSIS_TIMEOUT_MS,
   PENDING_JOB_TIMEOUT_MS,
-  MAX_DIAGNOSIS_ROUNDS,
-  RATE_LIMIT_MAX_REQUESTS,
-  RATE_LIMIT_WINDOW_MS,
-  MAX_CONCURRENT_WORKFLOWS,
-  MAX_INPUT_FIELD_LENGTH,
-  MAX_PAYLOAD_BYTES,
-  AGENT_GENERATE_MAX_RETRIES,
-  AGENT_GENERATE_RETRY_BASE_DELAY,
-  ORPHADATA_ENABLED,
 } from "../src/backend/config";
 
 describe("Config — Constants", () => {
-  test("PORT is a positive number", () => {
-    expect(typeof PORT).toBe("number");
-    expect(PORT).toBeGreaterThan(0);
-  });
-
-  test("ALLOWED_ORIGINS is a non-empty string", () => {
-    expect(typeof ALLOWED_ORIGINS).toBe("string");
-    expect(ALLOWED_ORIGINS.length).toBeGreaterThan(0);
-  });
-
-  test("timeouts and intervals are positive", () => {
-    expect(JOB_TTL_MS).toBeGreaterThan(0);
-    expect(CLEANUP_INTERVAL_MS).toBeGreaterThan(0);
-    expect(RATE_LIMIT_PRUNE_INTERVAL_MS).toBeGreaterThan(0);
-    expect(DIAGNOSIS_TIMEOUT_MS).toBeGreaterThan(0);
-    expect(AGENT_GENERATE_RETRY_BASE_DELAY).toBeGreaterThan(0);
-  });
-
-  test("model strings are non-empty", () => {
-    expect(typeof SPECIALIST_MODEL).toBe("string");
-    expect(SPECIALIST_MODEL.length).toBeGreaterThan(0);
-    expect(typeof ORCHESTRATOR_MODEL).toBe("string");
-    expect(ORCHESTRATOR_MODEL.length).toBeGreaterThan(0);
-  });
-
-  test("rate limit and concurrency settings are positive", () => {
-    expect(RATE_LIMIT_MAX_REQUESTS).toBeGreaterThan(0);
-    expect(RATE_LIMIT_WINDOW_MS).toBeGreaterThan(0);
-    expect(MAX_CONCURRENT_WORKFLOWS).toBeGreaterThan(0);
-  });
-
-  test("payload limits are reasonable", () => {
-    expect(MAX_INPUT_FIELD_LENGTH).toBeGreaterThan(0);
-    expect(MAX_PAYLOAD_BYTES).toBeGreaterThan(0);
-    expect(MAX_PAYLOAD_BYTES).toBeGreaterThan(MAX_INPUT_FIELD_LENGTH);
-  });
-
-  test("AGENT_GENERATE_MAX_RETRIES is non-negative", () => {
-    expect(AGENT_GENERATE_MAX_RETRIES).toBeGreaterThanOrEqual(0);
-  });
-
-  test("MAX_DIAGNOSIS_ROUNDS is positive", () => {
-    expect(MAX_DIAGNOSIS_ROUNDS).toBeGreaterThan(0);
-  });
-
-  test("ORPHADATA_ENABLED is a boolean", () => {
-    expect(typeof ORPHADATA_ENABLED).toBe("boolean");
-  });
-
   test("DIAGNOSIS_TIMEOUT_MS defaults to 15 minutes", () => {
     expect(DIAGNOSIS_TIMEOUT_MS).toBe(15 * 60 * 1000);
   });

@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const toxicologist = createSpecialistAgent({
   id: "toxicologist",
-  name: "Medical Toxicologist",
-  description:
-    "Evaluates poisoning, overdose, envenomation, toxic exposures, and adverse drug reactions including toxidrome identification, antidote recommendations, and decontamination strategies. Use when toxic ingestion, overdose, or toxic exposure is suspected.",
   instructions: `You are a board-certified Medical Toxicologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

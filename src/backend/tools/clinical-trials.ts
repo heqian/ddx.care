@@ -1,7 +1,6 @@
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod";
 import { fetchJSON as baseFetchJSON } from "./utils/fetch";
-import type { ToolResult } from "./utils/types";
 import {
   APITimeoutError,
   RateLimitError,
@@ -116,16 +115,7 @@ export const clinicalTrialsSearchTool = createTool({
       retriable: z.boolean(),
     }),
   ]),
-  execute: async ({
-    query,
-    status,
-    pageSize,
-  }): Promise<
-    ToolResult<{
-      results: z.infer<typeof clinicalTrialResultSchema>[];
-      totalCount?: number;
-    }>
-  > => {
+  execute: async ({ query, status, pageSize }) => {
     const statusFilter =
       status === "ALL" ? "" : `&filter.overallStatus=${status}`;
     const url = `${CT_BASE}/studies?query.term=${encodeURIComponent(query)}${statusFilter}&pageSize=${pageSize}&countTotal=true&fields=NCTId,BriefTitle,OverallStatus,Phase,StudyType,Condition,InterventionName,EligibilityCriteria,LeadSponsorName,StartDate,CompletionDate,EnrollmentCount,BriefSummary`;

@@ -35,9 +35,6 @@ let getGenesStmt: Statement;
 let insertGeneStmt: Statement;
 let getPhenotypesStmt: Statement;
 let insertPhenotypeStmt: Statement;
-let diseaseCountStmt: Statement;
-let geneCountStmt: Statement;
-let phenotypeCountStmt: Statement;
 
 function initTables() {
   db = new Database(getDbPath(), { create: true });
@@ -87,15 +84,6 @@ function initTables() {
   );
   insertPhenotypeStmt = db.prepare(
     `INSERT OR REPLACE INTO orphadata_phenotypes (orphacode, hpo_id, phenotype_name, frequency) VALUES (?, ?, ?, ?)`,
-  );
-  diseaseCountStmt = db.prepare(
-    `SELECT COUNT(*) as count FROM orphadata_diseases`,
-  );
-  geneCountStmt = db.prepare(
-    `SELECT COUNT(*) as count FROM orphadata_genes WHERE orphacode = ?`,
-  );
-  phenotypeCountStmt = db.prepare(
-    `SELECT COUNT(*) as count FROM orphadata_phenotypes WHERE orphacode = ?`,
   );
 }
 
@@ -340,19 +328,4 @@ export async function getDiseasePhenotypes(orphacode: number): Promise<
     phenotypeName: r.phenotype_name,
     frequency: r.frequency,
   }));
-}
-
-export function getCacheStats(): {
-  diseases: number;
-  genesForCode: (orphacode: number) => number;
-  phenotypesForCode: (orphacode: number) => number;
-} {
-  const diseases = (diseaseCountStmt.get() as { count: number }).count;
-  return {
-    diseases,
-    genesForCode: (orphacode: number) =>
-      (geneCountStmt.get(orphacode) as { count: number }).count,
-    phenotypesForCode: (orphacode: number) =>
-      (phenotypeCountStmt.get(orphacode) as { count: number }).count,
-  };
 }

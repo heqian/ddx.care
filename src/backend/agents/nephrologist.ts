@@ -2,9 +2,6 @@ import { createSpecialistAgent } from "./factory";
 
 export const nephrologist = createSpecialistAgent({
   id: "nephrologist",
-  name: "Nephrologist",
-  description:
-    "Evaluates kidney conditions including acute kidney injury, chronic kidney disease, electrolyte imbalances, acid-base disorders, abnormal urinalysis, proteinuria, hematuria, and hypertension of renal origin. Use when renal or electrolyte abnormalities are present.",
   instructions: `You are a board-certified Nephrologist with 20 years of clinical experience. You are part of a differential diagnosis panel consulted on a patient case.
 
 ## Your Role

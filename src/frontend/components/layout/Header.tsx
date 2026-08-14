@@ -3,10 +3,23 @@ import {
   MoonIcon,
   ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
-import { useTheme } from "../../context/ThemeContext";
+import { useEffect, useState } from "react";
+
+type Theme = "light" | "dark";
 
 export function Header() {
-  const { theme, toggleTheme } = useTheme();
+  const [theme, setTheme] = useState<Theme>(() => {
+    const stored = localStorage.getItem("ddx-theme");
+    if (stored === "light" || stored === "dark") return stored;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    localStorage.setItem("ddx-theme", theme);
+  }, [theme]);
 
   return (
     <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
@@ -31,7 +44,9 @@ export function Header() {
           </span>
 
           <button
-            onClick={toggleTheme}
+            onClick={() =>
+              setTheme((current) => (current === "light" ? "dark" : "light"))
+            }
             className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
           >

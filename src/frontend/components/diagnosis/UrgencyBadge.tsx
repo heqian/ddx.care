@@ -1,10 +1,8 @@
 interface UrgencyBadgeProps {
-  urgency: "emergent" | "urgent" | "routine" | null;
+  urgency: "emergent" | "urgent" | "routine";
 }
 
 export function UrgencyBadge({ urgency }: UrgencyBadgeProps) {
-  if (!urgency) return null;
-
   const styles = {
     emergent:
       "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800",
