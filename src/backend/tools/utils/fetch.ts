@@ -3,13 +3,23 @@ import {
   RateLimitError,
   PermanentAPIError,
 } from "../../utils/errors";
-import { getCached, setCached } from "./tool-cache";
+import { cacheKeyForUrl, getCached, setCached } from "./tool-cache";
 import { logger } from "../../utils/logger";
 
 export interface FetchJSONOptions extends RequestInit {
   timeoutMs?: number;
   ignore404?: boolean;
   errorPrefix?: string;
+}
+
+/**
+ * Strip the query string from a URL before it enters an error message.
+ * Query parameters carry PHI-derived terms (drug names, conditions) and
+ * error messages flow into logs.
+ */
+function stripUrlQuery(url: string): string {
+  const queryIndex = url.indexOf("?");
+  return queryIndex === -1 ? url : url.slice(0, queryIndex);
 }
 
 async function fetchResponse(
@@ -52,7 +62,8 @@ async function fetchResponse(
     }
     if (timeoutSignal.aborted && !signal?.aborted) {
       throw new APITimeoutError(
-        `Request timeout after ${timeoutMs}ms for ${url}`,
+        // No raw URL here — queries carry PHI-derived search terms.
+        `Request timeout after ${timeoutMs}ms for ${stripUrlQuery(url)}`,
       );
     }
     throw error;
@@ -60,10 +71,11 @@ async function fetchResponse(
 }
 
 export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
-  // Check cache first — a hit skips the HTTP call
+  // Check cache first — a hit skips the HTTP call. Log the hashed cache key,
+  // never the URL: query parameters carry PHI-derived search terms.
   const cached = getCached(url);
   if (cached !== null) {
-    logger.info("tool_cache_hit", { url });
+    logger.info("tool_cache_hit", { key: cacheKeyForUrl(url) });
     return cached;
   }
 
@@ -85,7 +97,7 @@ export async function fetchJSON(url: string, options: FetchJSONOptions = {}) {
 export async function fetchText(url: string, options: FetchJSONOptions = {}) {
   const cached = getCached(url);
   if (cached !== null) {
-    logger.info("tool_cache_hit", { url });
+    logger.info("tool_cache_hit", { key: cacheKeyForUrl(url) });
     return cached as string;
   }
 

@@ -133,15 +133,18 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
       expect(res.status).toBe(200);
     });
 
-    test("valid token via query param still accepted (dev fallback)", async () => {
-      const { jobId, token } = await createJob("query fallback test");
+    test("valid token via query param is rejected (fallback removed)", async () => {
+      // The `?token=` query fallback was removed — the job token travels
+      // exclusively in the X-Job-Token header so it never lands in URLs,
+      // browser history, or intermediary logs.
+      const { jobId, token } = await createJob("query fallback removed test");
       const res = await fetch(`${BASE}/v1/status/${jobId}?token=${token}`);
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(403);
     });
 
-    test("X-Job-Token header takes precedence over query param", async () => {
+    test("query param is ignored when a valid header is present", async () => {
       const { jobId, token } = await createJob("precedence test");
-      // Valid header + invalid query — header must win
+      // Valid header + invalid query — the query param is never consulted
       const res = await fetch(`${BASE}/v1/status/${jobId}?token=invalid`, {
         headers: { "X-Job-Token": token },
       });
@@ -281,14 +284,12 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
   });
 
   describe("Malformed-Unicode token does not crash the server", () => {
-    test("token with multibyte Unicode in query param returns 403 (not 500)", async () => {
+    test("multibyte Unicode in query param returns 403 without reaching verification", async () => {
       const { jobId } = await createJob("malformed unicode query test");
-      // A token containing non-ASCII multibyte characters used to throw a
-      // RangeError inside timingSafeEqual because the Buffer byte length
-      // differed from the expected hex length. The fix requires exactly 64
-      // ASCII hex chars before any Buffer comparison. Fetch rejects multibyte
-      // values in request headers before sending, so exercise the query-param
-      // fallback here.
+      // The REST query-param fallback is removed, so a `?token=` value is
+      // never verified — the request is rejected for the missing header.
+      // (Multibyte handling inside verifyToken itself is covered by the
+      // unit tests at the bottom of this file.)
       const res = await fetch(
         `${BASE}/v1/status/${jobId}?token=${encodeURIComponent("\u{1F512}".repeat(20))}`,
       );
@@ -304,8 +305,6 @@ describe("REST token verification (integration with WS_TOKEN_SECRET)", () => {
 
     test("token with a dot-separated malformed payload returns 403 (not 500)", async () => {
       const { jobId } = await createJob("malformed payload test");
-      // A token that looks structured (has a dot) but has non-hex in the
-      // hmac part must be rejected without throwing.
       const res = await fetch(
         `${BASE}/v1/status/${jobId}?token=${encodeURIComponent("123.\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff")}`,
       );

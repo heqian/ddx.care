@@ -120,7 +120,7 @@ export async function limitConcurrency<T, R>(
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  maxRetries = AGENT_GENERATE_MAX_RETRIES,
+  maxAttempts = AGENT_GENERATE_MAX_RETRIES,
   baseDelay = AGENT_GENERATE_RETRY_BASE_DELAY,
   abortSignal?: AbortSignal,
   shouldRetry?: (error: unknown) => boolean,
@@ -143,7 +143,7 @@ export async function withRetry<T>(
         throw e;
       }
       attempt++;
-      if (attempt >= maxRetries) throw e;
+      if (attempt >= maxAttempts) throw e;
       const delay =
         baseDelay * Math.pow(2, attempt - 1) * (0.5 + Math.random());
 
@@ -202,6 +202,17 @@ export function buildPatientSummary(fields: {
   ].join("\n");
 }
 
+// Accept any casing ("emergent", "EMERGENT") by normalizing to the canonical
+// form before enum validation. This avoids burning a correction attempt on a
+// report whose only flaw is urgency casing.
+const urgencySchema = z.preprocess(
+  (v) =>
+    typeof v === "string"
+      ? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase()
+      : v,
+  z.enum(["Emergent", "Urgent", "Routine"]),
+);
+
 export const diagnosisReportSchema = z.object({
   chiefComplaint: z.string(),
   patientSummary: z.string(),
@@ -215,7 +226,7 @@ export const diagnosisReportSchema = z.object({
     z.object({
       diagnosisName: z.string(),
       confidencePercentage: z.number().min(0).max(100),
-      urgency: z.enum(["Emergent", "Urgent", "Routine"]),
+      urgency: urgencySchema,
       rationale: z.string(),
       supportingEvidence: z.string(),
       contradictoryEvidence: z.string(),

@@ -30,6 +30,14 @@ const FDA_BASE = "https://api.fda.gov";
 export const FDA_LABEL_LIMITATION =
   "FDA label-text matching is supporting evidence only. Absence of a literal drug mention is not proof that no interaction exists and is not comprehensive clinical clearance." as const;
 
+// NOTE: RxNav used to expose a dedicated Drug-Drug Interaction API
+// (/REST/interaction/list.json?rxcuis=...), which would have been a better
+// data source than label-text matching. NLM discontinued it in January 2024
+// and there is no free public replacement (DrugBank/ONCHigh data is gone
+// with it). The FDA label-text approach below is the best remaining free
+// option — see the coverage/interactionStatus semantics that hedge its
+// limitations. Do not "migrate to the RxNav interaction API": it 404s.
+
 async function fetchJSON(
   url: string,
   options?: Parameters<typeof baseFetchJSON>[1],

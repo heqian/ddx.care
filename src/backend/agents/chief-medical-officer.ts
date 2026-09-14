@@ -12,7 +12,7 @@ export const chiefMedicalOfficer = new Agent({
     "drug-interaction": drugInteractionTool,
     "medlineplus-search": medlinePlusSearchTool,
   },
-  instructions: `You are the Chief Medical Officer (CMO) of a differential diagnosis panel. You orchestrate a team of 30+ specialist sub-agents to analyze complex patient cases and produce a comprehensive, ranked differential diagnosis report.
+  instructions: `You are the Chief Medical Officer (CMO) of a differential diagnosis panel. You orchestrate a team of 35 specialist sub-agents to analyze complex patient cases and produce a comprehensive, ranked differential diagnosis report.
 
 ## Your Responsibilities
 

@@ -1,6 +1,6 @@
 # ddx.care — AI-Powered Differential Diagnosis System
 
-Uses AI agents (via Mastra) to simulate a panel of medical specialists analyzing patient cases. 36 specialist agents consult on cases, orchestrated by a Chief Medical Officer (CMO) agent that synthesizes findings into a ranked differential diagnosis.
+Uses AI agents (via Mastra) to simulate a panel of medical specialists analyzing patient cases. 35 specialist agents consult on cases, orchestrated by a Chief Medical Officer (CMO) agent that synthesizes findings into a ranked differential diagnosis.
 
 ## Runtime & Tooling
 
@@ -48,12 +48,12 @@ Default to using Bun instead of Node.js. You should NEVER use Python or any Pyth
 ### Backend (`src/backend/`)
 
 - **Mastra framework** (`@mastra/core`) — agent orchestration, workflows, tool definitions
-- **AI Model**: Ollama Cloud (default: `ollama-cloud/gemma4:31b`), configured via `OLLAMA_API_KEY`. Other providers are supported — see [Mastra providers](https://mastra.ai/models/providers) for provider-specific API key env var names and supported models. Model string uses `provider/model-name` format as required by Mastra.
-- **Mastra instance** (`src/backend/index.ts`) — Registers all agents (CMO + 36 specialists) and the `diagnosticWorkflow` into a single `Mastra` instance.
+- **AI Model**: Ollama Cloud (default: `ollama-cloud/deepseek-v4.1-flash`), configured via `OLLAMA_API_KEY`. Other providers are supported — see [Mastra providers](https://mastra.ai/models/providers) for provider-specific API key env var names and supported models. Model string uses `provider/model-name` format as required by Mastra.
+- **Mastra instance** (`src/backend/index.ts`) — Registers all agents (CMO + 35 specialists) and the `diagnosticWorkflow` into a single `Mastra` instance.
 
 #### Agents (`src/backend/agents/`)
 
-36 specialist agents + 1 Chief Medical Officer (CMO), organized by category:
+35 specialist agents + 1 Chief Medical Officer (CMO), organized by category:
 
 - **Primary Care**: generalist, pediatrician, geriatrician
 - **Internal Medicine**: cardiologist, dermatologist, endocrinologist, gastroenterologist, hematologist, infectiologist, nephrologist, neurologist, oncologist, pulmonologist, rheumatologist
@@ -66,14 +66,14 @@ Default to using Bun instead of Node.js. You should NEVER use Python or any Pyth
 
 Key files:
 - `factory.ts` — `createSpecialistAgent()` factory function. Accepts `SpecialistConfig`, assigns model and tools per specialist.
-- `index.ts` — Exports `specialists` record (all 36), `SpecialistId` type, and `agentList` (metadata for `/v1/agents`).
+- `index.ts` — Exports `specialists` record (all 35), `SpecialistId` type, and `agentList` (metadata for `/v1/agents`).
 - `chief-medical-officer.ts` — CMO agent (`chiefMedicalOfficer`) with supervisor instructions for multi-round orchestration.
 
 #### Tools (`src/backend/tools/`)
 
 Medical API integrations, assigned per-specialist via `getToolsForSpecialist()` in `tools/index.ts`:
 
-- **Drug interactions via FDA labels** (`drug-interaction.ts`): `drugLookupTool`, `drugInteractionTool`, `drugSpellingTool`
+- **Drug interactions via FDA labels** (`drug-interaction.ts`): `drugLookupTool`, `drugInteractionTool`, `drugSpellingTool`. Interaction checking matches drug names against openFDA label text (RxNorm resolves names to RxCUIs; spelling suggestions come from RxNav). NLM discontinued its RxNav Drug-Drug Interaction API in January 2024 — there is no free public replacement, which is why label-text matching (with explicit coverage/limitation semantics) is used.
 - **OpenFDA** (`open-fda.ts`): `adverseEventsTool`, `drugLabelingTool`, `drugRecallTool`, `substanceToxicologyTool`
 - **ClinicalTrials.gov** (`clinical-trials.ts`): `clinicalTrialsSearchTool`
 - **MedlinePlus** (`medlineplus.ts`): `medlinePlusSearchTool`
@@ -100,17 +100,18 @@ Shared utilities:
 - `ws-token.ts` — Durable job capability + short-lived WebSocket ticket primitives using HMAC-SHA256 with `WS_TOKEN_SECRET`:
   - `generateToken(jobId, ttlMs?, now?)` signs `jobId.expiry` where `expiry = now + JOB_TTL_MS` (default). Returns `<expiryMs>.<hmacHex>`. Empty string in dev mode (empty `WS_TOKEN_SECRET`).
   - `verifyToken(jobId, token, now?)` parses `<expiryMs>.<hmacHex>`, rejects expired tokens, and uses a timing-safe comparison. Requires exactly 64 ASCII hex characters before any `Buffer` work to avoid the malformed-Unicode `RangeError`. Returns `true` in dev mode.
-  - `generateWsTicket(jobId, ttlSec?, now?)` and `verifyWsTicket(jobId, ticket, now?)` — short-lived (default 120s), stateless, single-use WebSocket upgrade ticket. Same `<expiryMs>.<hmacHex>` format but with an independent, shorter TTL so the two capabilities are not interchangeable.
+  - `generateWsTicket(jobId, ttlSec?, now?)` and `verifyWsTicket(jobId, ticket, now?)` — short-lived (default 120s), stateless WebSocket upgrade ticket. Same `<expiryMs>.<hmacHex>` format but with an independent, shorter TTL so the two capabilities are not interchangeable. Verification is stateless HMAC only — a ticket is replayable multiple times within its TTL (there is no server-side single-use ledger).
   When `WS_TOKEN_SECRET` is empty (dev mode), tokens/tickets are not required for WebSocket connections, REST endpoints (`GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId`), or the HTTP polling fallback.
 - `abort-controller-store.ts` — `Map<string, AbortController>` with exported `set`, `get`, `remove` functions. Stores abort controllers for running workflows, enabling cancellation via `DELETE /v1/diagnose/:jobId`.
 
 #### Tool Cache (`src/backend/tools/utils/tool-cache.ts`)
 
 - SQLite-backed URL→response cache for tool API calls. Avoids redundant HTTP requests when multiple specialists query the same endpoint during a diagnosis.
-- `initToolCache()` — Opens DB, creates table, prepares statements. Called on server startup.
+- **Cache keys are SHA-256 hashes of the URL, never the raw URL** — URLs carry PHI-derived terms (drug names, conditions) as query parameters. Nothing PHI-derived is stored at rest, and `tool_cache_hit` log lines contain only the hashed key. A legacy table with raw-URL keys is dropped once on startup (`tool_cache_legacy_schema_dropped`).
+- `initToolCache()` — Opens DB, migrates legacy schema, prepares statements, and purges entries that expired during downtime. Called on server startup.
 - `getCached(url)` — Returns cached response or `null` on miss/expiry. Increments hit/miss counters.
 - `setCached(url, response)` — Stores successful HTTP 200 response with timestamp.
-- `cleanupExpired()` — Deletes entries older than `TOOL_CACHE_TTL_MS`. Called every 10 minutes.
+- `cleanupExpired()` — Deletes entries older than `TOOL_CACHE_TTL_MS`. Called every 10 minutes (and once at startup).
 - `getCacheStats()` — Returns `{ entries, hits, misses }` for health endpoint.
 - Cache lookup happens in `fetchJSON` before the HTTP call — a cache hit skips the HTTP call entirely.
 - Only HTTP 200 responses are cached. Errors (429, 4xx, 5xx, timeout) and `ignore404` sentinel responses are never cached.
@@ -130,9 +131,9 @@ Shared utilities:
 
 All constants centralized here, read from environment variables with defaults:
 - `PORT` (3000), `ALLOWED_ORIGINS` (`*`), `TRUSTED_ORIGINS` (empty/dev-only), `JOB_TTL_MS` (60min, terminal jobs only), `PENDING_JOB_TIMEOUT_MS` (DIAGNOSIS_TIMEOUT_MS + 120s), `CLEANUP_INTERVAL_MS` (5min), `RATE_LIMIT_PRUNE_INTERVAL_MS` (10min)
-- `SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL` (both `ollama-cloud/gemma4:31b`)
+- `SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL` (both `ollama-cloud/deepseek-v4.1-flash`)
 - `DIAGNOSIS_TIMEOUT_MS` (900s / 15 min), `MAX_DIAGNOSIS_ROUNDS` (3). `validateConfig()` rejects `JOB_TTL_MS` or `PENDING_JOB_TIMEOUT_MS` below `DIAGNOSIS_TIMEOUT_MS`.
-- `RATE_LIMIT_MAX_REQUESTS` (5), `RATE_LIMIT_WINDOW_MS` (60s / 1 min), `MAX_CONCURRENT_WORKFLOWS` (3)
+- `RATE_LIMIT_MAX_REQUESTS` (10), `RATE_LIMIT_WINDOW_MS` (60s / 1 min), `MAX_CONCURRENT_WORKFLOWS` (3)
 - `MAX_INPUT_FIELD_LENGTH` (50,000 chars), `MAX_PAYLOAD_BYTES` (1MB)
 - `MOCK_LLM`, `LOG_FORMAT`, `SPECIALIST_CONTEXT_MODE`, `SPECIALIST_CONTEXT_MAX_CHARS`, `CMO_CONTEXT_MAX_CHARS`
 - `WS_TOKEN_SECRET` (empty = dev mode, no token required; set for production — secures WebSocket, REST status/cancel endpoints, and HTTP polling fallback)
@@ -160,7 +161,7 @@ All constants centralized here, read from environment variables with defaults:
 
 #### Hooks (`src/frontend/hooks/`)
 
-- `useJobStream` — WebSocket connection with exponential backoff reconnection (5 attempts: 1s → 2s → 4s → 8s → 16s) and pre-reconnect status check via `getJobStatus()`, before HTTP polling fallback. Prefers the short-lived `wsTicket` for the WebSocket URL; the long-lived `token` is used for REST polling via the `X-Job-Token` header.
+- `useJobStream` — WebSocket connection with exponential backoff reconnection (5 attempts: 1s → 2s → 4s → 8s → 16s) and pre-reconnect status check via `getJobStatus()`, before HTTP polling fallback. The short-lived `wsTicket` (120s TTL) is used only for the initial WebSocket connection — it is issued in the same submission response, so it is fresh by construction there. Reconnects happen at least 1s later and may outlive the ticket (a stale ticket would collect guaranteed 403s), so they authenticate with the long-lived `token` instead. REST polling always uses `token` via the `X-Job-Token` header.
 - `usePolling` — Interval-based status polling
 - `useAutoLogout` — Inactivity timeout with `timeoutMs` (input screen, default 10 min) and `waitingTimeoutMs` (waiting/results, default 15 min) options. The timer is never paused; it runs on all screens so an unattended terminal screen triggers the sensitive-session purge. The `screen` option selects which timeout applies. User activity (mousemove, keydown, click, scroll, touchstart) resets the timer.
 - `useRouter` — Hash-based client-side routing. `navigate()` uses `replaceState` when navigating between capability-bearing routes (waiting → results, results → waiting) so credential URLs don't accumulate in browser history. Navigating from a clean route (input) to a capability route uses `pushState` so the user can go back to the clean input page. Callers can override via `{ replace: boolean }`.
@@ -178,19 +179,21 @@ Entry point. Creates the `Bun.serve()` instance with:
 
 **Routes** (defined in `src/backend/api/routes.ts`):
 - `POST /v1/diagnose` — Submit a diagnostic case. Validates input (Zod schema, payload size limit), checks rate limit (per-IP + concurrent workflow cap), starts async workflow, returns `202 Accepted` with `jobId`, `token`, and `wsTicket`.
-- `GET /v1/status/:jobId` — Poll job status and progress events. A completed response contains a direct `result: ReportOutcome`; there is no nested workflow-result wrapper. Requires an `X-Job-Token: <token>` header when `WS_TOKEN_SECRET` is set (403 on missing/invalid token); a `?token=<hmac>` query parameter is accepted as a dev fallback during migration. Token is verified before job existence lookup to prevent enumeration (ordering: format check 400 → token check 403 → existence 404). The 200 response includes `Cache-Control: no-store, private` so shared and intermediary caches do not retain PHI-bearing payloads.
-- `DELETE /v1/diagnose/:jobId` — Cancel a running diagnostic workflow. Requires an `X-Job-Token: <token>` header when `WS_TOKEN_SECRET` is set (403 on missing/invalid token); a `?token=<hmac>` query parameter is accepted as a dev fallback. Aborts the workflow's `AbortController` and marks the job as `failed("Cancelled by user")`; the workflow keeps its concurrent slot until its promise settles.
+- `GET /v1/status/:jobId` — Poll job status and progress events. A completed response contains a direct `result: ReportOutcome`; there is no nested workflow-result wrapper. Requires an `X-Job-Token: <token>` header when `WS_TOKEN_SECRET` is set (403 on missing/invalid token); the legacy `?token=` query-parameter fallback was removed (the frontend is header-only). Token is verified before job existence lookup to prevent enumeration (ordering: format check 400 → token check 403 → existence 404). The 200 response includes `Cache-Control: no-store, private` so shared and intermediary caches do not retain PHI-bearing payloads.
+- `DELETE /v1/diagnose/:jobId` — Cancel a running diagnostic workflow. Requires an `X-Job-Token: <token>` header when `WS_TOKEN_SECRET` is set (403 on missing/invalid token). Aborts the workflow's `AbortController` and marks the job as `failed("Cancelled by user")`; the workflow keeps its concurrent slot until its promise settles.
 - `GET /v1/health` — Health check endpoint (uptime, active workflows, SQLite connectivity).
 - `GET /v1/agents` — List available specialist agents (id, name, description).
-- `GET /ws?jobId=...&ticket=...` — WebSocket for real-time progress streaming. Completion messages are `{ type: "completed", jobId, result: ReportOutcome }`. Validates `Origin` header against `TRUSTED_ORIGINS` (or `ALLOWED_ORIGINS` when not set). When `WS_TOKEN_SECRET` is set, prefers a short-lived `ticket` parameter (120s TTL, single-use) and also accepts the long-lived `token` parameter for a bounded migration period; rejects expired/invalid credentials with 403. Replays history on connect, subscribes to live updates.
+- `GET /ws?jobId=...&ticket=...` — WebSocket for real-time progress streaming. Completion messages are `{ type: "completed", jobId, result: ReportOutcome }`. Validates `Origin` header against `TRUSTED_ORIGINS` (or `ALLOWED_ORIGINS` when not set). When `WS_TOKEN_SECRET` is set, prefers a short-lived `ticket` parameter (120s TTL, replayable within its TTL — verification is stateless) and also accepts the long-lived `token` parameter; rejects expired/invalid credentials with 403. The `token` fallback is retained intentionally: WebSocket upgrade requests cannot set custom headers, so unlike the REST endpoints (which are header-only via `X-Job-Token`) there is no header transport available — the query parameter is the only option. Replays history on connect, subscribes to live updates.
 - `OPTIONS /v1/*` — CORS preflight catch-all.
 - `/*` — SPA fallback (serves the bundled `index.html` via Bun's HTMLBundle route value; security headers applied by Caddy in production, since HTMLBundle routes bypass the app's `corsHeaders()`).
 
 **CORS**: When `TRUSTED_ORIGINS` is set, reflects the request's `Origin` header if it matches the whitelist. When not set, falls back to `ALLOWED_ORIGINS` (default `*`). All `/v1/*` API responses include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Content-Security-Policy` headers via `corsHeaders()`. `Access-Control-Allow-Headers` includes `Content-Type, Authorization, X-Job-Token`; Caddy exempts credential-free `OPTIONS` requests from HTTP Basic auth so preflights reach these handlers. HTML responses (`"/"` and `"/*"`) are served as Bun HTMLBundle route values, which bypass `corsHeaders()` — security headers for HTML are applied by the Caddy reverse proxy.
 
+**Deployment requirement — reverse proxy**: The server must run behind the Caddy reverse proxy (or an equivalent that overwrites `X-Real-IP` and appends to `X-Forwarded-For`). `getClientIp` in `src/backend/api/routes.ts` trusts these headers; the provided Caddyfile's `header_up X-Real-IP {remote_host}` overwrites any client-supplied value, so rate limiting cannot be spoofed through the proxy. Exposed directly (no proxy), a client-controlled `X-Real-IP` defeats the per-IP rate limit. Additionally, set `WS_TOKEN_SECRET` in production — with it empty, job results are readable by anyone holding a job ID, and the server logs a prominent error at startup in `NODE_ENV=production` when it is missing.
+
 **Content-Security-Policy**: The CSP (`CSP_VALUE` in `src/backend/api/routes.ts`) is applied to all `/v1/*` API responses via `corsHeaders()`. It enforces: `default-src 'self'`, `script-src 'self'` (no `'unsafe-inline'`), `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com` (Google Fonts CSS allowlisted; `'unsafe-inline'` retained for Tailwind v4 runtime styles), `font-src 'self' https://fonts.gstatic.com`, `img-src 'self' data:`, `connect-src 'self'`, `frame-ancestors 'none'`, `base-uri 'none'`, `form-action 'self'`, `object-src 'none'`. HTML security headers are applied by the production Caddyfile, which adds its configured WebSocket origin for browser interoperability. HSTS is scoped to the configured host rather than committing every subdomain to preload requirements.
 
-**Capability transport hardening**: Job credentials (HMAC tokens) travel via `X-Job-Token` headers for REST endpoints and short-lived `wsTicket` query parameters (120s TTL) for WebSocket upgrades — never in URL path segments or long-lived query parameters. The dedicated header avoids colliding with Caddy's HTTP Basic `Authorization` header. The Caddyfile removes `X-Job-Token` and redacts `token` and `ticket` query parameters from access logs. The token format is `<expiryMs>.<hmacHex>` where `expiry = now + JOB_TTL_MS` (default), so tokens do not outlive the data they protect. `verifyToken` and `verifyWsTicket` reject expired credentials and require exactly 64 ASCII hex characters before any `Buffer` comparison (prevents the malformed-Unicode `RangeError`). `useRouter.navigate()` uses `replaceState` for capability-bearing routes (waiting, results) so credential URLs are not retained in browser history.
+**Capability transport hardening**: Job credentials (HMAC tokens) travel via `X-Job-Token` headers for REST endpoints and short-lived `wsTicket` query parameters (120s TTL) for WebSocket upgrades — never in URL path segments, and never in long-lived query parameters on REST. The dedicated header avoids colliding with Caddy's HTTP Basic `Authorization` header. The Caddyfile removes `X-Job-Token` and redacts `token` and `ticket` query parameters from access logs. The token format is `<expiryMs>.<hmacHex>` where `expiry = now + JOB_TTL_MS` (default), so tokens do not outlive the data they protect. `verifyToken` and `verifyWsTicket` reject expired credentials and require exactly 64 ASCII hex characters before any `Buffer` comparison (prevents the malformed-Unicode `RangeError`). The WebSocket upgrade is the one place a long-lived `token` may appear in a query string, since WS upgrades cannot set custom headers — see the `/ws` route note above. `useRouter.navigate()` uses `replaceState` for capability-bearing routes (waiting, results) so credential URLs are not retained in browser history.
 
 **WebSocket** (defined in `src/backend/api/websocket.ts`):
 - On open: validates job exists, replays progress history, and either replays the terminal `ReportOutcome` or subscribes to live events.
@@ -223,8 +226,8 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `WS_TOKEN_SECRET` | (empty) | HMAC secret for WebSocket + REST endpoint authentication. When empty, tokens are not required (dev mode). Set for production — secures WebSocket (short-lived ticket + long-lived token fallback), `GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId` (via `X-Job-Token`), and HTTP polling fallback. |
 | `JOB_TTL_MS` | `3600000` (60 min) | Terminal-job (completed/failed) TTL before scrub + delete. Must be >= `DIAGNOSIS_TIMEOUT_MS`. Pending jobs are not affected; see `PENDING_JOB_TIMEOUT_MS`. |
 | `PENDING_JOB_TIMEOUT_MS` | `1020000` (17 min) | Max lifetime of a pending job before it is aborted and failed (`Diagnosis timed out`). Defaults to `DIAGNOSIS_TIMEOUT_MS + 120000`. Must be >= `DIAGNOSIS_TIMEOUT_MS`. |
-| `SPECIALIST_MODEL` | `ollama-cloud/gemma4:31b` | Override specialist agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
-| `ORCHESTRATOR_MODEL` | `ollama-cloud/gemma4:31b` | Override CMO agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
+| `SPECIALIST_MODEL` | `ollama-cloud/deepseek-v4.1-flash` | Override specialist agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
+| `ORCHESTRATOR_MODEL` | `ollama-cloud/deepseek-v4.1-flash` | Override CMO agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max CMO consultation rounds |
 | `RATE_LIMIT_MAX_REQUESTS` | `10` | Max diagnosis requests per IP per window (counts all requests, valid and invalid) |
 | `RATE_LIMIT_WINDOW_MS` | `60000` (1 min) | Rate limit sliding window |
@@ -284,20 +287,23 @@ ddx.care is explicitly labeled "RESEARCH PROOF-OF-CONCEPT ONLY. NOT a medical de
 Backend test files in `tests/`:
 - `api.test.ts` — API route handler tests
 - `tools.test.ts` — Medical tool execution tests
-- `api-contract.test.ts` — API contract tests (live API with `RUN_CONTRACT=1`); fetches one real record per external API and asserts the exact fields each tool reads. Catches API schema drift. Runs in CI on PRs and nightly.
+- `api-contract.test.ts` — API contract tests (live API with `RUN_CONTRACT=1`); fetches one real record per external API and asserts the exact fields each tool reads. Catches API schema drift. Runs in CI on PRs and nightly. Includes a brand-name openFDA label-query regression case (locks in the across-fields OR behavior of `generic_name:X+brand_name:X`).
 - `workflow.test.ts` — Diagnostic workflow, `limitConcurrency`, `withRetry`, `splitToList` tests
-- `progress-store.test.ts` — `JobStore` CRUD, pub/sub, cleanup, scrub-before-delete tests
+- `progress-store.test.ts` — `JobStore` CRUD, pub/sub, cleanup, scrub-before-delete, progress-cap tests
 - `rate-limiter.test.ts` — Rate limiting, concurrent workflow cap, prune tests
 - `logger.test.ts` — Logger output format, JSON mode, tool-arg redaction tests
 - `fetch-utils.test.ts` — `fetchJSON` timeout, error handling tests
 - `audit-logger.test.ts` — Audit logger rotation, tool-arg redaction, time-based purge tests
 - `ws-origin.test.ts` — WebSocket origin validation tests
+- `errors.test.ts` — Typed error hierarchy, `isRetriableError`, `sanitizeForContext` tests
+- `job-context.test.ts` — Frontend job-context reducer tests
+- The `test` script also runs `websocket`, `config`, `tool-execute`, `routes-capacity`, `router`, `api-client`, `prompt-injection`, `orphadata-cache`, `orphadata-tools`, `nlm-clinical-tables`, `openfda-new-tools`, and `tool-cache` test files.
 
 ### REST/WS Token Integration Tests (`bun run test:rest-tokens`)
 
-These files start a server with `WS_TOKEN_SECRET` set and must run separately from `bun run test` (Bun shares the module registry; the main suite's dev-mode server caches an empty secret).
+These files start a server with `WS_TOKEN_SECRET` set and must run separately from `bun run test` (Bun shares the module registry; the main suite's dev-mode server caches an empty secret). Runs in CI as its own job.
 
-- `rest-token.test.ts` — REST endpoint `Authorization` header acceptance, query-param fallback, expired-token rejection, `Cache-Control: no-store` presence, malformed-Unicode (403 not 500), and unit-level `generateToken`/`verifyToken` primitives. Run: `bun run test:rest-token`.
+- `rest-token.test.ts` — REST endpoint `X-Job-Token` header acceptance, removed query-param fallback (rejected with 403), expired-token rejection, `Cache-Control: no-store` presence, malformed-Unicode (403 not 500), and unit-level `generateToken`/`verifyToken` primitives. Run: `bun run test:rest-token`.
 - `ws-ticket.test.ts` — `/ws` ticket validation: valid ticket within TTL, expired ticket rejected, invalid/cross-job ticket rejected, missing-credential 403, long-lived token fallback, ticket precedence. Run: `bun run test:ws-ticket`.
 
 ### Frontend Tests (`bun run test:frontend`)
@@ -316,19 +322,19 @@ These files start a server with `WS_TOKEN_SECRET` set and must run separately fr
 ## Key Dependencies
 
 ### Runtime
-- `@mastra/core` (^1.24.1) — Agent/workflow framework
-- `react` / `react-dom` (^19.2.5) — UI
-- `zod` (^4.3.6) — Input validation schemas
+- `@mastra/core` (^1.50.1) — Agent/workflow framework
+- `react` / `react-dom` (^19.2.7) — UI
+- `zod` (^4.4.3) — Input validation schemas
 - `marked` (^17.0.6) — Markdown rendering
 - `isomorphic-dompurify` (^3.8.0) — HTML sanitization
 - `@heroicons/react` (^2.2.0) — Icon library
 
 ### Dev
-- `tailwindcss` (^4.2.2) + `bun-plugin-tailwind` (^0.1.2) — Styling
-- `@biomejs/biome` (^2.4.11) — Linter
-- `@playwright/test` (^1.59.1) — E2E testing
+- `tailwindcss` (^4.3.2) + `bun-plugin-tailwind` (^0.1.2) — Styling
+- `@biomejs/biome` (^2.5.3) — Linter
+- `@playwright/test` (^1.61.1) — E2E testing
 - `@testing-library/react` (^16.3.2) — Component testing
-- `happy-dom` (^20.8.9) — DOM environment for tests
+- `happy-dom` (^20.10.6) — DOM environment for tests
 - `typescript` (^5.9.3) — Type checking
 
 ## Skills (`.agents/skills/`)

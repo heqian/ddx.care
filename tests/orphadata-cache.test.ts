@@ -63,6 +63,27 @@ const MOCK_GENES: Record<number, any> = {
       },
     },
   },
+  // A mixed payload: one real gene plus a bogus empty-symbol record. Used by
+  // the sentinel-collision guard test — the empty symbol must be dropped, never
+  // written (it would be indistinguishable from the negative-cache sentinel).
+  99977: {
+    data: {
+      results: {
+        DisorderGeneAssociation: [
+          {
+            Gene: { Symbol: "", name: "bogus empty symbol" },
+            DisorderGeneAssociationType:
+              "Disease-causing germline mutation(s) in",
+          },
+          {
+            Gene: { Symbol: "REALGENE", name: "a real gene" },
+            DisorderGeneAssociationType:
+              "Disease-causing germline mutation(s) in",
+          },
+        ],
+      },
+    },
+  },
 };
 
 const MOCK_PHENOTYPES: Record<number, any> = {
@@ -101,6 +122,26 @@ const MOCK_PHENOTYPES: Record<number, any> = {
                 HPOId: "HP:0001738",
                 HPOTerm: "Exocrine pancreatic insufficiency",
               },
+              HPOFrequency: "Very frequent (99-80%)",
+            },
+          ],
+        },
+      },
+    },
+  },
+  // A phenotype payload containing a bogus empty-hpo_id record. Used by the
+  // sentinel-collision guard test — the empty id must be dropped, never written.
+  99976: {
+    data: {
+      results: {
+        Disorder: {
+          HPODisorderAssociation: [
+            {
+              HPO: { HPOId: "", HPOTerm: "bogus empty id" },
+              HPOFrequency: "Very frequent (99-80%)",
+            },
+            {
+              HPO: { HPOId: "HP:9999999", HPOTerm: "a real phenotype" },
               HPOFrequency: "Very frequent (99-80%)",
             },
           ],
@@ -196,6 +237,17 @@ describe("Orphadata Cache — Full Suite", () => {
       expect(results).toHaveLength(1);
       expect(results[0].orphacode).toBe(586);
     });
+
+    test("LIKE metacharacters are matched literally, not as wildcards", () => {
+      // "%" and "_" must not act as wildcards — a bare "%" used to return
+      // arbitrary first-N diseases before escaping was added.
+      expect(cache.searchDiseases("%", 10)).toEqual([]);
+      expect(cache.searchDiseases("_", 10)).toEqual([]);
+    });
+
+    test("a literal backslash in the query does not break the search", () => {
+      expect(cache.searchDiseases("Alexander\\", 10)).toEqual([]);
+    });
   });
 
   describe("Gene Lazy Loading", () => {
@@ -241,6 +293,25 @@ describe("Orphadata Cache — Full Suite", () => {
       const genes = await cache.getDiseaseGenes(99999);
       expect(genes).toEqual([]);
     });
+
+    test("negative gene results are cached — no refetch on second call", async () => {
+      const mockFetch = globalThis.fetch as any;
+      await cache.getDiseaseGenes(99998); // first call: fetch + sentinel row
+      const callsBefore = mockFetch.mock.calls.length;
+      await cache.getDiseaseGenes(99998); // second call: sentinel hit, no fetch
+      expect(mockFetch.mock.calls.length).toBe(callsBefore);
+    });
+
+    test("empty-symbol gene records are dropped — never collide with the sentinel", async () => {
+      // Regression guard for the negative-cache sentinel invariant. The
+      // 99977 payload mixes a real gene with a bogus empty-symbol record.
+      // Writing the empty symbol would be indistinguishable from the
+      // NEGATIVE_CACHE_MARKER row and corrupt the "queried, empty" signal.
+      const genes = await cache.getDiseaseGenes(99977);
+      expect(genes).toHaveLength(1);
+      expect(genes[0].geneSymbol).toBe("REALGENE");
+      expect(genes.every((g) => g.geneSymbol !== "")).toBe(true);
+    });
   });
 
   describe("Phenotype Lazy Loading", () => {
@@ -270,6 +341,24 @@ describe("Orphadata Cache — Full Suite", () => {
     test("returns empty array for disease with no phenotypes", async () => {
       const phenotypes = await cache.getDiseasePhenotypes(99999);
       expect(phenotypes).toEqual([]);
+    });
+
+    test("negative phenotype results are cached — no refetch on second call", async () => {
+      const mockFetch = globalThis.fetch as any;
+      await cache.getDiseasePhenotypes(99997);
+      const callsBefore = mockFetch.mock.calls.length;
+      await cache.getDiseasePhenotypes(99997);
+      expect(mockFetch.mock.calls.length).toBe(callsBefore);
+    });
+
+    test("empty-hpo_id phenotype records are dropped — never collide with the sentinel", async () => {
+      // Regression guard for the negative-cache sentinel invariant. The
+      // 99976 payload mixes a real phenotype with a bogus empty-id record;
+      // the empty id must never be written to the cache.
+      const phenotypes = await cache.getDiseasePhenotypes(99976);
+      expect(phenotypes).toHaveLength(1);
+      expect(phenotypes[0].hpoId).toBe("HP:9999999");
+      expect(phenotypes.every((p) => p.hpoId !== "")).toBe(true);
     });
   });
 

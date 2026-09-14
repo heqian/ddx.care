@@ -66,6 +66,25 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run test:frontend
 
+  # REST/WS token security tests. These start a server with WS_TOKEN_SECRET
+  # set and must run in their own process (Bun shares the module registry,
+  # so the main suite's dev-mode server would cache an empty secret).
+  rest-tokens:
+    runs-on: ubuntu-latest
+    env:
+      MOCK_LLM: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: bun-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - run: bun run test:rest-tokens
+
   build:
     runs-on: ubuntu-latest
     steps:

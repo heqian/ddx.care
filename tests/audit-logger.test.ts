@@ -121,6 +121,28 @@ describe("AuditLogger", () => {
     expect(parsed.metadata.confidence).toBe(0.95);
   });
 
+  test("rotation triggers as the file grows through in-session writes", () => {
+    // The pre-existing rotation tests rely on a pre-created file (size read
+    // from disk at open). This test grows the file through writes alone, so
+    // rotation must fire from the file's actual on-disk size — a broken
+    // rotation check would silently grow the file forever.
+    const logger = new AuditLogger(logPath, 0.001, 2); // ~1 KB max
+    for (let i = 0; i < 50; i++) {
+      logger.write({ event: "bulk", seq: i, pad: "x".repeat(80) });
+    }
+
+    const rotated = getRotatedFiles(tmpDir, "audit");
+    expect(rotated.length).toBeGreaterThanOrEqual(1);
+
+    // The current file parses as JSON lines and holds only recent entries
+    const current = readFileSync(logPath, "utf-8").trim().split("\n");
+    expect(current.length).toBeGreaterThan(0);
+    expect(current.length).toBeLessThan(50);
+    for (const line of current) {
+      expect(() => JSON.parse(line)).not.toThrow();
+    }
+  });
+
   test("write does not throw on permission error", () => {
     const readonlyDir = join(tmpDir, "readonly");
     const restrictedPath = join(readonlyDir, "audit.log");

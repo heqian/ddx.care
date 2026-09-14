@@ -309,3 +309,67 @@ describe("Settlement-aware workflow capacity", () => {
     expect(maxUnsettled).toBe(maxConcurrent);
   });
 });
+
+describe("Cancellation race during workflow startup", () => {
+  test("a DELETE arriving while createWorkflowRun is pending still aborts the run", async () => {
+    // Regression test: the AbortController used to be registered AFTER the
+    // `await createWorkflowRun(jobId)` gap. A DELETE landing in that window
+    // found no controller, marked the job failed, and let the workflow run
+    // to completion — burning LLM cost and a concurrency slot for nothing.
+    const limiter = createLimiter();
+    const jobs = createJobStore();
+    const aborts = createAbortStore();
+    const jobId = "00000000-0000-4000-a000-000000000001";
+
+    const startup = deferred<void>();
+    let runCreationStarted = false;
+    let signalAtStart: AbortSignal | undefined;
+    let controllerAtDelete: AbortController | undefined;
+
+    const routes = createHarness({
+      rateLimiter: limiter,
+      progressStore: jobs,
+      abortStore: aborts,
+      createWorkflowRun: async () => {
+        runCreationStarted = true;
+        await startup.promise;
+        return {
+          start: async () => {
+            signalAtStart = aborts.controllers.get(jobId)?.signal;
+            controllerAtDelete = aborts.controllers.get(jobId);
+          },
+        };
+      },
+    });
+
+    const postPromise = routes.post();
+    // Wait until the route is inside the createWorkflowRun await
+    while (!runCreationStarted) {
+      await Bun.sleep(0);
+    }
+
+    // DELETE lands while run creation is still pending
+    const deleteResponse = await routes.delete(jobId);
+    expect(deleteResponse.status).toBe(200);
+    expect(await deleteResponse.json()).toEqual({ status: "cancelled" });
+
+    // The controller must already be registered at DELETE time — the abort
+    // must reach the workflow, not be a no-op on a missing controller.
+    const controllerDuringStartup = aborts.controllers.get(jobId);
+    expect(controllerDuringStartup).toBeDefined();
+    expect(controllerDuringStartup?.signal.aborted).toBe(true);
+
+    // Let startup finish; the run must observe the aborted signal
+    startup.resolve();
+    const postResponse = await postPromise;
+    expect(postResponse.status).toBe(202);
+    await Bun.sleep(0);
+    expect(signalAtStart?.aborted).toBe(true);
+    expect(controllerAtDelete).toBeDefined();
+
+    // The workflow promise settled via its catch/finally path: slot released
+    expect(limiter.activeWorkflows).toBe(0);
+    // Job stays failed (the later complete() on an aborted run is a no-op)
+    expect(jobs.jobs.get(jobId)?.status).toBe("failed");
+  });
+});

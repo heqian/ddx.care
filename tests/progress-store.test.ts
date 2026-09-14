@@ -1,4 +1,8 @@
-import { test, expect, describe, beforeEach } from "bun:test";
+import { test, expect, describe, beforeEach, afterAll } from "bun:test";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { JobStore, type ProgressEvent } from "../src/backend/progress-store";
 import * as abortStore from "../src/backend/utils/abort-controller-store";
 import {
@@ -41,6 +45,45 @@ let store: JobStore;
 beforeEach(() => {
   // Use in-memory SQLite so tests are isolated and fast
   store = new JobStore(":memory:");
+});
+
+describe("JobStore — Corrupt row resilience", () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), "jobstore-corrupt-"));
+  const dbPath = join(tmpDir, `corrupt-${Date.now()}.sqlite`);
+  const fileStore = new JobStore(dbPath);
+
+  afterAll(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test("getJob degrades gracefully when the stored result is corrupt", () => {
+    fileStore.createJob("job-corrupt-result");
+    // Corrupt the row through a second connection (legacy/garbled data)
+    const raw = new Database(dbPath);
+    raw.exec(
+      `UPDATE jobs SET result = 'not-json{{{' WHERE id = 'job-corrupt-result'`,
+    );
+    raw.close();
+
+    const job = fileStore.getJob("job-corrupt-result");
+    expect(job).toBeDefined();
+    expect(job!.status).toBe("pending");
+    expect(job!.result).toBeUndefined();
+    expect(job!.progress).toEqual([]);
+  });
+
+  test("getJob degrades gracefully when the stored progress is not JSON", () => {
+    fileStore.createJob("job-corrupt-progress");
+    const raw = new Database(dbPath);
+    raw.exec(
+      `UPDATE jobs SET progress = 'not-json' WHERE id = 'job-corrupt-progress'`,
+    );
+    raw.close();
+
+    const job = fileStore.getJob("job-corrupt-progress");
+    expect(job).toBeDefined();
+    expect(job!.progress).toEqual([]);
+  });
 });
 
 describe("JobStore — Job Lifecycle", () => {
@@ -154,6 +197,23 @@ describe("JobStore — Progress Events", () => {
     expect(job!.progress[0].message).toBe("Step 1");
     expect(job!.progress[1].message).toBe("Step 2");
     expect(job!.progress[2].message).toBe("Step 3");
+  });
+
+  test("stored progress events are capped — oldest events are trimmed past the threshold", () => {
+    store.createJob("job-p2-cap");
+    // Trim hysteresis: at >1200 stored events the array is rewritten to the
+    // most recent 1000 and then regrows — so the window is bounded but not
+    // always exactly 1000. 1250 emits → one trim (at 1201) + 49 regrown.
+    for (let i = 0; i < 1250; i++) {
+      store.emitMessage("job-p2-cap", `Event ${i}`);
+    }
+
+    const job = store.getJob("job-p2-cap");
+    expect(job!.progress.length).toBeGreaterThanOrEqual(1000);
+    expect(job!.progress.length).toBeLessThanOrEqual(1200);
+    // The kept window is the MOST RECENT events; the oldest were dropped
+    expect(job!.progress[0].message).toBe("Event 201");
+    expect(job!.progress[job!.progress.length - 1].message).toBe("Event 1249");
   });
 
   test("progress persists after complete", () => {

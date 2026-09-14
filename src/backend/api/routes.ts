@@ -85,21 +85,15 @@ function corsPreflightResponse(req?: Request): Response {
  * Returns a 403 Response if the token is missing/invalid, or null if access is allowed.
  * Skipped in dev mode (empty WS_TOKEN_SECRET), mirroring the /ws WebSocket handler.
  *
- * Token transport precedence:
- *   1. `X-Job-Token: <token>` header (preferred — redacted by Caddy, not in history)
- *   2. `?token=<token>` query parameter (dev fallback during migration)
+ * The token travels exclusively in the `X-Job-Token` header (redacted by
+ * Caddy, never in URLs or browser history). The legacy `?token=` query
+ * fallback was removed once the frontend shipped header-only clients; /ws
+ * still accepts query parameters because WebSocket upgrades cannot set
+ * custom headers.
  */
 function verifyJobToken(req: Request, jobId: string): Response | null {
   if (!WS_TOKEN_SECRET) return null;
-  // Prefer the dedicated job-token header so Caddy's HTTP Basic credentials
-  // can continue using Authorization. Fall back to the query parameter for
-  // dev ergonomics and migration from existing clients. The query fallback is
-  // covered by Caddy log redaction (see Caddyfile).
-  let token = req.headers.get("x-job-token")?.trim() || null;
-  if (!token) {
-    const url = new URL(req.url);
-    token = url.searchParams.get("token");
-  }
+  const token = req.headers.get("x-job-token")?.trim() || null;
   if (!token || !verifyToken(jobId, token)) {
     logger.warn("rest_token_rejected", { jobId });
     return withCors(
@@ -300,10 +294,15 @@ export function createRoutes(
           jobCreated = true;
           logger.workflowStart(jobId);
 
-          const run = await createWorkflowRun(jobId);
+          // Register the abort controller BEFORE awaiting workflow-run
+          // creation. The await is an async gap in which a DELETE could
+          // arrive, mark the job failed, and find no controller to abort —
+          // leaving the workflow running to completion for nothing.
           const ac = new AbortController();
           routeAbortStore.set(jobId, ac);
           controllerRegistered = true;
+
+          const run = await createWorkflowRun(jobId);
 
           const workflowPromise = run.start({
             inputData: {
@@ -606,8 +605,9 @@ export function createRoutes(
         }
 
         if (WS_TOKEN_SECRET) {
-          // Prefer the short-lived, single-use ticket (default 120s TTL) so the
+          // Prefer the short-lived ticket (default 120s TTL) so the
           // long-lived job capability is not exposed in the WebSocket URL.
+          // The ticket is stateless HMAC — replayable within its TTL.
           const ticket = url.searchParams.get("ticket");
           const token = url.searchParams.get("token");
           if (ticket) {

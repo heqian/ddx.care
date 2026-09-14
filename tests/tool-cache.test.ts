@@ -8,9 +8,10 @@ import {
   afterEach,
   vi,
 } from "bun:test";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { Database } from "bun:sqlite";
 import {
   initToolCache,
   getCached,
@@ -53,6 +54,29 @@ describe("Tool Cache — unit", () => {
 
     const result = getCached(url);
     expect(result).toEqual(data);
+  });
+
+  test("no raw URLs are stored at rest — keys are SHA-256 hex hashes", () => {
+    // URLs carry PHI-derived search terms as query parameters. The cache
+    // must never persist them: inspect the SQLite file directly.
+    const distinctive = "https://example.com/api?q=phI-marker-lisinopril";
+    setCached(distinctive, { data: "x" });
+
+    const db = new Database(dbPath);
+    const rows = db.query("SELECT cache_key FROM tool_cache").all() as Array<{
+      cache_key: string;
+    }>;
+    db.close();
+
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.cache_key).toMatch(/^[0-9a-f]{64}$/);
+    }
+
+    // Belt and braces: the raw URL bytes are nowhere in the DB file
+    const fileBytes = readFileSync(dbPath, "utf-8");
+    expect(fileBytes).not.toContain(distinctive);
+    expect(fileBytes).not.toContain("lisinopril");
   });
 
   test("different URLs get separate cache entries", () => {

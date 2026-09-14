@@ -1,6 +1,20 @@
-import { test, expect, describe, beforeEach, afterEach, vi } from "bun:test";
+import {
+  test,
+  expect,
+  describe,
+  beforeAll,
+  afterAll,
+  afterEach,
+  vi,
+} from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fetchJSON } from "../src/backend/tools/utils/fetch";
-import { resetToolCache } from "../src/backend/tools/utils/tool-cache";
+import {
+  initToolCache,
+  resetToolCache,
+} from "../src/backend/tools/utils/tool-cache";
 
 // Save original fetch
 const originalFetch = globalThis.fetch;
@@ -111,5 +125,81 @@ describe("fetchJSON — Timeout", () => {
     await expect(
       fetchJSON("https://slow.example.com/api", { timeoutMs: 50 }),
     ).rejects.toThrow(/timeout/i);
+  });
+});
+
+describe("fetchJSON — PHI redaction in logs and errors", () => {
+  const tmpDir = mkdtempSync(join(tmpdir(), "fetch-redact-"));
+
+  beforeAll(() => {
+    // fetchJSON only logs tool_cache_hit when the cache is initialized
+    process.env.TOOL_CACHE_DB_PATH = join(
+      tmpDir,
+      `redact-${Date.now()}.sqlite`,
+    );
+    initToolCache();
+  });
+
+  afterAll(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    resetToolCache();
+  });
+
+  test("cache-hit log lines contain the hashed key, never the URL", async () => {
+    const url = "https://example.com/api?condition=hiv+tuberculosis";
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: "x" }),
+    }) as any;
+    await fetchJSON(url); // populate cache
+
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((...args) => {
+      logs.push(args.join(" "));
+    });
+    try {
+      await fetchJSON(url); // cache hit → tool_cache_hit log line
+    } finally {
+      spy.mockRestore();
+    }
+
+    const hitLine = logs.find((l) => l.includes("tool_cache_hit"));
+    expect(hitLine).toBeDefined();
+    // PHI-derived query terms must never reach the log
+    expect(hitLine).not.toContain("condition=hiv");
+    expect(hitLine).not.toContain(url);
+    // The log carries the SHA-256 cache key instead
+    expect(hitLine).toMatch(/[0-9a-f]{64}/);
+  });
+
+  test("timeout error messages strip the query string", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockImplementation(async (_url: string, opts: any) => {
+        return new Promise((_, reject) => {
+          opts.signal.addEventListener("abort", () => {
+            const err = new Error("aborted");
+            err.name = "AbortError";
+            reject(err);
+          });
+        });
+      }) as any;
+
+    try {
+      await fetchJSON("https://slow.example.com/api?drug=warfarin", {
+        timeoutMs: 50,
+      });
+      expect.unreachable("expected timeout");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      const message = (error as Error).message;
+      expect(message).toContain("slow.example.com/api");
+      expect(message).not.toContain("drug=warfarin");
+    }
   });
 });

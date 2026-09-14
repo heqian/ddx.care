@@ -13,9 +13,9 @@ export const RATE_LIMIT_MAX_ENTRIES = parseInt(
   10,
 );
 export const SPECIALIST_MODEL =
-  process.env.SPECIALIST_MODEL ?? "ollama-cloud/gemma4:31b";
+  process.env.SPECIALIST_MODEL ?? "ollama-cloud/deepseek-v4.1-flash";
 export const ORCHESTRATOR_MODEL =
-  process.env.ORCHESTRATOR_MODEL ?? "ollama-cloud/gemma4:31b";
+  process.env.ORCHESTRATOR_MODEL ?? "ollama-cloud/deepseek-v4.1-flash";
 export const DIAGNOSIS_TIMEOUT_MS = parseInt(
   process.env.DIAGNOSIS_TIMEOUT_MS ?? String(15 * 60 * 1000),
   10,

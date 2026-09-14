@@ -1156,6 +1156,46 @@ describe("useJobStream", () => {
     vi.useRealTimers();
   });
 
+  test("first connection uses the wsTicket; reconnects fall back to the token", async () => {
+    vi.useFakeTimers();
+
+    // The client never parses the ticket — any string works. First
+    // connections use it (fresh by construction, issued with the submission
+    // response); reconnects must not reuse a possibly-expired ticket.
+    const ticket = "9999999999999.deadbeef";
+    renderHook(() =>
+      useJobStream("job-cred", "tok-123", 0, undefined, undefined, ticket),
+    );
+
+    await hookAct(async () => {
+      vi.advanceTimersByTime(10);
+    });
+
+    // Initial connection carries the ticket, not the long-lived token
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(MockWebSocket.instances[0].url).toContain(
+      `ticket=${encodeURIComponent(ticket)}`,
+    );
+    expect(MockWebSocket.instances[0].url).not.toContain("token=");
+
+    await hookAct(async () => {
+      MockWebSocket.instances[0].simulateClose(1006, "Abnormal");
+    });
+
+    // First retry: 1000ms — reconnects authenticate with the token
+    await hookAct(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(2);
+    expect(MockWebSocket.instances[1].url).toContain(
+      `token=${encodeURIComponent("tok-123")}`,
+    );
+    expect(MockWebSocket.instances[1].url).not.toContain("ticket=");
+
+    vi.useRealTimers();
+  });
+
   test("closes WebSocket on unmount", async () => {
     const { unmount } = renderHook(() => useJobStream("job-unmount"));
 

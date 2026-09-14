@@ -19,6 +19,7 @@ import {
   AUDIT_LOG_PATH,
   AUDIT_LOG_RETENTION_HOURS,
   PENDING_JOB_TIMEOUT_MS,
+  WS_TOKEN_SECRET,
   validateConfig,
 } from "./src/backend/config";
 import { logger, getAuditLogger } from "./src/backend/utils/logger";
@@ -30,6 +31,15 @@ import {
 import { validateSpecialistIntegrity } from "./src/backend/agents/specialist-integrity";
 
 validateConfig();
+if (process.env.NODE_ENV === "production" && !WS_TOKEN_SECRET) {
+  logger.error("ws_token_secret_missing", {
+    message:
+      "WS_TOKEN_SECRET is empty in production. Job credentials are NOT enforced: " +
+      "anyone who obtains a job ID can read its PHI-bearing results via " +
+      "GET /v1/status/:jobId and /ws. Only the reverse-proxy auth layer " +
+      "(if any) protects job data. Set WS_TOKEN_SECRET to enable per-job tokens.",
+  });
+}
 const specialistCount = validateSpecialistIntegrity();
 logger.info("specialist_registry_validated", { specialistCount });
 
@@ -39,7 +49,13 @@ progressStore.markStalePending();
 progressStore.cleanupExpired(JOB_TTL_MS);
 
 if (ORPHADATA_ENABLED) {
-  initializeOrphadataCache().catch(() => {});
+  // Await before serving so tools never query a partially populated disease
+  // table. Failures are logged (not fatal) — tools then degrade gracefully.
+  await initializeOrphadataCache().catch((error: unknown) => {
+    logger.error("orphadata_init_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
 }
 
 if (TOOL_CACHE_ENABLED) {
@@ -111,8 +127,11 @@ logger.info("server_start", {
 
 // --- Graceful shutdown ---
 const SHUTDOWN_TIMEOUT_MS = 30_000;
+let shuttingDown = false;
 
 async function shutdown(signal: string) {
+  if (shuttingDown) return; // Ignore repeat signals during drain
+  shuttingDown = true;
   console.log(`\nReceived ${signal}. Shutting down gracefully...`);
 
   // 1. Stop accepting new connections

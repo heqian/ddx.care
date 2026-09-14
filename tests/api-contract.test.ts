@@ -135,6 +135,20 @@ describeContract(
       );
       expect(withRxcui.length).toBeGreaterThan(0);
     });
+
+    test("brand-name queries via generic_name+brand_name match brand records", async () => {
+      // drugLabelingTool queries `openfda.generic_name:X+openfda.brand_name:X`.
+      // Verified against openFDA: unquoted `field1:x+field2:x` matches records
+      // where x appears in EITHER field (NOT a strict AND) — so brand names
+      // like "lipitor" resolve to labels even though the generic is
+      // atorvastatin. This test locks that behavior in so a future openFDA
+      // parser change (toward strict AND) is caught here, not in production.
+      const data = await fetchJSON(
+        `${FDA}/drug/label.json?search=openfda.generic_name:lipitor+openfda.brand_name:lipitor&limit=5`,
+      );
+      expect(data.meta.results.total).toBeGreaterThan(0);
+      expect(data.results.length).toBeGreaterThan(0);
+    });
   },
 );
 

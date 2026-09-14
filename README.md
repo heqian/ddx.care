@@ -6,7 +6,7 @@ AI-powered differential diagnosis system that simulates a panel of medical speci
 
 ### Backend (`src/backend/`)
 - **Mastra framework** (`@mastra/core`) — agent orchestration, workflows, tool definitions
-- **AI Model**: Ollama Cloud (`ollama-cloud/gemma4:31b` by default), configured via `OLLAMA_API_KEY`. Other providers are supported — see [Mastra providers](https://mastra.ai/models/providers) for available API key env var names and supported models.
+- **AI Model**: Ollama Cloud (`ollama-cloud/deepseek-v4.1-flash` by default), configured via `OLLAMA_API_KEY`. Other providers are supported — see [Mastra providers](https://mastra.ai/models/providers) for available API key env var names and supported models.
 - **Agents** — 35 medical specialist agents + Chief Medical Officer (CMO). Created via factory pattern in `factory.ts`
 - **Tools** — Medical API integrations:
   - OpenFDA drug safety & adverse events
@@ -57,8 +57,8 @@ The app runs on `http://localhost:3000` by default.
 |----------|---------|-------------|
 | `OLLAMA_API_KEY` | — | **Required.** LLM provider API key. Env var name varies by provider — see [Mastra providers](https://mastra.ai/models/providers) |
 | `PORT` | `3000` | Server port |
-| `SPECIALIST_MODEL` | `ollama-cloud/gemma4:31b` | Model for specialist agents. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
-| `ORCHESTRATOR_MODEL` | `ollama-cloud/gemma4:31b` | Model for CMO orchestrator. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
+| `SPECIALIST_MODEL` | `ollama-cloud/deepseek-v4.1-flash` | Model for specialist agents. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
+| `ORCHESTRATOR_MODEL` | `ollama-cloud/deepseek-v4.1-flash` | Model for CMO orchestrator. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max consultation rounds per diagnosis |
 | `RATE_LIMIT_MAX_REQUESTS` | `5` | Max requests per IP per window |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window (1 minute) |
@@ -127,7 +127,7 @@ report outcome. Clients must branch on the job status first and then on
 
 - **Runtime:** Bun
 - **AI Framework:** Mastra (`@mastra/core`)
-- **AI Model:** Ollama Cloud (`ollama-cloud/gemma4:31b`). Other providers supported — see [Mastra providers](https://mastra.ai/models/providers)
+- **AI Model:** Ollama Cloud (`ollama-cloud/deepseek-v4.1-flash`). Other providers supported — see [Mastra providers](https://mastra.ai/models/providers)
 - **Frontend:** React 19, Tailwind CSS v4
 - **Validation:** Zod
 - **Markdown / Sanitization:** `marked`, `isomorphic-dompurify`

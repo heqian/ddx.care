@@ -30,6 +30,9 @@ export default defineConfig({
       RATE_LIMIT_WINDOW_MS: "60000",
       MAX_CONCURRENT_WORKFLOWS: "50",
       WS_TOKEN_SECRET: "e2e-job-context-secret",
+      // Mock-mode E2E never consults the rare-disease cache; skipping the
+      // startup fetch keeps the suite hermetic and fast to boot.
+      ORPHADATA_ENABLED: "0",
     },
   },
 });

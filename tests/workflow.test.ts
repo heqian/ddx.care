@@ -477,6 +477,55 @@ describe("diagnosisReportSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  test("normalizes urgency casing instead of failing validation", () => {
+    // Models sometimes emit "emergent"/"EMERGENT". Failing the whole report
+    // over casing burned a costly correction retry — the schema now
+    // normalizes to the canonical capitalized form.
+    const base = {
+      chiefComplaint: "Headache",
+      patientSummary: "Test",
+      specialistsConsulted: [],
+      crossSpecialtyObservations: "",
+      recommendedImmediateActions: "",
+    };
+    const withUrgency = (urgency: string) => ({
+      ...base,
+      rankedDiagnoses: [
+        {
+          diagnosisName: "Test",
+          confidencePercentage: 50,
+          urgency,
+          rationale: "Test",
+          supportingEvidence: "",
+          contradictoryEvidence: "",
+          suggestedNextSteps: "",
+        },
+      ],
+    });
+
+    const lower = diagnosisReportSchema.safeParse(withUrgency("emergent"));
+    expect(lower.success).toBe(true);
+    if (lower.success) {
+      expect(lower.data.rankedDiagnoses[0].urgency).toBe("Emergent");
+    }
+
+    const upper = diagnosisReportSchema.safeParse(withUrgency("ROUTINE"));
+    expect(upper.success).toBe(true);
+    if (upper.success) {
+      expect(upper.data.rankedDiagnoses[0].urgency).toBe("Routine");
+    }
+
+    const mixed = diagnosisReportSchema.safeParse(withUrgency("UrGeNt"));
+    expect(mixed.success).toBe(true);
+    if (mixed.success) {
+      expect(mixed.data.rankedDiagnoses[0].urgency).toBe("Urgent");
+    }
+
+    // Non-enum words are still rejected — normalization is casing-only
+    const stillInvalid = diagnosisReportSchema.safeParse(withUrgency("asap"));
+    expect(stillInvalid.success).toBe(false);
+  });
+
   test("accepts confidence within 0-100 range", () => {
     // Schema uses z.number().min(0).max(100) — verify valid values pass
     const valid = {

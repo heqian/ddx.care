@@ -37,6 +37,7 @@ export function useJobStream(
     let retryTimer: number | null = null;
     let pollTimer: number | null = null;
     let retryCount = 0;
+    let firstConnection = true;
     let polling = false;
     const controllers = new Set<AbortController>();
 
@@ -99,14 +100,20 @@ export function useJobStream(
     const connectWebSocket = () => {
       if (cancelled) return;
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      // Prefer the short-lived wsTicket (120s TTL) over the long-lived token so
-      // the durable capability is not exposed in the WebSocket URL. The token
-      // remains as a migration fallback and is still used for REST polling.
-      const credParam = wsTicket
-        ? `&ticket=${encodeURIComponent(wsTicket)}`
-        : token
-          ? `&token=${encodeURIComponent(token)}`
-          : "";
+      // The short-lived wsTicket (120s TTL) is only used for the initial
+      // connection — it is issued in the same submission response, so it is
+      // fresh by construction there. Reconnects happen at least 1s later and
+      // may outlive the ticket (a stale ticket would collect guaranteed
+      // 403s), so they carry the long-lived token instead. Caddy redacts
+      // both query parameters from access logs. The REST polling fallback
+      // uses the token via the X-Job-Token header.
+      const credParam =
+        firstConnection && wsTicket
+          ? `&ticket=${encodeURIComponent(wsTicket)}`
+          : token
+            ? `&token=${encodeURIComponent(token)}`
+            : "";
+      firstConnection = false;
       const wsUrl = `${protocol}//${window.location.host}/ws?jobId=${encodeURIComponent(jobId)}${credParam}`;
 
       ws = new WebSocket(wsUrl);

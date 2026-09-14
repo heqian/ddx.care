@@ -46,6 +46,15 @@ interface JobRow {
   progress: string;
 }
 
+/**
+ * Progress events are stored as a JSON array that gets rewritten on every
+ * append (json_insert) — O(n²) over a job's lifetime. Capping the stored
+ * history bounds both the rewrite cost and the replay size. Long jobs keep
+ * their most recent events; the trim runs only past the threshold.
+ */
+const MAX_PROGRESS_EVENTS = 1000;
+const PROGRESS_TRIM_THRESHOLD = 1200;
+
 export interface JobEntry {
   status: "pending" | "completed" | "failed";
   result?: ReportOutcome;
@@ -63,6 +72,8 @@ export class JobStore extends EventTarget {
   private failStmt!: Statement;
   private scrubStmt!: Statement;
   private cleanupStmt!: Statement;
+  private countProgressStmt!: Statement;
+  private replaceProgressStmt!: Statement;
 
   constructor(dbPath = process.env.DB_PATH || "jobs.sqlite") {
     super();
@@ -104,6 +115,12 @@ export class JobStore extends EventTarget {
     this.cleanupStmt = this.db.prepare(
       `DELETE FROM jobs WHERE status IN ('completed', 'failed') AND createdAt < ?`,
     );
+    this.countProgressStmt = this.db.prepare(
+      `SELECT json_array_length(progress) as count FROM jobs WHERE id = ?`,
+    );
+    this.replaceProgressStmt = this.db.prepare(
+      `UPDATE jobs SET progress = ? WHERE id = ?`,
+    );
   }
 
   createJob(jobId: string): void {
@@ -114,14 +131,34 @@ export class JobStore extends EventTarget {
     const row = this.getStmt.get(jobId) as JobRow | null;
     if (!row) return undefined;
 
+    // A corrupt row (e.g. legacy data from an older schema) must not take
+    // down GET /v1/status — degrade to an empty-but-present job instead.
+    let result: ReportOutcome | undefined;
+    if (row.result) {
+      try {
+        result = reportOutcomeSchema.parse(JSON.parse(row.result));
+      } catch (error) {
+        logger.warn("job_result_parse_failed", {
+          jobId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    let progress: ProgressEvent[] = [];
+    try {
+      const parsed = JSON.parse(row.progress);
+      if (Array.isArray(parsed)) progress = parsed as ProgressEvent[];
+    } catch {
+      logger.warn("job_progress_parse_failed", { jobId });
+    }
+
     return {
       status: row.status as JobEntry["status"],
-      result: row.result
-        ? reportOutcomeSchema.parse(JSON.parse(row.result))
-        : undefined,
+      result,
       error: row.error || undefined,
       createdAt: row.createdAt,
-      progress: JSON.parse(row.progress),
+      progress,
     };
   }
 
@@ -131,12 +168,34 @@ export class JobStore extends EventTarget {
         ? { time: new Date().toISOString(), message: messageOrEvent }
         : messageOrEvent;
     this.emitStmt.run(JSON.stringify(event), jobId);
+    this.trimProgressIfLarge(jobId);
 
     this.dispatchEvent(
       new CustomEvent(`progress-${jobId}`, {
         detail: { type: "progress", jobId, event },
       }),
     );
+  }
+
+  /** Occasionally trim the stored progress array to its most recent events. */
+  private trimProgressIfLarge(jobId: string): void {
+    const row = this.countProgressStmt.get(jobId) as
+      | { count: number | null }
+      | undefined;
+    const count = row?.count;
+    if (typeof count !== "number" || count <= PROGRESS_TRIM_THRESHOLD) return;
+
+    const job = this.getStmt.get(jobId) as JobRow | null;
+    if (!job) return;
+    try {
+      const events = JSON.parse(job.progress);
+      if (!Array.isArray(events) || events.length <= MAX_PROGRESS_EVENTS)
+        return;
+      const trimmed = events.slice(events.length - MAX_PROGRESS_EVENTS);
+      this.replaceProgressStmt.run(JSON.stringify(trimmed), jobId);
+    } catch {
+      // Leave the array untouched if it cannot be parsed.
+    }
   }
 
   complete(jobId: string, result: ReportOutcome): void {
