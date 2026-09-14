@@ -7,8 +7,8 @@ import {
 } from "../src/backend/config";
 
 describe("Config — Constants", () => {
-  test("DIAGNOSIS_TIMEOUT_MS defaults to 15 minutes", () => {
-    expect(DIAGNOSIS_TIMEOUT_MS).toBe(15 * 60 * 1000);
+  test("DIAGNOSIS_TIMEOUT_MS defaults to 30 minutes", () => {
+    expect(DIAGNOSIS_TIMEOUT_MS).toBe(30 * 60 * 1000);
   });
 
   test("PENDING_JOB_TIMEOUT_MS defaults to DIAGNOSIS_TIMEOUT_MS + 120000", () => {

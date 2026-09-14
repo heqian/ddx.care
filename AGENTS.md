@@ -86,7 +86,7 @@ Shared utilities:
 #### Workflows (`src/backend/workflows/`)
 
 - `diagnostic-workflow.ts` — Two-step Mastra workflow: `runDiagnosis` → `formatReport`
-  - **runDiagnosis**: Multi-round CMO supervisor loop. The CMO decides which specialists to consult per round, delegates via `limitConcurrency` (default: max 1 concurrent), and uses `withRetry` (3 attempts, exponential backoff). Continues up to `MAX_DIAGNOSIS_ROUNDS` (default 3) or until the CMO declares `isFinal`. Timeout: 900s (15 min). Supports agent-to-agent context sharing via `SPECIALIST_CONTEXT_MODE` — the CMO can provide per-specialist "context directives" so specialists see prior consultation findings.
+  - **runDiagnosis**: Multi-round CMO supervisor loop. The CMO decides which specialists to consult per round, delegates via `limitConcurrency` (default: max 1 concurrent), and uses `withRetry` (3 attempts, exponential backoff). Continues up to `MAX_DIAGNOSIS_ROUNDS` (default 3) or until the CMO declares `isFinal`. Timeout: 1800s (30 min). Supports agent-to-agent context sharing via `SPECIALIST_CONTEXT_MODE` — the CMO can provide per-specialist "context directives" so specialists see prior consultation findings.
   - **Report generation**: Uses one initial structured generation and one corrected structured generation. Valid output becomes an `available` outcome; exhausted validation, empty-response, or provider failures become `generation_failed` without fabricated medical content. Cancellation and timeout still propagate as workflow failures.
   - **formatReport**: Converts validated raw diagnosis data into the `available` variant with ranked diagnoses, urgency levels, evidence arrays, generation metadata, and a disclaimer. It passes `generation_failed` through unchanged.
 - Shared runtime schemas and derived types (`DiagnosisReport`, `ReportOutcome`, error codes) live in `src/shared/report-outcome.ts`.
@@ -132,7 +132,7 @@ Shared utilities:
 All constants centralized here, read from environment variables with defaults:
 - `PORT` (3000), `ALLOWED_ORIGINS` (`*`), `TRUSTED_ORIGINS` (empty/dev-only), `JOB_TTL_MS` (60min, terminal jobs only), `PENDING_JOB_TIMEOUT_MS` (DIAGNOSIS_TIMEOUT_MS + 120s), `CLEANUP_INTERVAL_MS` (5min), `RATE_LIMIT_PRUNE_INTERVAL_MS` (10min)
 - `SPECIALIST_MODEL`, `ORCHESTRATOR_MODEL` (both `ollama-cloud/deepseek-v4.1-flash`)
-- `DIAGNOSIS_TIMEOUT_MS` (900s / 15 min), `MAX_DIAGNOSIS_ROUNDS` (3). `validateConfig()` rejects `JOB_TTL_MS` or `PENDING_JOB_TIMEOUT_MS` below `DIAGNOSIS_TIMEOUT_MS`.
+- `DIAGNOSIS_TIMEOUT_MS` (1800s / 30 min), `MAX_DIAGNOSIS_ROUNDS` (3). `validateConfig()` rejects `JOB_TTL_MS` or `PENDING_JOB_TIMEOUT_MS` below `DIAGNOSIS_TIMEOUT_MS`.
 - `RATE_LIMIT_MAX_REQUESTS` (10), `RATE_LIMIT_WINDOW_MS` (60s / 1 min), `MAX_CONCURRENT_WORKFLOWS` (3)
 - `MAX_INPUT_FIELD_LENGTH` (50,000 chars), `MAX_PAYLOAD_BYTES` (1MB)
 - `MOCK_LLM`, `LOG_FORMAT`, `SPECIALIST_CONTEXT_MODE`, `SPECIALIST_CONTEXT_MAX_CHARS`, `CMO_CONTEXT_MAX_CHARS`
@@ -225,7 +225,7 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `TRUSTED_ORIGNS` | (empty) | Production CORS + WebSocket origin whitelist (comma-separated). When set, `ALLOWED_ORIGINS` is ignored |
 | `WS_TOKEN_SECRET` | (empty) | HMAC secret for WebSocket + REST endpoint authentication. When empty, tokens are not required (dev mode). Set for production — secures WebSocket (short-lived ticket + long-lived token fallback), `GET /v1/status/:jobId`, `DELETE /v1/diagnose/:jobId` (via `X-Job-Token`), and HTTP polling fallback. |
 | `JOB_TTL_MS` | `3600000` (60 min) | Terminal-job (completed/failed) TTL before scrub + delete. Must be >= `DIAGNOSIS_TIMEOUT_MS`. Pending jobs are not affected; see `PENDING_JOB_TIMEOUT_MS`. |
-| `PENDING_JOB_TIMEOUT_MS` | `1020000` (17 min) | Max lifetime of a pending job before it is aborted and failed (`Diagnosis timed out`). Defaults to `DIAGNOSIS_TIMEOUT_MS + 120000`. Must be >= `DIAGNOSIS_TIMEOUT_MS`. |
+| `PENDING_JOB_TIMEOUT_MS` | `1920000` (32 min) | Max lifetime of a pending job before it is aborted and failed (`Diagnosis timed out`). Defaults to `DIAGNOSIS_TIMEOUT_MS + 120000`. Must be >= `DIAGNOSIS_TIMEOUT_MS`. |
 | `SPECIALIST_MODEL` | `ollama-cloud/deepseek-v4.1-flash` | Override specialist agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `ORCHESTRATOR_MODEL` | `ollama-cloud/deepseek-v4.1-flash` | Override CMO agent model. See [Mastra providers](https://mastra.ai/models/providers) for supported models |
 | `MAX_DIAGNOSIS_ROUNDS` | `3` | Max CMO consultation rounds |
@@ -248,7 +248,7 @@ Entry point. Creates the `Bun.serve()` instance with:
 | `MAX_SPECIALIST_CONCURRENCY` | `1` | Max concurrent specialist agents per round |
 | `AGENT_GENERATE_MAX_RETRIES` | `3` | Max retries for agent generation calls |
 | `AGENT_GENERATE_RETRY_BASE_DELAY` | `1000` | Base delay in ms between agent generation retries |
-| `DIAGNOSIS_TIMEOUT_MS` | `900000` (15 min) | Diagnosis workflow timeout |
+| `DIAGNOSIS_TIMEOUT_MS` | `1800000` (30 min) | Diagnosis workflow timeout |
 | `DB_PATH` | `jobs.sqlite` | Path to SQLite job database |
 | `ORPHADATA_DB_PATH` | `orphadata.sqlite` | Path to SQLite Orphadata cache database |
 

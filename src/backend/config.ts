@@ -17,7 +17,7 @@ export const SPECIALIST_MODEL =
 export const ORCHESTRATOR_MODEL =
   process.env.ORCHESTRATOR_MODEL ?? "ollama-cloud/deepseek-v4.1-flash";
 export const DIAGNOSIS_TIMEOUT_MS = parseInt(
-  process.env.DIAGNOSIS_TIMEOUT_MS ?? String(15 * 60 * 1000),
+  process.env.DIAGNOSIS_TIMEOUT_MS ?? String(30 * 60 * 1000),
   10,
 );
 export const PENDING_JOB_TIMEOUT_MS = parseInt(
