@@ -458,8 +458,10 @@ describe("API Endpoints", () => {
       rateLimiter["hasLoggedReset"] = true;
 
       // Pre-fill the rate limit window to exhaust the per-IP quota
-      // Default is 10 requests per 60s window
-      const testIp = "::1";
+      // Default is 10 requests per 60s window.
+      // The server binds 127.0.0.1 by default (BIND_HOST), so test
+      // requests arrive from the IPv4 loopback address.
+      const testIp = "127.0.0.1";
       rateLimiter["clients"].set(testIp, {
         timestamps: Array(10).fill(Date.now()),
       });
@@ -693,7 +695,7 @@ describe("API Endpoints", () => {
         headers: { "Content-Type": "application/json" },
       });
 
-      const testIp = "::1";
+      const testIp = "127.0.0.1";
       const entry = rateLimiter["clients"].get(testIp);
       // The malformed request SHOULD have called rateLimiter.record()
       // (after check() succeeds) so there should be one timestamp.
@@ -714,7 +716,7 @@ describe("API Endpoints", () => {
         headers: { "Content-Type": "application/json" },
       });
 
-      const testIp = "::1";
+      const testIp = "127.0.0.1";
       const entry = rateLimiter["clients"].get(testIp);
       expect(entry?.timestamps?.length ?? 0).toBe(1);
 
@@ -736,7 +738,7 @@ describe("API Endpoints", () => {
         headers: { "Content-Type": "application/json" },
       });
 
-      const testIp = "::1";
+      const testIp = "127.0.0.1";
       const entry = rateLimiter["clients"].get(testIp);
       expect(entry).toBeDefined();
       expect(entry!.timestamps.length).toBe(1);
@@ -751,7 +753,7 @@ describe("API Endpoints", () => {
 
       // Default RATE_LIMIT_MAX_REQUESTS is 10. Send 10 malformed requests
       // (each should consume a rate-limit slot), then the 11th should 429.
-      const testIp = "::1";
+      const testIp = "127.0.0.1";
 
       // Send 10 malformed requests — all should be 400 but consume slots
       for (let i = 0; i < 10; i++) {

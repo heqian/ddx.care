@@ -104,6 +104,87 @@ describe("Config — validateConfig", () => {
   });
 });
 
+describe("Config — WS_TOKEN_SECRET required in production", () => {
+  async function importFreshEnv(env: Record<string, string | undefined>) {
+    const originals: Record<string, string | undefined> = {};
+    for (const [key, value] of Object.entries(env)) {
+      originals[key] = process.env[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    try {
+      const mod = await import(
+        `../src/backend/config?t=${Date.now()}-${Math.random()}`
+      );
+      return { mod, restore: () => restoreEnv(originals) };
+    } catch (error) {
+      restoreEnv(originals);
+      throw error;
+    }
+  }
+
+  function restoreEnv(originals: Record<string, string | undefined>) {
+    for (const [key, value] of Object.entries(originals)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+
+  test("throws in production when WS_TOKEN_SECRET is empty", async () => {
+    const { mod, restore } = await importFreshEnv({
+      NODE_ENV: "production",
+      WS_TOKEN_SECRET: undefined,
+      MOCK_LLM: "1",
+    });
+    try {
+      expect(() => mod.validateConfig()).toThrow("WS_TOKEN_SECRET");
+    } finally {
+      restore();
+    }
+  });
+
+  test("passes in production when WS_TOKEN_SECRET is set", async () => {
+    const { mod, restore } = await importFreshEnv({
+      NODE_ENV: "production",
+      WS_TOKEN_SECRET: "test-secret",
+      MOCK_LLM: "1",
+    });
+    try {
+      expect(() => mod.validateConfig()).not.toThrow();
+    } finally {
+      restore();
+    }
+  });
+
+  test("passes outside production when WS_TOKEN_SECRET is empty", async () => {
+    const { mod, restore } = await importFreshEnv({
+      NODE_ENV: "development",
+      WS_TOKEN_SECRET: undefined,
+      MOCK_LLM: "1",
+    });
+    try {
+      expect(() => mod.validateConfig()).not.toThrow();
+    } finally {
+      restore();
+    }
+  });
+
+  test("BIND_HOST defaults to loopback and honors override", async () => {
+    const def = await importFreshEnv({ BIND_HOST: undefined });
+    try {
+      expect(def.mod.BIND_HOST).toBe("127.0.0.1");
+    } finally {
+      def.restore();
+    }
+    const custom = await importFreshEnv({ BIND_HOST: "0.0.0.0" });
+    try {
+      expect(custom.mod.BIND_HOST).toBe("0.0.0.0");
+    } finally {
+      custom.restore();
+    }
+  });
+});
+
 describe("Config — retention/timeout relationship validation", () => {
   async function importFreshConfig(env: Record<string, string>) {
     const originals: Record<string, string | undefined> = {};

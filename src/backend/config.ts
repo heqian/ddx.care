@@ -1,4 +1,5 @@
 export const PORT = parseInt(process.env.PORT ?? "3000", 10);
+export const BIND_HOST = process.env.BIND_HOST ?? "127.0.0.1";
 export const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS ?? "*";
 export const TRUSTED_ORIGINS = process.env.TRUSTED_ORIGINS ?? "";
 export const WS_TOKEN_SECRET = process.env.WS_TOKEN_SECRET ?? "";
@@ -218,6 +219,11 @@ export function validateConfig() {
   if (Number.isNaN(TOOL_CACHE_TTL_MS) || TOOL_CACHE_TTL_MS < 0) {
     throw new Error(
       `Invalid TOOL_CACHE_TTL_MS: ${process.env.TOOL_CACHE_TTL_MS}. Must be a non-negative number. Set to 0 to disable tool caching.`,
+    );
+  }
+  if (process.env.NODE_ENV === "production" && !WS_TOKEN_SECRET) {
+    throw new Error(
+      "Missing WS_TOKEN_SECRET environment variable. It must be set when NODE_ENV=production: without it, job credentials are not enforced and anyone who obtains a job ID can read its PHI-bearing results.",
     );
   }
 }

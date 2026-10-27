@@ -4,6 +4,7 @@ import { createRoutes, rateLimiter } from "./src/backend/api/routes";
 import { websocketHandlers, type WsData } from "./src/backend/api/websocket";
 import {
   PORT,
+  BIND_HOST,
   JOB_TTL_MS,
   CLEANUP_INTERVAL_MS,
   RATE_LIMIT_PRUNE_INTERVAL_MS,
@@ -19,7 +20,6 @@ import {
   AUDIT_LOG_PATH,
   AUDIT_LOG_RETENTION_HOURS,
   PENDING_JOB_TIMEOUT_MS,
-  WS_TOKEN_SECRET,
   validateConfig,
 } from "./src/backend/config";
 import { logger, getAuditLogger } from "./src/backend/utils/logger";
@@ -31,15 +31,6 @@ import {
 import { validateSpecialistIntegrity } from "./src/backend/agents/specialist-integrity";
 
 validateConfig();
-if (process.env.NODE_ENV === "production" && !WS_TOKEN_SECRET) {
-  logger.error("ws_token_secret_missing", {
-    message:
-      "WS_TOKEN_SECRET is empty in production. Job credentials are NOT enforced: " +
-      "anyone who obtains a job ID can read its PHI-bearing results via " +
-      "GET /v1/status/:jobId and /ws. Only the reverse-proxy auth layer " +
-      "(if any) protects job data. Set WS_TOKEN_SECRET to enable per-job tokens.",
-  });
-}
 const specialistCount = validateSpecialistIntegrity();
 logger.info("specialist_registry_validated", { specialistCount });
 
@@ -93,6 +84,7 @@ const auditPurgeTimer = AUDIT_LOG_PATH
 let server: ReturnType<typeof Bun.serve>;
 
 server = Bun.serve<WsData>({
+  hostname: BIND_HOST,
   port: PORT,
   maxRequestBodySize: MAX_PAYLOAD_BYTES,
   routes: createRoutes(
